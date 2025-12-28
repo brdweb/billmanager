@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState({
         isLoggedIn: true,
         // Use is_account_owner from API (true for account owners who can access admin/billing)
-        isAdmin: (response as any).is_account_owner ?? response.role === 'admin',
+        isAdmin: response.is_account_owner ?? response.role === 'admin',
         role: response.role,
         databases: response.databases || [],
         currentDb: response.databases?.[0]?.name || null,
@@ -103,8 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       // Return warning if user has no database access
-      const warning = (response as any).warning;
-      return { success: true, warning };
+      return { success: true, warning: response.warning };
     } catch {
       return { success: false };
     }
@@ -129,10 +128,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Refresh auth state after password change
       await refreshAuth();
       return { success: true };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
       return {
         success: false,
-        error: error.response?.data?.error || 'Failed to change password',
+        error: err.response?.data?.error || 'Failed to change password',
       };
     }
   };
@@ -179,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

@@ -109,8 +109,9 @@ export function UsersTab({ isActive }: UsersTabProps) {
       setInviteEmail('');
       setInviteRole('user');
       setSelectedDatabases([]);
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to send invitation');
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      alert(err.response?.data?.error || 'Failed to send invitation');
     } finally {
       setInviteLoading(false);
     }
@@ -131,8 +132,9 @@ export function UsersTab({ isActive }: UsersTabProps) {
       setCreatePassword('');
       setCreateRole('user');
       setCreateDatabases([]);
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to create user');
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      alert(err.response?.data?.error || 'Failed to create user');
     } finally {
       setCreateLoading(false);
     }
@@ -144,8 +146,9 @@ export function UsersTab({ isActive }: UsersTabProps) {
     try {
       await cancelInvite(inviteId);
       await fetchData();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to cancel invitation');
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      alert(err.response?.data?.error || 'Failed to cancel invitation');
     }
   };
 
@@ -155,8 +158,9 @@ export function UsersTab({ isActive }: UsersTabProps) {
     try {
       await deleteUser(userId);
       await fetchData();
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to delete user');
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      alert(err.response?.data?.error || 'Failed to delete user');
     }
   };
 
@@ -206,8 +210,9 @@ export function UsersTab({ isActive }: UsersTabProps) {
 
       await fetchData();
       setEditingUser(null);
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to update user');
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      alert(err.response?.data?.error || 'Failed to update user');
     } finally {
       setAccessLoading(false);
     }

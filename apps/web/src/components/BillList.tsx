@@ -201,7 +201,7 @@ export function BillList({
               { value: 'deposit', label: 'Deposits Only' }
             ]}
             value={filter.type}
-            onChange={(value) => onFilterChange({ ...filter, type: (value as any) || 'all' })}
+            onChange={(value) => onFilterChange({ ...filter, type: (value as 'all' | 'expense' | 'deposit') || 'all' })}
             clearable
             size="sm"
             w={180}

@@ -90,6 +90,8 @@ export interface LoginResponse {
   user_id?: number;
   change_token?: string;
   databases?: Database[];
+  is_account_owner?: boolean;
+  warning?: string;
 }
 
 export interface MeResponse {

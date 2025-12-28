@@ -185,7 +185,7 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
   const handleSubmit = async (values: BillFormValues) => {
     setLoading(true);
     try {
-      let frequencyConfig: Record<string, any> = {};
+      let frequencyConfig: { dates?: number[]; days?: number[] } = {};
       let calculatedNextDue: string | null = null;
 
       if (values.frequency === 'monthly' && values.frequency_type === 'specific_dates') {

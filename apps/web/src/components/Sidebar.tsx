@@ -24,6 +24,7 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange, onShowChart
   // Fetch monthly payment totals when logged in
   useEffect(() => {
     if (isLoggedIn) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPaymentsLoading(true);
       getMonthlyPayments()
         .then((res) => setMonthlyPayments(res))

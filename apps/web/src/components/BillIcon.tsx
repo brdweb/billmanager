@@ -245,4 +245,5 @@ export function BillIcon({ icon, size = 20, withBackground = false }: BillIconPr
 }
 
 // Export the icon map for the icon picker
+// eslint-disable-next-line react-refresh/only-export-components
 export const availableIcons = Object.keys(iconMap);

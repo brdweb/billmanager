@@ -52,7 +52,7 @@ export function PasswordChangeModal({ opened, onClose }: PasswordChangeModalProp
       } else {
         setError(result.error || 'Failed to change password');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to change password. Please try again.');
     } finally {
       setLoading(false);

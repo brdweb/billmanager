@@ -65,8 +65,9 @@ export function DatabasesTab() {
       setNewName('');
       setNewDisplayName('');
       setNewDescription('');
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to create bill group');
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      alert(err.response?.data?.error || 'Failed to create bill group');
     } finally {
       setAddLoading(false);
     }
@@ -90,8 +91,9 @@ export function DatabasesTab() {
       await deleteDatabase(db.id!);
       await fetchDatabases();
       await refreshAuth(); // Refresh user's database list
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to delete bill group');
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      alert(err.response?.data?.error || 'Failed to delete bill group');
     }
   };
 
