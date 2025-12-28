@@ -3387,9 +3387,22 @@ def create_app():
             for rule in app.url_map.iter_rules(): logger.info(f"    {rule.methods} {rule.rule} -> {rule.endpoint}")
             db.create_all(); migrate_sqlite_to_pg(app)
 
-            # Run any pending database migrations
+            # Detect fresh install BEFORE running migrations
+            # Fresh install = no users AND no schema_migrations table
+            from sqlalchemy import inspect as sa_inspect
+            inspector = sa_inspect(db.engine)
+            is_fresh_install = 'schema_migrations' not in inspector.get_table_names() and User.query.count() == 0
+
+            # Run any pending database migrations (skip on fresh install - schema is already current)
             logger.info("🔄 Checking for pending database migrations...")
-            run_pending_migrations(db)
+            if is_fresh_install:
+                from db_migrations import ensure_migrations_table, record_migration, MIGRATIONS
+                ensure_migrations_table(db)
+                for version, description, _ in MIGRATIONS:
+                    record_migration(db, version, description)
+                logger.info(f"✨ Fresh install - marked {len(MIGRATIONS)} migrations as applied (schema already current)")
+            else:
+                run_pending_migrations(db)
 
             # First-run detection: only create defaults if NO users exist
             user_count = User.query.count()
@@ -3405,14 +3418,15 @@ def create_app():
                 db.session.flush()  # Get IDs before linking
                 admin.accessible_databases.append(p_db)
                 db.session.commit()
-                # Print password to console only (not to log file) for initial setup
-                print("\n" + "=" * 60)
-                print("🔐 INITIAL ADMIN CREDENTIALS (save these now!)")
-                print(f"   Username: admin")
-                print(f"   Password: {initial_password}")
-                print("   You will be required to change this password on first login.")
-                print("=" * 60 + "\n")
-                logger.info("✅ Default admin and database created (credentials printed to console)")
+                # Print credentials to stderr so Docker logs capture them
+                import sys
+                print("\n" + "=" * 60, file=sys.stderr)
+                print("🔐 INITIAL ADMIN CREDENTIALS (save these now!)", file=sys.stderr)
+                print(f"   Username: admin", file=sys.stderr)
+                print(f"   Password: {initial_password}", file=sys.stderr)
+                print("   You will be required to change this password on first login.", file=sys.stderr)
+                print("=" * 60 + "\n", file=sys.stderr)
+                logger.info("✅ Default admin and database created")
             else:
                 logger.info(f"📦 Existing installation detected ({user_count} users) - skipping default creation")
         except Exception as e: logger.error(f"❌ Startup Error: {e}")
