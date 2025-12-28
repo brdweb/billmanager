@@ -426,7 +426,7 @@ def calculate_next_due_date(current_due, frequency, frequency_type='simple', fre
     else: current_date = current_due
     
     if frequency == 'weekly': return current_date + timedelta(days=7)
-    elif frequency == 'bi-weekly': return current_date + timedelta(days=14)
+    elif frequency in ('bi-weekly', 'biweekly'): return current_date + timedelta(days=14)
     elif frequency == 'monthly':
         if frequency_type == 'specific_dates' and 'dates' in frequency_config:
             dates = frequency_config['dates']; current_day = current_date.day
@@ -1050,7 +1050,7 @@ def process_auto_payments():
 
 @api_bp.route('/api/version', methods=['GET'])
 def get_version():
-    return jsonify({'version': '3.3.3', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites']})
+    return jsonify({'version': '3.3.4', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites']})
 
 @api_bp.route('/ping')
 def ping(): return jsonify({'status': 'ok'})
@@ -2631,7 +2631,7 @@ def jwt_get_version():
     return jsonify({
         'success': True,
         'data': {
-            'version': '3.4.0',
+            'version': '3.3.4',
             'api_version': 'v2',
             'license': "O'Saasy",
             'license_url': 'https://osaasy.dev/',

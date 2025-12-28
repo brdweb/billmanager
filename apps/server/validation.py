@@ -171,7 +171,7 @@ def validate_frequency(frequency: str) -> Tuple[bool, Optional[str]]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    valid_frequencies = ['weekly', 'bi-weekly', 'monthly', 'quarterly', 'yearly', 'custom']
+    valid_frequencies = ['weekly', 'bi-weekly', 'biweekly', 'monthly', 'quarterly', 'yearly', 'custom']
 
     if not frequency or frequency not in valid_frequencies:
         return False, f"Frequency must be one of: {', '.join(valid_frequencies)}"

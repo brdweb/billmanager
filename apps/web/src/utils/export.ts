@@ -21,6 +21,7 @@ function formatFrequency(bill: Bill): string {
     case 'weekly':
       return 'Weekly';
     case 'bi-weekly':
+    case 'biweekly':
       return 'Bi-weekly';
     case 'quarterly':
       return 'Quarterly';

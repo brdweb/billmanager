@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Modal, Tabs } from '@mantine/core';
 import { IconUsers, IconFolders } from '@tabler/icons-react';
 import { UsersTab } from './UsersTab';
@@ -9,6 +10,8 @@ interface AdminModalProps {
 }
 
 export function AdminModal({ opened, onClose }: AdminModalProps) {
+  const [activeTab, setActiveTab] = useState<string | null>('users');
+
   return (
     <Modal
       opened={opened}
@@ -17,7 +20,7 @@ export function AdminModal({ opened, onClose }: AdminModalProps) {
       size="xl"
       centered
     >
-      <Tabs defaultValue="users">
+      <Tabs value={activeTab} onChange={setActiveTab}>
         <Tabs.List>
           <Tabs.Tab value="users" leftSection={<IconUsers size={16} />}>
             Users
@@ -28,7 +31,7 @@ export function AdminModal({ opened, onClose }: AdminModalProps) {
         </Tabs.List>
 
         <Tabs.Panel value="users" pt="md">
-          <UsersTab />
+          <UsersTab isActive={activeTab === 'users'} />
         </Tabs.Panel>
 
         <Tabs.Panel value="databases" pt="md">

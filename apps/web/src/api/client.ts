@@ -52,7 +52,7 @@ export interface Bill {
   name: string;
   amount: number | null;
   varies: boolean;
-  frequency: 'weekly' | 'bi-weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
+  frequency: 'weekly' | 'bi-weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
   frequency_type: 'simple' | 'specific_dates' | 'multiple_weekly';
   frequency_config: string;
   next_due: string;

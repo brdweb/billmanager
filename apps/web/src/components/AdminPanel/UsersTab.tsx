@@ -34,7 +34,11 @@ import {
 } from '../../api/client';
 import { useConfig } from '../../context/ConfigContext';
 
-export function UsersTab() {
+interface UsersTabProps {
+  isActive: boolean;
+}
+
+export function UsersTab({ isActive }: UsersTabProps) {
   const { emailEnabled, isSelfHosted } = useConfig();
   const [users, setUsers] = useState<User[]>([]);
   const [databases, setDatabases] = useState<Database[]>([]);
@@ -62,9 +66,12 @@ export function UsersTab() {
   const [userEmail, setUserEmail] = useState('');
   const [accessLoading, setAccessLoading] = useState(false);
 
+  // Fetch data on mount and when tab becomes active
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (isActive) {
+      fetchData();
+    }
+  }, [isActive]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -158,8 +165,13 @@ export function UsersTab() {
     setUserEmail(user.email || '');
     setAccessLoading(true);
     try {
-      const response = await getUserDatabases(user.id);
-      setUserDatabases(response.map((db) => db.id!));
+      // Fetch both fresh databases list and user's current access
+      const [dbsRes, userDbsRes] = await Promise.all([
+        getDatabases(),
+        getUserDatabases(user.id),
+      ]);
+      setDatabases(dbsRes);
+      setUserDatabases(userDbsRes.map((db) => db.id!));
     } catch (error) {
       console.error('Failed to fetch user databases:', error);
     } finally {
@@ -270,7 +282,16 @@ export function UsersTab() {
           <Button
             leftSection={<IconUserPlus size={16} />}
             variant="light"
-            onClick={() => setShowCreateForm(true)}
+            onClick={async () => {
+              // Refresh databases before showing form
+              try {
+                const dbsRes = await getDatabases();
+                setDatabases(dbsRes);
+              } catch (error) {
+                console.error('Failed to refresh databases:', error);
+              }
+              setShowCreateForm(true);
+            }}
           >
             Create User
           </Button>
@@ -397,7 +418,16 @@ export function UsersTab() {
             <Button
               leftSection={<IconMail size={16} />}
               variant="light"
-              onClick={() => setShowInviteForm(true)}
+              onClick={async () => {
+                // Refresh databases before showing form
+                try {
+                  const dbsRes = await getDatabases();
+                  setDatabases(dbsRes);
+                } catch (error) {
+                  console.error('Failed to refresh databases:', error);
+                }
+                setShowInviteForm(true);
+              }}
             >
               Invite User
             </Button>

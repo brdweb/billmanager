@@ -309,7 +309,7 @@ function App() {
                 />
                 <Divider />
                 <Text size="xs" c="dimmed" ta="center">
-                  BillManager v3.3.3 - Licensed under{' '}
+                  BillManager v3.3.4 - Licensed under{' '}
                   <Anchor href="https://osaasy.dev/" target="_blank" size="xs">
                     O'Saasy
                   </Anchor>
