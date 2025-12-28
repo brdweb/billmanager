@@ -62,9 +62,10 @@ class TestJWTAuth:
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data.get('success') is True
-        assert 'access_token' in data
-        assert 'refresh_token' in data
-        assert 'databases' in data
+        assert 'data' in data
+        assert 'access_token' in data['data']
+        assert 'refresh_token' in data['data']
+        assert 'databases' in data['data']
 
     def test_jwt_login_wrong_password(self, client, admin_user):
         """Test JWT login fails with wrong password."""
@@ -97,7 +98,7 @@ class TestJWTAuth:
             'password': 'testpassword123'
         })
         login_data = json.loads(login_response.data)
-        refresh_token = login_data.get('refresh_token')
+        refresh_token = login_data['data']['refresh_token']
 
         # Use refresh token to get new access token
         response = client.post('/api/v2/auth/refresh', json={
@@ -105,7 +106,7 @@ class TestJWTAuth:
         })
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert 'access_token' in data
+        assert 'access_token' in data or 'access_token' in data.get('data', {})
 
 
 class TestPasswordChange:

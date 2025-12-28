@@ -466,8 +466,13 @@ def calculate_next_due_date(current_due, frequency, frequency_type='simple', fre
 @api_bp.route('/login', methods=['POST'])
 @limiter.limit("5 per minute")
 def login():
-    data = request.get_json(); user = User.query.filter_by(username=data.get('username')).first()
-    if user and user.check_password(data.get('password')):
+    data = request.get_json() or {}
+    username = data.get('username')
+    password = data.get('password')
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required'}), 400
+    user = User.query.filter_by(username=username).first()
+    if user and user.check_password(password):
         # Commit any password hash migration that occurred during check_password
         db.session.commit()
         if user.password_change_required:

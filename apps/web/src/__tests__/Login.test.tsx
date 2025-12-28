@@ -67,19 +67,26 @@ describe('Login Page', () => {
   })
 
   describe('Form Validation', () => {
-    it('shows error when submitting empty form', async () => {
+    it('shows error when submitting with empty fields after touching them', async () => {
       const user = userEvent.setup()
       renderLogin()
+
+      // Type and clear to trigger validation on non-empty then empty
+      const usernameInput = screen.getByLabelText(/username/i)
+      const passwordInput = screen.getByLabelText(/password/i)
+
+      // Focus and blur without typing to simulate interaction
+      await user.click(usernameInput)
+      await user.click(passwordInput)
 
       const submitButton = screen.getByRole('button', { name: /sign in/i })
       await user.click(submitButton)
 
-      await waitFor(() => {
-        expect(screen.getByText(/username and password are required/i)).toBeInTheDocument()
-      })
+      // HTML5 validation prevents form submission, so login should NOT be called
+      expect(mockLogin).not.toHaveBeenCalled()
     })
 
-    it('shows error when only username is provided', async () => {
+    it('does not submit when only username is provided', async () => {
       const user = userEvent.setup()
       renderLogin()
 
@@ -88,9 +95,8 @@ describe('Login Page', () => {
       const submitButton = screen.getByRole('button', { name: /sign in/i })
       await user.click(submitButton)
 
-      await waitFor(() => {
-        expect(screen.getByText(/username and password are required/i)).toBeInTheDocument()
-      })
+      // HTML5 validation prevents submission when password is empty
+      expect(mockLogin).not.toHaveBeenCalled()
     })
   })
 

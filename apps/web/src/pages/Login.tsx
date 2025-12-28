@@ -350,7 +350,7 @@ export function Login() {
           </Tabs>
         </Paper>
 
-        <Text c="white" size="sm" ta="center" mt="xl" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
+        <Text component="div" c="white" size="sm" ta="center" mt="xl" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
           Open source •{' '}
           <Anchor
             href="https://github.com/brdweb/billmanager"

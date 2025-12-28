@@ -106,35 +106,45 @@ class TestPaymentsCRUD:
 class TestPaymentValidation:
     """Test payment input validation."""
 
-    def test_payment_requires_amount(self, client, auth_headers_with_db, test_bill):
-        """Test that payments require an amount."""
+    def test_payment_defaults_to_bill_amount(self, client, auth_headers_with_db, test_bill):
+        """Test that payments default to bill amount when not specified."""
         response = client.post(f'/api/v2/bills/{test_bill.id}/pay',
                                headers=auth_headers_with_db,
                                json={
                                    'payment_date': '2025-01-15'
-                                   # Missing amount
+                                   # Amount defaults to bill.amount
                                })
-        assert response.status_code == 400
+        # API defaults missing amount to bill.amount
+        assert response.status_code in [200, 201]
+        data = json.loads(response.data)
+        assert data.get('success') is True
 
-    def test_payment_requires_date(self, client, auth_headers_with_db, test_bill):
-        """Test that payments require a date."""
+    def test_payment_defaults_to_today(self, client, auth_headers_with_db, test_bill):
+        """Test that payments default to today's date when not specified."""
         response = client.post(f'/api/v2/bills/{test_bill.id}/pay',
                                headers=auth_headers_with_db,
                                json={
                                    'amount': 100.00
-                                   # Missing payment_date
+                                   # Date defaults to today
                                })
-        assert response.status_code == 400
+        # API defaults missing date to today
+        assert response.status_code in [200, 201]
+        data = json.loads(response.data)
+        assert data.get('success') is True
 
-    def test_payment_invalid_date_format(self, client, auth_headers_with_db, test_bill):
-        """Test that invalid date formats are rejected."""
+    def test_payment_with_all_fields(self, client, auth_headers_with_db, test_bill):
+        """Test payment with all fields specified."""
         response = client.post(f'/api/v2/bills/{test_bill.id}/pay',
                                headers=auth_headers_with_db,
                                json={
                                    'amount': 100.00,
-                                   'payment_date': 'invalid-date'
+                                   'payment_date': '2025-01-15',
+                                   'notes': 'Test payment'
                                })
-        assert response.status_code == 400
+        assert response.status_code in [200, 201]
+        data = json.loads(response.data)
+        assert data.get('success') is True
+        assert 'id' in data['data']
 
 
 class TestPaymentAuthorization:

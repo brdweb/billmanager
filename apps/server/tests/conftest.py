@@ -10,6 +10,8 @@ Provides:
 import os
 import sys
 import pytest
+from sqlalchemy import event
+from sqlalchemy.pool import StaticPool
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,6 +32,11 @@ def app():
     application.config.update({
         'TESTING': True,
         'WTF_CSRF_ENABLED': False,
+        # Use StaticPool for SQLite in-memory to share connection across threads
+        'SQLALCHEMY_ENGINE_OPTIONS': {
+            'poolclass': StaticPool,
+            'connect_args': {'check_same_thread': False},
+        },
     })
 
     with application.app_context():
@@ -59,99 +66,97 @@ def db_session(app):
 @pytest.fixture(scope='function')
 def admin_user(app, db_session):
     """Create an admin user for testing."""
-    with app.app_context():
-        user = User(
-            username='testadmin',
-            role='admin',
-            email='admin@test.com',
-            password_change_required=False
-        )
-        user.set_password('testpassword123')
-        db_session.add(user)
-        db_session.commit()
-
-        # Refresh to get the ID
-        db_session.refresh(user)
-        yield user
+    user = User(
+        username='testadmin',
+        role='admin',
+        email='admin@test.com',
+        password_change_required=False
+    )
+    user.set_password('testpassword123')
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
 
 
 @pytest.fixture(scope='function')
 def regular_user(app, db_session, admin_user):
     """Create a regular user for testing."""
-    with app.app_context():
-        user = User(
-            username='testuser',
-            role='user',
-            email='user@test.com',
-            password_change_required=False,
-            created_by_id=admin_user.id
-        )
-        user.set_password('userpassword123')
-        db_session.add(user)
-        db_session.commit()
-        db_session.refresh(user)
-        yield user
+    user = User(
+        username='testuser',
+        role='user',
+        email='user@test.com',
+        password_change_required=False,
+        created_by_id=admin_user.id
+    )
+    user.set_password('userpassword123')
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
 
 
 @pytest.fixture(scope='function')
 def test_database(app, db_session, admin_user):
     """Create a test database (workspace) for testing."""
-    with app.app_context():
-        database = Database(
-            name='testdb',
-            display_name='Test Database',
-            description='Database for testing',
-            owner_id=admin_user.id
-        )
-        db_session.add(database)
-        db_session.commit()
+    database = Database(
+        name='testdb',
+        display_name='Test Database',
+        description='Database for testing',
+        owner_id=admin_user.id
+    )
+    db_session.add(database)
+    db_session.commit()
+    db_session.refresh(database)
 
-        # Give admin access
-        admin_user.accessible_databases.append(database)
-        db_session.commit()
-        db_session.refresh(database)
-        yield database
+    # Give admin access using the association table directly
+    from models import user_database_access
+    db_session.execute(
+        user_database_access.insert().values(
+            user_id=admin_user.id,
+            database_id=database.id
+        )
+    )
+    db_session.commit()
+    return database
 
 
 @pytest.fixture(scope='function')
 def test_bill(app, db_session, test_database):
     """Create a test bill."""
-    with app.app_context():
-        bill = Bill(
-            database_id=test_database.id,
-            name='Test Bill',
-            amount=100.00,
-            frequency='monthly',
-            due_date='2025-01-15',
-            type='expense',
-            account='Checking'
-        )
-        db_session.add(bill)
-        db_session.commit()
-        db_session.refresh(bill)
-        yield bill
+    bill = Bill(
+        database_id=test_database.id,
+        name='Test Bill',
+        amount=100.00,
+        frequency='monthly',
+        due_date='2025-01-15',
+        type='expense',
+        account='Checking'
+    )
+    db_session.add(bill)
+    db_session.commit()
+    db_session.refresh(bill)
+    return bill
 
 
 @pytest.fixture(scope='function')
 def admin_auth_headers(app, admin_user):
     """Generate JWT auth headers for admin user."""
-    with app.app_context():
-        token = create_access_token(admin_user.id, admin_user.role)
-        return {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
-        }
+    token = create_access_token(admin_user.id, admin_user.role)
+    return {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
 
 
 @pytest.fixture(scope='function')
 def user_auth_headers(app, regular_user):
     """Generate JWT auth headers for regular user."""
-    with app.app_context():
-        token = create_access_token(regular_user.id, regular_user.role)
-        return {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
-        }
+    token = create_access_token(regular_user.id, regular_user.role)
+    return {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
 
 
 @pytest.fixture(scope='function')
