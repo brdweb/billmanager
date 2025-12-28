@@ -19,7 +19,7 @@ Adding new migrations:
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import text, inspect
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ def record_migration(db, version, description):
     """Record a migration as applied."""
     db.session.execute(
         text('INSERT INTO schema_migrations (version, description, applied_at) VALUES (:version, :description, :applied_at)'),
-        {'version': version, 'description': description, 'applied_at': datetime.utcnow()}
+        {'version': version, 'description': description, 'applied_at': datetime.now(timezone.utc)}
     )
     db.session.commit()
 

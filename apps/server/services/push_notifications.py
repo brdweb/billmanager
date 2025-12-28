@@ -24,7 +24,7 @@ import os
 import json
 import logging
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -361,7 +361,7 @@ def process_bill_reminders(days_ahead: List[int] = None) -> Dict[str, int]:
     from models import Bill, Database, db
     from sqlalchemy import func
 
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     stats = {'total_bills': 0, 'notifications_sent': 0}
 
     for days in days_ahead:
@@ -377,7 +377,7 @@ def process_bill_reminders(days_ahead: List[int] = None) -> Dict[str, int]:
             stats['total_bills'] += 1
 
             # Get database owner to notify
-            database = Database.query.get(bill.database_id)
+            database = db.session.get(Database, bill.database_id)
             if not database or not database.owner_id:
                 continue
 

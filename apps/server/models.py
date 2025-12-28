@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -20,7 +20,7 @@ class User(db.Model):
     role = db.Column(db.String(20), default='user')
     password_change_required = db.Column(db.Boolean, default=False)
     change_token = db.Column(db.String(64), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # SaaS multi-tenancy: track which admin created this user (null for self-registered admins)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -53,7 +53,7 @@ class User(db.Model):
         if self.is_account_owner:
             return self
         if self.created_by_id:
-            return User.query.get(self.created_by_id)
+            return db.session.get(User, self.created_by_id)
         return None
 
     def set_password(self, password):
@@ -80,13 +80,13 @@ class User(db.Model):
     def generate_email_verification_token(self):
         """Generate a secure token for email verification (24 hour expiry)"""
         self.email_verification_token = secrets.token_urlsafe(32)
-        self.email_verification_expires = datetime.utcnow() + timedelta(hours=24)
+        self.email_verification_expires = datetime.now(timezone.utc) + timedelta(hours=24)
         return self.email_verification_token
 
     def generate_password_reset_token(self):
         """Generate a secure token for password reset (1 hour expiry)"""
         self.password_reset_token = secrets.token_urlsafe(32)
-        self.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
+        self.password_reset_expires = datetime.now(timezone.utc) + timedelta(hours=1)
         return self.password_reset_token
 
     def verify_email_token(self, token):
@@ -95,7 +95,7 @@ class User(db.Model):
             return False
         if self.email_verification_token != token:
             return False
-        if datetime.utcnow() > self.email_verification_expires:
+        if datetime.now(timezone.utc) > self.email_verification_expires:
             return False
         return True
 
@@ -105,7 +105,7 @@ class User(db.Model):
             return False
         if self.password_reset_token != token:
             return False
-        if datetime.utcnow() > self.password_reset_expires:
+        if datetime.now(timezone.utc) > self.password_reset_expires:
             return False
         return True
 
@@ -117,7 +117,7 @@ class User(db.Model):
     def is_trial_active(self):
         if not self.trial_ends_at:
             return False
-        return datetime.utcnow() < self.trial_ends_at
+        return datetime.now(timezone.utc) < self.trial_ends_at
 
     @property
     def has_active_subscription(self):
@@ -132,7 +132,7 @@ class Database(db.Model):
     name = db.Column(db.String(50), unique=True, nullable=False)
     display_name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.String(255))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Owner tracking for SaaS multi-tenancy (which admin owns this database)
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -162,7 +162,7 @@ class Bill(db.Model):
     
     category = db.Column(db.String(50))
     notes = db.Column(db.Text)
-    last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     payments = db.relationship('Payment', backref='bill', lazy=True, cascade="all, delete-orphan")
@@ -174,8 +174,8 @@ class Payment(db.Model):
     amount = db.Column(db.Float, nullable=False)
     payment_date = db.Column(db.String(10), nullable=False) # YYYY-MM-DD
     notes = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=lambda: datetime.now(timezone.utc))
 
 
 class RefreshToken(db.Model):
@@ -186,7 +186,7 @@ class RefreshToken(db.Model):
     token_hash = db.Column(db.String(64), nullable=False, unique=True)
     expires_at = db.Column(db.DateTime, nullable=False)
     revoked = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Track device/client info for token management
     device_info = db.Column(db.String(255), nullable=True)
@@ -213,8 +213,8 @@ class UserDevice(db.Model):
     # Device metadata
     app_version = db.Column(db.String(20), nullable=True)
     os_version = db.Column(db.String(50), nullable=True)
-    last_active_at = db.Column(db.DateTime, default=datetime.utcnow)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_active_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Notification preferences (JSON string)
     notification_settings = db.Column(db.Text, default='{}')
@@ -239,14 +239,14 @@ class UserInvite(db.Model):
     database_ids = db.Column(db.String(255), default='')  # Comma-separated list of database IDs
     expires_at = db.Column(db.DateTime, nullable=False)
     accepted_at = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationship
     invited_by = db.relationship('User', backref=db.backref('sent_invites', lazy=True))
 
     @property
     def is_expired(self):
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
 
     @property
     def is_accepted(self):
@@ -279,8 +279,8 @@ class Subscription(db.Model):
     current_period_end = db.Column(db.DateTime, nullable=True)
     canceled_at = db.Column(db.DateTime, nullable=True)
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationship
     user = db.relationship('User', backref=db.backref('subscription', uselist=False))
@@ -301,7 +301,7 @@ class Subscription(db.Model):
             return False
         if not self.trial_ends_at:
             return False
-        return datetime.utcnow() > self.trial_ends_at
+        return datetime.now(timezone.utc) > self.trial_ends_at
 
     @property
     def effective_tier(self):
@@ -319,5 +319,5 @@ class Subscription(db.Model):
     def days_until_renewal(self):
         if not self.current_period_end:
             return None
-        delta = self.current_period_end - datetime.utcnow()
+        delta = self.current_period_end - datetime.now(timezone.utc)
         return max(0, delta.days)

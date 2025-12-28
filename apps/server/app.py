@@ -137,8 +137,8 @@ def create_access_token(user_id, role):
         'user_id': user_id,
         'role': role,
         'type': 'access',
-        'exp': datetime.datetime.utcnow() + JWT_ACCESS_TOKEN_EXPIRES,
-        'iat': datetime.datetime.utcnow()
+        'exp': datetime.datetime.now(datetime.timezone.utc) + JWT_ACCESS_TOKEN_EXPIRES,
+        'iat': datetime.datetime.now(datetime.timezone.utc)
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm='HS256')
 
@@ -146,7 +146,7 @@ def create_refresh_token(user_id, device_info=None):
     """Create a long-lived refresh token and store hash in database."""
     token = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(token.encode()).hexdigest()
-    expires_at = datetime.datetime.utcnow() + JWT_REFRESH_TOKEN_EXPIRES
+    expires_at = datetime.datetime.now(datetime.timezone.utc) + JWT_REFRESH_TOKEN_EXPIRES
 
     refresh = RefreshToken(
         user_id=user_id,
@@ -177,7 +177,9 @@ def verify_refresh_token(token):
     refresh = RefreshToken.query.filter_by(token_hash=token_hash, revoked=False).first()
     if not refresh:
         return None
-    if refresh.expires_at < datetime.datetime.utcnow():
+    # Handle comparison between naive (from DB) and aware datetimes
+    expires_at = refresh.expires_at.replace(tzinfo=datetime.timezone.utc) if refresh.expires_at.tzinfo is None else refresh.expires_at
+    if expires_at < datetime.datetime.now(datetime.timezone.utc):
         refresh.revoked = True
         db.session.commit()
         return None
@@ -202,7 +204,7 @@ def jwt_required(f):
         # Get database from X-Database header for mobile clients
         db_name = request.headers.get('X-Database')
         if db_name:
-            user = User.query.get(g.jwt_user_id)
+            user = db.session.get(User,g.jwt_user_id)
             target_db = Database.query.filter_by(name=db_name).first()
             if target_db and target_db in user.accessible_databases:
                 g.jwt_db_name = db_name
@@ -350,7 +352,7 @@ def check_tier_limit(user, feature: str) -> tuple[bool, dict]:
             # Also count pending invitations for databases owned by this user
             pending_invites = UserInvite.query.filter_by(invited_by_id=user.id).filter(
                 UserInvite.accepted_at == None,
-                UserInvite.expires_at > datetime.datetime.utcnow()
+                UserInvite.expires_at > datetime.datetime.now(datetime.timezone.utc)
             ).count()
             used += pending_invites
         else:
@@ -384,7 +386,7 @@ def subscription_required(feature: str = None, min_tier: str = None):
             if not is_saas():
                 return f(*args, **kwargs)
 
-            user = User.query.get(g.jwt_user_id)
+            user = db.session.get(User,g.jwt_user_id)
             if not user:
                 return jsonify({'success': False, 'error': 'User not found'}), 404
 
@@ -491,7 +493,7 @@ def logout():
 @api_bp.route('/me', methods=['GET'])
 @login_required
 def me():
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User,session['user_id'])
     dbs = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
     return jsonify({
         'username': user.username,
@@ -504,7 +506,7 @@ def me():
 @api_bp.route('/select-db/<string:db_name>', methods=['POST'])
 @login_required
 def select_database(db_name):
-    user = User.query.get(session['user_id']); target_db = Database.query.filter_by(name=db_name).first()
+    user = db.session.get(User,session['user_id']); target_db = Database.query.filter_by(name=db_name).first()
     if target_db and target_db in user.accessible_databases:
         session['db_name'] = db_name; return jsonify({'message': f'Selected database: {db_name}'})
     return jsonify({'error': 'Access denied'}), 403
@@ -512,7 +514,7 @@ def select_database(db_name):
 @api_bp.route('/databases', methods=['GET', 'POST'])
 @admin_required
 def databases_handler():
-    current_user = User.query.get(session.get('user_id'))
+    current_user = db.session.get(User,session.get('user_id'))
     if request.method == 'GET':
         # In SaaS mode, only show databases owned by this admin
         if is_saas():
@@ -548,7 +550,7 @@ def databases_handler():
 @api_bp.route('/databases/<int:db_id>', methods=['DELETE'])
 @admin_required
 def delete_database(db_id):
-    target_db = Database.query.get_or_404(db_id)
+    target_db = db.get_or_404(Database,db_id)
     # In SaaS mode, only allow deleting databases you own
     if is_saas():
         current_user_id = session.get('user_id')
@@ -559,7 +561,7 @@ def delete_database(db_id):
 @api_bp.route('/databases/<int:db_id>/access', methods=['GET', 'POST'])
 @admin_required
 def database_access_handler(db_id):
-    target_db = Database.query.get_or_404(db_id)
+    target_db = db.get_or_404(Database,db_id)
     current_user_id = session.get('user_id')
     # In SaaS mode, only allow managing access to databases you own
     if is_saas() and target_db.owner_id != current_user_id:
@@ -567,7 +569,7 @@ def database_access_handler(db_id):
     if request.method == 'GET':
         return jsonify([{'id': u.id, 'username': u.username, 'role': u.role} for u in target_db.users])
     else:
-        user = User.query.get_or_404(request.get_json().get('user_id'))
+        user = db.get_or_404(User,request.get_json().get('user_id'))
         # In SaaS mode, only allow granting access to users you created
         if is_saas() and user.created_by_id != current_user_id and user.id != current_user_id:
             return jsonify({'error': 'Cannot grant access to users outside your account'}), 403
@@ -578,7 +580,7 @@ def database_access_handler(db_id):
 @api_bp.route('/databases/<int:db_id>/access/<int:user_id>', methods=['DELETE'])
 @admin_required
 def revoke_database_access(db_id, user_id):
-    target_db = Database.query.get_or_404(db_id); user = User.query.get_or_404(user_id)
+    target_db = db.get_or_404(Database,db_id); user = db.get_or_404(User,user_id)
     current_user_id = session.get('user_id')
     # In SaaS mode, only allow revoking access to databases you own
     if is_saas() and target_db.owner_id != current_user_id:
@@ -591,7 +593,7 @@ def revoke_database_access(db_id, user_id):
 @admin_required
 def users_handler():
     current_user_id = session.get('user_id')
-    current_user = User.query.get(current_user_id)
+    current_user = db.session.get(User,current_user_id)
     if request.method == 'GET':
         # In SaaS mode, only show users created by this admin (plus themselves)
         if is_saas():
@@ -626,7 +628,7 @@ def users_handler():
             new_user.created_by_id = current_user_id
         new_user.set_password(data.get('password')); db.session.add(new_user)
         for db_id in data.get('database_ids', []):
-            d = Database.query.get(db_id)
+            d = db.session.get(Database,db_id)
             # In SaaS mode, only allow assigning access to databases you own
             if d:
                 if is_saas() and d.owner_id != current_user_id:
@@ -637,7 +639,7 @@ def users_handler():
 @api_bp.route('/users/<int:user_id>', methods=['PUT'])
 @admin_required
 def update_user(user_id):
-    user = User.query.get_or_404(user_id)
+    user = db.get_or_404(User,user_id)
     current_user_id = session.get('user_id')
     # In SaaS mode, only allow updating users you created (or yourself, or legacy users)
     if is_saas() and user.id != current_user_id:
@@ -660,11 +662,11 @@ def update_user(user_id):
 @admin_required
 def delete_user(user_id):
     if user_id == session.get('user_id'): return jsonify({'error': 'Self'}), 400
-    user = User.query.get_or_404(user_id)
+    user = db.get_or_404(User,user_id)
     # In SaaS mode, check permissions
     if is_saas():
         current_user_id = session.get('user_id')
-        current_user = User.query.get(current_user_id)
+        current_user = db.session.get(User,current_user_id)
         # Account owners can delete any user (except themselves, checked above)
         if current_user.is_account_owner:
             pass  # Allow deletion
@@ -694,18 +696,18 @@ def invite_user():
 
     # Check for pending invite to same email
     pending_invite = UserInvite.query.filter_by(email=email, accepted_at=None).filter(
-        UserInvite.expires_at > datetime.datetime.utcnow()
+        UserInvite.expires_at > datetime.datetime.now(datetime.timezone.utc)
     ).first()
     if pending_invite:
         return jsonify({'error': 'An invitation has already been sent to this email'}), 400
 
     current_user_id = session.get('user_id')
-    current_user = User.query.get(current_user_id)
+    current_user = db.session.get(User,current_user_id)
 
     # In SaaS mode, validate database access
     if is_saas():
         for db_id in database_ids:
-            d = Database.query.get(db_id)
+            d = db.session.get(Database,db_id)
             if d and d.owner_id != current_user_id:
                 return jsonify({'error': 'Cannot grant access to databases you do not own'}), 403
 
@@ -717,7 +719,7 @@ def invite_user():
         token=token,
         role=role,
         invited_by_id=current_user_id,
-        expires_at=datetime.datetime.utcnow() + timedelta(days=7)
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + timedelta(days=7)
     )
     # Store database IDs in a simple format (we'll use them when accepting)
     invite.database_ids = ','.join(str(id) for id in database_ids) if database_ids else ''
@@ -738,7 +740,7 @@ def get_invites():
     """Get pending invitations sent by current admin"""
     current_user_id = session.get('user_id')
     invites = UserInvite.query.filter_by(invited_by_id=current_user_id, accepted_at=None).filter(
-        UserInvite.expires_at > datetime.datetime.utcnow()
+        UserInvite.expires_at > datetime.datetime.now(datetime.timezone.utc)
     ).all()
     return jsonify([{
         'id': inv.id,
@@ -753,7 +755,7 @@ def get_invites():
 def cancel_invite(invite_id):
     """Cancel a pending invitation"""
     current_user_id = session.get('user_id')
-    invite = UserInvite.query.get_or_404(invite_id)
+    invite = db.get_or_404(UserInvite,invite_id)
     if invite.invited_by_id != current_user_id:
         return jsonify({'error': 'Access denied'}), 403
     if invite.is_accepted:
@@ -792,7 +794,7 @@ def accept_invite():
         email=invite.email,
         role=invite.role,
         created_by_id=invite.invited_by_id,
-        email_verified_at=datetime.datetime.utcnow()  # Auto-verify since they received the invite email
+        email_verified_at=datetime.datetime.now(datetime.timezone.utc)  # Auto-verify since they received the invite email
     )
     new_user.set_password(password)
     db.session.add(new_user)
@@ -802,14 +804,14 @@ def accept_invite():
         for db_id_str in invite.database_ids.split(','):
             try:
                 db_id = int(db_id_str)
-                d = Database.query.get(db_id)
+                d = db.session.get(Database,db_id)
                 if d:
                     new_user.accessible_databases.append(d)
             except ValueError:
                 pass
 
     # Mark invitation as accepted
-    invite.accepted_at = datetime.datetime.utcnow()
+    invite.accepted_at = datetime.datetime.now(datetime.timezone.utc)
     db.session.commit()
 
     return jsonify({'message': 'Account created successfully', 'username': username}), 201
@@ -829,7 +831,7 @@ def get_invite_info():
     if invite.is_expired:
         return jsonify({'error': 'Invitation has expired'}), 400
 
-    inviter = User.query.get(invite.invited_by_id)
+    inviter = db.session.get(User,invite.invited_by_id)
     return jsonify({
         'email': invite.email,
         'invited_by': inviter.username if inviter else 'Unknown',
@@ -839,7 +841,7 @@ def get_invite_info():
 @api_bp.route('/users/<int:user_id>/databases', methods=['GET'])
 @admin_required
 def get_user_databases(user_id):
-    user = User.query.get_or_404(user_id)
+    user = db.get_or_404(User,user_id)
     current_user_id = session.get('user_id')
     # In SaaS mode, only allow viewing databases of users you created (or yourself, or legacy users)
     if is_saas() and user.id != current_user_id:
@@ -880,7 +882,7 @@ def bills_handler():
         return jsonify(result)
     else:
         # Check subscription limits before creating bill
-        user = User.query.get(session.get('user_id'))
+        user = db.session.get(User,session.get('user_id'))
         if user:
             allowed, info = check_tier_limit(user, 'bills')
             if not allowed:
@@ -927,7 +929,7 @@ def bills_handler():
 def bill_detail_handler(bill_id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
     if not target_db: return jsonify({'error': 'No database selected'}), 400
-    bill = Bill.query.get_or_404(bill_id)
+    bill = db.get_or_404(Bill,bill_id)
     if bill.database_id != target_db.id: return jsonify({'error': 'Access denied'}), 403
     if request.method == 'PUT':
         data = request.get_json(); bill.name = data.get('name', bill.name); bill.amount = data.get('amount', bill.amount)
@@ -943,7 +945,7 @@ def bill_detail_handler(bill_id):
 def unarchive_bill(bill_id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
     if not target_db: return jsonify({'error': 'No database selected'}), 400
-    bill = Bill.query.get_or_404(bill_id)
+    bill = db.get_or_404(Bill,bill_id)
     if bill.database_id != target_db.id: return jsonify({'error': 'Access denied'}), 403
     bill.archived = False; db.session.commit(); return jsonify({'message': 'Unarchived'})
 
@@ -952,7 +954,7 @@ def unarchive_bill(bill_id):
 def delete_bill_permanent(bill_id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
     if not target_db: return jsonify({'error': 'No database selected'}), 400
-    bill = Bill.query.get_or_404(bill_id)
+    bill = db.get_or_404(Bill,bill_id)
     if bill.database_id != target_db.id: return jsonify({'error': 'Access denied'}), 403
     db.session.delete(bill); db.session.commit(); return jsonify({'message': 'Deleted'})
 
@@ -961,7 +963,7 @@ def delete_bill_permanent(bill_id):
 def pay_bill(bill_id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
     if not target_db: return jsonify({'error': 'No database selected'}), 400
-    bill = Bill.query.get_or_404(bill_id)
+    bill = db.get_or_404(Bill,bill_id)
     if bill.database_id != target_db.id: return jsonify({'error': 'Access denied'}), 403
     data = request.get_json()
     payment = Payment(bill_id=bill.id, amount=data.get('amount'), payment_date=datetime.date.today().isoformat(), notes=data.get('notes'))
@@ -984,7 +986,7 @@ def get_payments_by_name(name):
 @login_required
 def get_payments_by_id(bill_id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
-    bill = Bill.query.get_or_404(bill_id)
+    bill = db.get_or_404(Bill,bill_id)
     if bill.database_id != target_db.id: return jsonify({'error': 'Access denied'}), 403
     payments = Payment.query.filter_by(bill_id=bill_id).order_by(desc(Payment.payment_date)).all()
     return jsonify([{'id': p.id, 'amount': p.amount, 'payment_date': p.payment_date, 'notes': p.notes} for p in payments])
@@ -994,7 +996,7 @@ def get_payments_by_id(bill_id):
 def update_payment(id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
     if not target_db: return jsonify({'error': 'No database selected'}), 400
-    payment = Payment.query.get_or_404(id)
+    payment = db.get_or_404(Payment,id)
     if payment.bill.database_id != target_db.id: return jsonify({'error': 'Access denied'}), 403
     data = request.get_json()
     if 'amount' in data: payment.amount = data['amount']
@@ -1008,7 +1010,7 @@ def update_payment(id):
 def delete_payment(id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
     if not target_db: return jsonify({'error': 'No database selected'}), 400
-    payment = Payment.query.get_or_404(id)
+    payment = db.get_or_404(Payment,id)
     if payment.bill.database_id != target_db.id: return jsonify({'error': 'Access denied'}), 403
     db.session.delete(payment)
     db.session.commit()
@@ -1140,7 +1142,7 @@ def jwt_refresh():
     if not stored_token:
         return jsonify({'success': False, 'error': 'Invalid or expired refresh token'}), 401
 
-    user = User.query.get(stored_token.user_id)
+    user = db.session.get(User,stored_token.user_id)
     if not user:
         return jsonify({'success': False, 'error': 'User not found'}), 401
 
@@ -1232,7 +1234,7 @@ def register():
 
     # For self-hosted mode without email verification, mark as verified
     if not REQUIRE_EMAIL_VERIFICATION:
-        user.email_verified_at = datetime.datetime.utcnow()
+        user.email_verified_at = datetime.datetime.now(datetime.timezone.utc)
         token = None
     else:
         # Generate email verification token
@@ -1240,7 +1242,7 @@ def register():
 
     # Set trial only in SaaS mode with billing
     if ENABLE_BILLING:
-        user.trial_ends_at = datetime.datetime.utcnow() + timedelta(days=14)
+        user.trial_ends_at = datetime.datetime.now(datetime.timezone.utc) + timedelta(days=14)
 
     db.session.add(user)
 
@@ -1314,7 +1316,7 @@ def verify_email():
         return jsonify({'success': False, 'error': 'Token expired'}), 400
 
     # Mark email as verified
-    user.email_verified_at = datetime.datetime.utcnow()
+    user.email_verified_at = datetime.datetime.now(datetime.timezone.utc)
     user.email_verification_token = None
     user.email_verification_expires = None
     db.session.commit()
@@ -1448,7 +1450,7 @@ def billing_usage():
     """Get current usage against tier limits."""
     from config import is_saas, get_tier_limits
 
-    user = User.query.get(g.auth_user_id)
+    user = db.session.get(User,g.auth_user_id)
     if not user:
         return jsonify({'success': False, 'error': 'User not found'}), 404
 
@@ -1485,7 +1487,7 @@ def billing_usage():
 @auth_required
 def create_checkout():
     """Create a Stripe Checkout session for subscription."""
-    user = User.query.get(g.auth_user_id)
+    user = db.session.get(User,g.auth_user_id)
     if not user:
         return jsonify({'success': False, 'error': 'User not found'}), 404
 
@@ -1537,7 +1539,7 @@ def create_checkout():
 @auth_required
 def billing_portal():
     """Create a Stripe Customer Portal session for subscription management."""
-    user = User.query.get(g.auth_user_id)
+    user = db.session.get(User,g.auth_user_id)
     if not user:
         return jsonify({'success': False, 'error': 'User not found'}), 404
 
@@ -1561,7 +1563,7 @@ def change_plan():
     """Change subscription plan (upgrade or downgrade)."""
     from config import get_stripe_price_id
 
-    user = User.query.get(g.auth_user_id)
+    user = db.session.get(User,g.auth_user_id)
     if not user:
         return jsonify({'success': False, 'error': 'User not found'}), 404
 
@@ -1623,7 +1625,7 @@ def billing_status():
     """Get current subscription status."""
     from config import get_tier_limits
 
-    user = User.query.get(g.auth_user_id)
+    user = db.session.get(User,g.auth_user_id)
     if not user:
         return jsonify({'success': False, 'error': 'User not found'}), 404
 
@@ -1697,7 +1699,7 @@ def stripe_webhook():
             subscription_id = data.get('subscription')
 
             if user_id:
-                user = User.query.get(int(user_id))
+                user = db.session.get(User,int(user_id))
                 if user:
                     if not user.subscription:
                         subscription = Subscription(user_id=user.id)
@@ -1752,7 +1754,7 @@ def stripe_webhook():
                 subscription = Subscription.query.filter_by(stripe_subscription_id=subscription_id).first()
                 if subscription:
                     subscription.status = 'canceled'
-                    subscription.canceled_at = datetime.datetime.utcnow()
+                    subscription.canceled_at = datetime.datetime.now(datetime.timezone.utc)
                     db.session.commit()
                     logger.info(f"Subscription canceled: {subscription_id}")
 
@@ -1765,7 +1767,7 @@ def stripe_webhook():
                 if subscription:
                     subscription.status = status
                     if data.get('cancel_at_period_end'):
-                        subscription.canceled_at = datetime.datetime.utcnow()
+                        subscription.canceled_at = datetime.datetime.now(datetime.timezone.utc)
 
                     # Update tier from current subscription items (handles scheduled downgrades)
                     items = data.get('items', {}).get('data', [])
@@ -1799,7 +1801,7 @@ def stripe_webhook():
 @jwt_required
 def jwt_me():
     """Get current user info (JWT version)."""
-    user = User.query.get(g.jwt_user_id)
+    user = db.session.get(User,g.jwt_user_id)
     databases = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
     return jsonify({
         'success': True,
@@ -1903,7 +1905,7 @@ def jwt_get_bill(bill_id):
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = Bill.query.get_or_404(bill_id)
+    bill = db.get_or_404(Bill,bill_id)
 
     if bill.database_id != target_db.id:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
@@ -1929,7 +1931,7 @@ def jwt_update_bill(bill_id):
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = Bill.query.get_or_404(bill_id)
+    bill = db.get_or_404(Bill,bill_id)
 
     if bill.database_id != target_db.id:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
@@ -1962,7 +1964,7 @@ def jwt_archive_bill(bill_id):
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = Bill.query.get_or_404(bill_id)
+    bill = db.get_or_404(Bill,bill_id)
 
     if bill.database_id != target_db.id:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
@@ -1979,7 +1981,7 @@ def jwt_unarchive_bill(bill_id):
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = Bill.query.get_or_404(bill_id)
+    bill = db.get_or_404(Bill,bill_id)
 
     if bill.database_id != target_db.id:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
@@ -1996,7 +1998,7 @@ def jwt_delete_bill_permanent(bill_id):
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = Bill.query.get_or_404(bill_id)
+    bill = db.get_or_404(Bill,bill_id)
 
     if bill.database_id != target_db.id:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
@@ -2013,7 +2015,7 @@ def jwt_pay_bill(bill_id):
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = Bill.query.get_or_404(bill_id)
+    bill = db.get_or_404(Bill,bill_id)
 
     if bill.database_id != target_db.id:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
@@ -2046,7 +2048,7 @@ def jwt_get_bill_payments(bill_id):
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = Bill.query.get_or_404(bill_id)
+    bill = db.get_or_404(Bill,bill_id)
 
     if bill.database_id != target_db.id:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
@@ -2087,7 +2089,7 @@ def jwt_update_payment(payment_id):
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    payment = Payment.query.get_or_404(payment_id)
+    payment = db.get_or_404(Payment,payment_id)
 
     if payment.bill.database_id != target_db.id:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
@@ -2111,7 +2113,7 @@ def jwt_delete_payment(payment_id):
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    payment = Payment.query.get_or_404(payment_id)
+    payment = db.get_or_404(Payment,payment_id)
 
     if payment.bill.database_id != target_db.id:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
@@ -2238,7 +2240,7 @@ def jwt_change_password():
 def jwt_get_users():
     """Get all users (admin only)."""
     user_id = g.jwt_user_id
-    current_user = User.query.get(user_id)
+    current_user = db.session.get(User,user_id)
     if is_saas():
         users = User.query.filter(
             (User.created_by_id == user_id) | (User.id == user_id)
@@ -2289,7 +2291,7 @@ def jwt_create_user():
         return jsonify({'success': False, 'error': 'Email already in use'}), 400
 
     current_user_id = g.jwt_user_id
-    current_user = User.query.get(current_user_id)
+    current_user = db.session.get(User,current_user_id)
 
     # Check users limit (only enforced in SaaS mode)
     allowed, info = check_tier_limit(current_user, 'users')
@@ -2314,7 +2316,7 @@ def jwt_create_user():
 
     # Grant database access
     for db_id in database_ids:
-        d = Database.query.get(db_id)
+        d = db.session.get(Database,db_id)
         if d:
             # In SaaS mode, only allow assigning access to databases you own
             if is_saas() and d.owner_id != current_user_id:
@@ -2338,7 +2340,7 @@ def jwt_create_user():
 @jwt_admin_required
 def jwt_update_user(target_user_id):
     """Update user role (admin only)."""
-    user = User.query.get_or_404(target_user_id)
+    user = db.get_or_404(User,target_user_id)
     current_user_id = g.jwt_user_id
     if is_saas() and user.id != current_user_id:
         if user.created_by_id is not None and user.created_by_id != current_user_id:
@@ -2362,10 +2364,10 @@ def jwt_delete_user(target_user_id):
     """Delete a user (admin only)."""
     if target_user_id == g.jwt_user_id:
         return jsonify({'success': False, 'error': 'Cannot delete yourself'}), 400
-    user = User.query.get_or_404(target_user_id)
+    user = db.get_or_404(User,target_user_id)
     if is_saas():
         current_user_id = g.jwt_user_id
-        current_user = User.query.get(current_user_id)
+        current_user = db.session.get(User,current_user_id)
         if current_user.is_account_owner:
             pass
         elif user.created_by_id is not None and user.created_by_id != current_user_id:
@@ -2380,7 +2382,7 @@ def jwt_get_invitations():
     """Get pending invitations (admin only)."""
     current_user_id = g.jwt_user_id
     invites = UserInvite.query.filter_by(invited_by_id=current_user_id, accepted_at=None).filter(
-        UserInvite.expires_at > datetime.datetime.utcnow()
+        UserInvite.expires_at > datetime.datetime.now(datetime.timezone.utc)
     ).all()
     return jsonify({
         'success': True,
@@ -2415,13 +2417,13 @@ def jwt_create_invitation():
         return jsonify({'success': False, 'error': 'A user with this email already exists'}), 400
 
     pending_invite = UserInvite.query.filter_by(email=email, accepted_at=None).filter(
-        UserInvite.expires_at > datetime.datetime.utcnow()
+        UserInvite.expires_at > datetime.datetime.now(datetime.timezone.utc)
     ).first()
     if pending_invite:
         return jsonify({'success': False, 'error': 'An invitation has already been sent to this email'}), 400
 
     current_user_id = g.jwt_user_id
-    current_user = User.query.get(current_user_id)
+    current_user = db.session.get(User,current_user_id)
 
     # Check users limit (only enforced in SaaS mode)
     allowed, info = check_tier_limit(current_user, 'users')
@@ -2435,7 +2437,7 @@ def jwt_create_invitation():
 
     if is_saas():
         for db_id in database_ids:
-            d = Database.query.get(db_id)
+            d = db.session.get(Database,db_id)
             if d and d.owner_id != current_user_id:
                 return jsonify({'success': False, 'error': 'Cannot grant access to databases you do not own'}), 403
 
@@ -2445,7 +2447,7 @@ def jwt_create_invitation():
         token=token,
         role=role,
         invited_by_id=current_user_id,
-        expires_at=datetime.datetime.utcnow() + timedelta(days=7)
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + timedelta(days=7)
     )
     invite.database_ids = ','.join(str(id) for id in database_ids) if database_ids else ''
 
@@ -2465,7 +2467,7 @@ def jwt_create_invitation():
 def jwt_delete_invitation(invite_id):
     """Cancel a pending invitation (admin only)."""
     current_user_id = g.jwt_user_id
-    invite = UserInvite.query.get_or_404(invite_id)
+    invite = db.get_or_404(UserInvite,invite_id)
     if invite.invited_by_id != current_user_id:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
     if invite.is_accepted:
@@ -2479,13 +2481,13 @@ def jwt_delete_invitation(invite_id):
 def jwt_resend_invitation(invite_id):
     """Resend an invitation email (admin only)."""
     current_user_id = g.jwt_user_id
-    invite = UserInvite.query.get_or_404(invite_id)
+    invite = db.get_or_404(UserInvite,invite_id)
     if invite.invited_by_id != current_user_id:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
     if invite.is_accepted:
         return jsonify({'success': False, 'error': 'Invitation already accepted'}), 400
 
-    current_user = User.query.get(current_user_id)
+    current_user = db.session.get(User,current_user_id)
     email_sent = send_invite_email(invite.email, invite.token, current_user.username)
 
     return jsonify({'success': True, 'data': {'message': 'Invitation resent' if email_sent else 'Failed to resend invitation'}})
@@ -2495,7 +2497,7 @@ def jwt_resend_invitation(invite_id):
 def jwt_get_databases():
     """Get all databases with access info (admin only)."""
     current_user_id = g.jwt_user_id
-    current_user = User.query.get(current_user_id)
+    current_user = db.session.get(User,current_user_id)
 
     if is_saas():
         databases = Database.query.filter_by(owner_id=current_user_id).all()
@@ -2534,7 +2536,7 @@ def jwt_create_database():
         return jsonify({'success': False, 'error': 'A database with this name already exists'}), 400
 
     current_user_id = g.jwt_user_id
-    current_user = User.query.get(current_user_id)
+    current_user = db.session.get(User,current_user_id)
 
     # Check bill_groups limit (only enforced in SaaS mode)
     allowed, info = check_tier_limit(current_user, 'bill_groups')
@@ -2560,7 +2562,7 @@ def jwt_create_database():
 @jwt_admin_required
 def jwt_update_database(database_id):
     """Update a database/bill group (admin only)."""
-    database = Database.query.get_or_404(database_id)
+    database = db.get_or_404(Database,database_id)
     current_user_id = g.jwt_user_id
 
     if is_saas() and database.owner_id != current_user_id:
@@ -2577,7 +2579,7 @@ def jwt_update_database(database_id):
 @jwt_admin_required
 def jwt_delete_database(database_id):
     """Delete a database/bill group (admin only)."""
-    database = Database.query.get_or_404(database_id)
+    database = db.get_or_404(Database,database_id)
     current_user_id = g.jwt_user_id
 
     if is_saas() and database.owner_id != current_user_id:
@@ -2591,7 +2593,7 @@ def jwt_delete_database(database_id):
 @jwt_admin_required
 def jwt_add_database_access(database_id):
     """Grant user access to a database (admin only)."""
-    database = Database.query.get_or_404(database_id)
+    database = db.get_or_404(Database,database_id)
     current_user_id = g.jwt_user_id
 
     if is_saas() and database.owner_id != current_user_id:
@@ -2602,7 +2604,7 @@ def jwt_add_database_access(database_id):
     if not target_user_id:
         return jsonify({'success': False, 'error': 'user_id is required'}), 400
 
-    target_user = User.query.get_or_404(target_user_id)
+    target_user = db.get_or_404(User,target_user_id)
 
     if target_user in database.users:
         return jsonify({'success': False, 'error': 'User already has access'}), 400
@@ -2615,13 +2617,13 @@ def jwt_add_database_access(database_id):
 @jwt_admin_required
 def jwt_remove_database_access(database_id, target_user_id):
     """Revoke user access from a database (admin only)."""
-    database = Database.query.get_or_404(database_id)
+    database = db.get_or_404(Database,database_id)
     current_user_id = g.jwt_user_id
 
     if is_saas() and database.owner_id != current_user_id:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
 
-    target_user = User.query.get_or_404(target_user_id)
+    target_user = db.get_or_404(User,target_user_id)
 
     if target_user not in database.users:
         return jsonify({'success': False, 'error': 'User does not have access'}), 400
@@ -2825,7 +2827,7 @@ def jwt_register_device():
         device.push_provider = data.get('push_provider', device.push_provider)
         device.app_version = data.get('app_version', device.app_version)
         device.os_version = data.get('os_version', device.os_version)
-        device.last_active_at = datetime.datetime.utcnow()
+        device.last_active_at = datetime.datetime.now(datetime.timezone.utc)
         if data.get('notification_settings'):
             device.notification_settings = json.dumps(data['notification_settings'])
     else:
@@ -2885,7 +2887,7 @@ def jwt_update_push_token(device_id):
 
     device.push_token = data.get('push_token')
     device.push_provider = data.get('push_provider', device.push_provider)
-    device.last_active_at = datetime.datetime.utcnow()
+    device.last_active_at = datetime.datetime.now(datetime.timezone.utc)
     db.session.commit()
 
     return jsonify({'success': True, 'data': {'message': 'Push token updated'}})
@@ -2951,7 +2953,7 @@ def jwt_sync_push():
 
         if bill_id:
             # Update existing bill
-            bill = Bill.query.get(bill_id)
+            bill = db.session.get(Bill,bill_id)
             if not bill or bill.database_id != target_db.id:
                 rejected_bills.append({'id': bill_id, 'reason': 'not_found'})
                 continue
@@ -3034,13 +3036,13 @@ def jwt_sync_push():
 
         if payment_id:
             # Update existing payment
-            payment = Payment.query.get(payment_id)
+            payment = db.session.get(Payment,payment_id)
             if not payment:
                 rejected_payments.append({'id': payment_id, 'reason': 'not_found'})
                 continue
 
             # Verify payment belongs to a bill in this database
-            bill = Bill.query.get(payment.bill_id)
+            bill = db.session.get(Bill,payment.bill_id)
             if not bill or bill.database_id != target_db.id:
                 rejected_payments.append({'id': payment_id, 'reason': 'access_denied'})
                 continue
@@ -3074,7 +3076,7 @@ def jwt_sync_push():
                 continue
 
             # Verify bill exists and belongs to this database
-            bill = Bill.query.get(bill_id)
+            bill = db.session.get(Bill,bill_id)
             if not bill or bill.database_id != target_db.id:
                 rejected_payments.append({'id': None, 'reason': 'invalid_bill_id', 'data': payment_data})
                 continue
@@ -3095,22 +3097,22 @@ def jwt_sync_push():
 
     # Process deletions (archive bills, delete payments)
     for bill_id in data.get('deleted_bills', []):
-        bill = Bill.query.get(bill_id)
+        bill = db.session.get(Bill,bill_id)
         if bill and bill.database_id == target_db.id:
             bill.archived = True
             accepted_bills.append({'id': bill_id, 'action': 'archived'})
 
     for payment_id in data.get('deleted_payments', []):
-        payment = Payment.query.get(payment_id)
+        payment = db.session.get(Payment,payment_id)
         if payment:
-            bill = Bill.query.get(payment.bill_id)
+            bill = db.session.get(Bill,payment.bill_id)
             if bill and bill.database_id == target_db.id:
                 db.session.delete(payment)
                 accepted_payments.append({'id': payment_id, 'action': 'deleted'})
 
     db.session.commit()
 
-    server_time = datetime.datetime.utcnow().isoformat() + 'Z'
+    server_time = datetime.datetime.now(datetime.timezone.utc).isoformat() + 'Z'
 
     return jsonify({
         'success': True,
@@ -3202,7 +3204,7 @@ def jwt_sync():
     } for p in payments]
 
     # Server timestamp for next sync
-    server_time = datetime.datetime.utcnow().isoformat() + 'Z'
+    server_time = datetime.datetime.now(datetime.timezone.utc).isoformat() + 'Z'
 
     return jsonify({
         'success': True,
@@ -3271,7 +3273,7 @@ def jwt_sync_full():
         'updated_at': p.updated_at.isoformat() if p.updated_at else None
     } for p in payments]
 
-    server_time = datetime.datetime.utcnow().isoformat() + 'Z'
+    server_time = datetime.datetime.now(datetime.timezone.utc).isoformat() + 'Z'
 
     return jsonify({
         'success': True,

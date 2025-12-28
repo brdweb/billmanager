@@ -113,8 +113,8 @@ def migrate_sqlite_to_pg(app):
             access_rows = cursor_master.fetchall()
             
             for row in access_rows:
-                u_obj = User.query.get(user_map[row['user_id']].id) if row['user_id'] in user_map else None
-                d_obj = Database.query.get(db_map[row['database_id']].id) if row['database_id'] in db_map else None
+                u_obj = db.session.get(User, user_map[row['user_id']].id) if row['user_id'] in user_map else None
+                d_obj = db.session.get(Database, db_map[row['database_id']].id) if row['database_id'] in db_map else None
                 
                 if u_obj and d_obj:
                     if d_obj not in u_obj.accessible_databases:
