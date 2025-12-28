@@ -1,0 +1,19 @@
+# Bandit configuration for BillManager
+# https://bandit.readthedocs.io/
+
+# Skip these test IDs
+skips:
+  # B101: assert_used - We use asserts in tests
+  - B101
+
+# Exclude these directories
+exclude_dirs:
+  - tests
+  - venv
+  - .venv
+  - __pycache__
+
+# Set severity thresholds
+# Available: LOW, MEDIUM, HIGH
+severity: LOW
+confidence: LOW

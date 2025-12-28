@@ -9,3 +9,12 @@ flask-migrate==4.0.7
 PyJWT==2.8.0
 resend==2.0.0
 stripe==7.0.0
+
+# Testing
+pytest>=8.0.0
+pytest-cov>=4.1.0
+responses>=0.25.0
+
+# Security scanning
+bandit>=1.7.0
+pip-audit>=2.7.0

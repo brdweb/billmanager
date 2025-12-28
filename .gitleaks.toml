@@ -1,0 +1,39 @@
+# Gitleaks configuration for BillManager
+# https://github.com/gitleaks/gitleaks
+
+title = "BillManager Secrets Scan"
+
+[extend]
+# Use the default gitleaks config as a base
+useDefault = true
+
+# Allow specific patterns that aren't actually secrets
+[[rules]]
+id = "test-credentials"
+description = "Allow test database credentials"
+regex = '''billspass|testsecret|testpassword'''
+allowlist.paths = [
+  '''\.md$''',
+  '''conftest\.py$''',
+  '''test_.*\.py$''',
+  '''CLAUDE\.md$''',
+]
+
+[[rules]]
+id = "example-urls"
+description = "Allow example URLs in documentation"
+regex = '''192\.168\.40\.240'''
+allowlist.paths = [
+  '''\.md$''',
+  '''CLAUDE\.md$''',
+]
+
+# Paths to always ignore
+[allowlist]
+paths = [
+  '''node_modules/''',
+  '''\.git/''',
+  '''\./venv/''',
+  '''package-lock\.json$''',
+  '''\.env\.example$''',
+]

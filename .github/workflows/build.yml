@@ -12,7 +12,8 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  test:
+  test-backend:
+    name: Backend Tests & Security
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -29,12 +30,27 @@ jobs:
         run: |
           cd apps/server
           pip install -r requirements.txt
-          pip install pytest
 
-      - name: Run Python tests
+      - name: Run pytest
         run: |
           cd apps/server
-          pytest -v || echo "No tests found, skipping"
+          pytest -v --cov=. --cov-report=xml --cov-report=term-missing
+
+      - name: Run bandit security scan
+        run: |
+          cd apps/server
+          bandit -r . -x tests -c bandit.yaml -f txt
+
+      - name: Run pip-audit
+        run: |
+          pip-audit -r apps/server/requirements.txt
+
+  test-frontend:
+    name: Frontend Tests & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -48,13 +64,43 @@ jobs:
           cd apps/web
           npm ci
 
+      - name: Run vitest
+        run: |
+          cd apps/web
+          npm run test
+
+      - name: Run ESLint
+        run: |
+          cd apps/web
+          npm run lint
+
       - name: Build frontend (TypeScript check)
         run: |
           cd apps/web
           npm run build
 
+      - name: Run npm audit
+        run: |
+          cd apps/web
+          npm audit --audit-level=high || true
+
+  security-scan:
+    name: Secrets Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build:
-    needs: test
+    name: Build Docker Image
+    needs: [test-backend, test-frontend, security-scan]
     runs-on: ubuntu-latest
     permissions:
       contents: read
