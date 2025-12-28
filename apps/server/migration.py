@@ -218,5 +218,6 @@ def migrate_sqlite_to_pg(app):
 
         # Finalize
         print("✅ Migration process finished.")
+        from datetime import datetime
         with open(flag_file, 'w') as f:
-            f.write(f"Migration completed on {os.popen('date').read().strip()}")
+            f.write(f"Migration completed on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
