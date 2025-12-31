@@ -14,7 +14,7 @@ info:
 
     Access tokens expire after 15 minutes. Refresh tokens expire after 7 days.
 
-  version: 3.3.4
+  version: 3.4.1
   license:
     name: O'Saasy License
     url: https://osaasy.dev/

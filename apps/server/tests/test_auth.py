@@ -136,6 +136,59 @@ class TestPasswordChange:
             assert data.get('require_password_change') is True
             assert 'change_token' in data
 
+    def test_v1_password_change_sets_session(self, client, app, db_session):
+        """Test v1 /change-password endpoint sets up session correctly."""
+        from models import User, Database
+
+        with app.app_context():
+            # Create admin user that requires password change
+            user = User(
+                username='firstadmin',
+                role='admin',
+                password_change_required=True
+            )
+            user.set_password('initialpassword')
+            db_session.add(user)
+
+            # Create a database and grant access
+            test_db = Database(
+                name='testdb',
+                display_name='Test Database'
+            )
+            db_session.add(test_db)
+            db_session.flush()
+            user.accessible_databases.append(test_db)
+            db_session.commit()
+
+            # Login - should return password change required
+            login_response = client.post('/login', json={
+                'username': 'firstadmin',
+                'password': 'initialpassword'
+            })
+            login_data = json.loads(login_response.data)
+            assert login_data.get('require_password_change') is True
+            change_token = login_data.get('change_token')
+            assert change_token is not None
+
+            # Use v1 change-password endpoint
+            change_response = client.post('/change-password', json={
+                'change_token': change_token,
+                'new_password': 'newsecurepassword123'
+            })
+            assert change_response.status_code == 200
+            change_data = json.loads(change_response.data)
+            assert change_data.get('role') == 'admin'
+            assert 'databases' in change_data
+            assert len(change_data['databases']) == 1
+            assert change_data['databases'][0]['name'] == 'testdb'
+
+            # Session should now be valid - /me should work
+            me_response = client.get('/me')
+            assert me_response.status_code == 200
+            me_data = json.loads(me_response.data)
+            assert me_data.get('role') == 'admin'
+            assert me_data.get('current_db') == 'testdb'
+
 
 class TestLogout:
     """Test logout functionality."""

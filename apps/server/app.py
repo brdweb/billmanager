@@ -37,6 +37,10 @@ from validation import (
 # --- JWT Configuration ---
 # In production, JWT_SECRET_KEY must be explicitly set
 _jwt_secret = os.environ.get('JWT_SECRET_KEY') or os.environ.get('FLASK_SECRET_KEY')
+# --- Global Logging ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 if not _jwt_secret:
     if os.environ.get('FLASK_ENV') == 'production' or os.environ.get('ENVIRONMENT') == 'production':
         raise RuntimeError("JWT_SECRET_KEY or FLASK_SECRET_KEY must be set in production")
@@ -46,10 +50,6 @@ if not _jwt_secret:
 JWT_SECRET_KEY = _jwt_secret
 JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)
 JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)
-
-# --- Global Logging ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # --- Blueprints ---
 api_bp = Blueprint('api', __name__)
@@ -485,6 +485,38 @@ def login():
         if dbs: session['db_name'] = dbs[0]['name']
         return jsonify({'message': 'Login successful', 'role': user.role, 'databases': dbs})
     return jsonify({'error': 'Invalid username or password'}), 401
+
+@api_bp.route('/change-password', methods=['POST'])
+@limiter.limit("5 per minute")
+def change_password():
+    """Change password for users with password_change_required flag (first login)."""
+    data = request.get_json() or {}
+    change_token = data.get('change_token')
+    new_password = data.get('new_password')
+
+    if not change_token or not new_password:
+        return jsonify({'error': 'change_token and new_password are required'}), 400
+
+    if len(new_password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters'}), 400
+
+    user = User.query.filter_by(change_token=change_token).first()
+    if not user:
+        return jsonify({'error': 'Invalid change token'}), 401
+
+    user.set_password(new_password)
+    user.password_change_required = False
+    user.change_token = None
+    db.session.commit()
+
+    # Set up session (like normal login)
+    session['user_id'] = user.id
+    session['role'] = user.role
+    dbs = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
+    if dbs:
+        session['db_name'] = dbs[0]['name']
+
+    return jsonify({'message': 'Password changed successfully', 'role': user.role, 'databases': dbs})
 
 @api_bp.route('/logout', methods=['POST'])
 def logout():
@@ -1057,7 +1089,7 @@ def process_auto_payments():
 
 @api_bp.route('/api/version', methods=['GET'])
 def get_version():
-    return jsonify({'version': '3.3.4', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites']})
+    return jsonify({'version': '3.4.1', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites']})
 
 @api_bp.route('/ping')
 def ping(): return jsonify({'status': 'ok'})
@@ -2638,7 +2670,7 @@ def jwt_get_version():
     return jsonify({
         'success': True,
         'data': {
-            'version': '3.3.4',
+            'version': '3.4.1',
             'api_version': 'v2',
             'license': "O'Saasy",
             'license_url': 'https://osaasy.dev/',
