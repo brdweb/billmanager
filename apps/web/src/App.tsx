@@ -267,15 +267,22 @@ function App() {
   // Render public routes without Layout
   if (isPublicRoute) {
     return (
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Login />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/resend-verification" element={<ResendVerification />} />
-        <Route path="/accept-invite" element={<AcceptInvite />} />
-      </Routes>
+      <>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Login />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/resend-verification" element={<ResendVerification />} />
+          <Route path="/accept-invite" element={<AcceptInvite />} />
+        </Routes>
+        {/* Password change modal must be accessible from login page */}
+        <PasswordChangeModal
+          opened={passwordChangeOpened}
+          onClose={() => setPasswordChangeOpened(false)}
+        />
+      </>
     );
   }
 
@@ -309,7 +316,7 @@ function App() {
                 />
                 <Divider />
                 <Text size="xs" c="dimmed" ta="center">
-                  BillManager v3.3.4 - Licensed under{' '}
+                  BillManager v3.4.1 - Licensed under{' '}
                   <Anchor href="https://osaasy.dev/" target="_blank" size="xs">
                     O'Saasy
                   </Anchor>
