@@ -133,7 +133,7 @@ class TestPasswordChange:
                 'password': 'initialpassword'
             })
             data = json.loads(response.data)
-            assert data.get('require_password_change') is True
+            assert data.get('password_change_required') is True
             assert 'change_token' in data
 
     def test_v1_password_change_sets_session(self, client, app, db_session):
@@ -166,7 +166,7 @@ class TestPasswordChange:
                 'password': 'initialpassword'
             })
             login_data = json.loads(login_response.data)
-            assert login_data.get('require_password_change') is True
+            assert login_data.get('password_change_required') is True
             change_token = login_data.get('change_token')
             assert change_token is not None
 
