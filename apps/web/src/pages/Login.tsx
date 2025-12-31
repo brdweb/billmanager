@@ -85,7 +85,10 @@ export function Login() {
     try {
       const result = await login(loginUsername, loginPassword);
       if (result.success) {
-        navigate('/');
+        // Don't navigate if password change is required - modal will show on this page
+        if (!result.requirePasswordChange) {
+          navigate('/');
+        }
       } else {
         setLoginError('Invalid credentials');
       }

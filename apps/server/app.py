@@ -479,7 +479,7 @@ def login():
         db.session.commit()
         if user.password_change_required:
             token = secrets.token_hex(32); user.change_token = token; db.session.commit()
-            return jsonify({'require_password_change': True, 'user_id': user.id, 'change_token': token, 'role': user.role})
+            return jsonify({'password_change_required': True, 'user_id': user.id, 'change_token': token, 'role': user.role})
         session['user_id'] = user.id; session['role'] = user.role
         dbs = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
         if dbs: session['db_name'] = dbs[0]['name']
@@ -1134,7 +1134,7 @@ def jwt_login():
         return jsonify({
             'success': False,
             'error': 'Password change required',
-            'require_password_change': True,
+            'password_change_required': True,
             'change_token': token
         }), 403
 

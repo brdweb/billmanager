@@ -20,6 +20,7 @@ interface AuthState {
 interface LoginResult {
   success: boolean;
   warning?: string;
+  requirePasswordChange?: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -88,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             changeToken: response.change_token!,
           },
         }));
-        return { success: true }; // Login succeeded but password change required
+        return { success: true, requirePasswordChange: true };
       }
 
       setState({

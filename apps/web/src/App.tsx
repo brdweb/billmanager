@@ -181,14 +181,8 @@ function App() {
     fetchBills();
   }, [fetchBills]);
 
-  // Handle password change required
-  const [passwordChangeOpened, setPasswordChangeOpened] = useState(false);
-
-  useEffect(() => {
-    if (pendingPasswordChange) {
-      setPasswordChangeOpened(true);
-    }
-  }, [pendingPasswordChange]);
+  // Handle password change required - derive directly from auth state
+  const passwordChangeOpened = !!pendingPasswordChange;
 
   // Bill actions
   const handleAddBill = () => {
@@ -280,7 +274,7 @@ function App() {
         {/* Password change modal must be accessible from login page */}
         <PasswordChangeModal
           opened={passwordChangeOpened}
-          onClose={() => setPasswordChangeOpened(false)}
+          onClose={() => {}}
         />
       </>
     );
@@ -367,7 +361,7 @@ function App() {
       {/* Modals */}
       <PasswordChangeModal
         opened={passwordChangeOpened}
-        onClose={() => setPasswordChangeOpened(false)}
+        onClose={() => {}}
       />
 
       <AdminModal opened={adminOpened} onClose={closeAdmin} />
