@@ -10,6 +10,7 @@ from functools import wraps
 
 import jwt
 from flask import Flask, request, jsonify, send_from_directory, session, g, Blueprint
+from werkzeug.utils import safe_join
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_limiter import Limiter
@@ -2475,7 +2476,8 @@ def jwt_create_invitation():
 
     if not email:
         return jsonify({'success': False, 'error': 'Email is required'}), 400
-    if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+    # Validate email: length check prevents ReDoS, simple check for @ and domain
+    if len(email) > 254 or '@' not in email or '.' not in email.split('@')[-1]:
         return jsonify({'success': False, 'error': 'Invalid email format'}), 400
 
     existing_user = User.query.filter_by(email=email).first()
@@ -3372,8 +3374,9 @@ def index():
 @spa_bp.route('/<path:path>', methods=['GET'])
 def serve_static(path):
     client_dir = get_client_dir()
-    full_path = os.path.join(client_dir, path)
-    if os.path.exists(full_path) and os.path.isfile(full_path):
+    # Use safe_join to prevent path traversal attacks
+    full_path = safe_join(client_dir, path)
+    if full_path and os.path.exists(full_path) and os.path.isfile(full_path):
         return send_from_directory(client_dir, path)
     return send_from_directory(client_dir, 'index.html')
 
