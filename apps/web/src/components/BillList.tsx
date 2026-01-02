@@ -130,15 +130,12 @@ export function BillList({
     }
   }, [isLoggedIn, bills]); // Refetch when bills change
 
-  // Reset page when bills change (filters applied)
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [bills.length]);
-
-  // Paginated bills
+  // Paginated bills - reset to page 1 if current page is out of bounds
   const totalPages = Math.ceil(bills.length / ITEMS_PER_PAGE);
+  const validPage = currentPage > totalPages ? 1 : currentPage;
   const paginatedBills = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    const page = currentPage > Math.ceil(bills.length / ITEMS_PER_PAGE) ? 1 : currentPage;
+    const start = (page - 1) * ITEMS_PER_PAGE;
     return bills.slice(start, start + ITEMS_PER_PAGE);
   }, [bills, currentPage]);
   if (!isLoggedIn) {
@@ -398,7 +395,7 @@ export function BillList({
         <Group justify="center">
           <Pagination
             total={totalPages}
-            value={currentPage}
+            value={validPage}
             onChange={setCurrentPage}
             size="sm"
           />

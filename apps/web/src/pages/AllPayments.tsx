@@ -128,15 +128,12 @@ export function AllPayments() {
     return result;
   }, [payments, searchName, dateFrom, dateTo, amountMin, amountMax, sortBy]);
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchName, dateFrom, dateTo, amountMin, amountMax, sortBy]);
-
-  // Paginated payments
+  // Paginated payments - reset to page 1 if current page is out of bounds
   const totalPages = Math.ceil(filteredPayments.length / ITEMS_PER_PAGE);
+  const validPage = currentPage > totalPages ? 1 : currentPage;
   const paginatedPayments = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    const page = currentPage > Math.ceil(filteredPayments.length / ITEMS_PER_PAGE) ? 1 : currentPage;
+    const start = (page - 1) * ITEMS_PER_PAGE;
     return filteredPayments.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredPayments, currentPage]);
 
@@ -477,7 +474,7 @@ export function AllPayments() {
             <Group justify="center" p="md">
               <Pagination
                 total={totalPages}
-                value={currentPage}
+                value={validPage}
                 onChange={setCurrentPage}
                 size="sm"
               />
