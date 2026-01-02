@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
   Stack,
@@ -11,6 +11,7 @@ import {
   Paper,
   Loader,
   Center,
+  Pagination,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { IconEdit, IconTrash, IconCheck, IconX } from '@tabler/icons-react';
@@ -40,11 +41,23 @@ export function PaymentHistory({
   const [editAmount, setEditAmount] = useState<number | ''>('');
   const [editDate, setEditDate] = useState<Date | null>(null);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 5;
+
   useEffect(() => {
     if (opened && billId) {
       fetchPayments();
+      setCurrentPage(1); // Reset page when opening new bill
     }
   }, [opened, billId]);
+
+  // Paginated payments
+  const totalPages = Math.ceil(payments.length / ITEMS_PER_PAGE);
+  const paginatedPayments = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return payments.slice(start, start + ITEMS_PER_PAGE);
+  }, [payments, currentPage]);
 
   const fetchPayments = async () => {
     if (!billId) return;
@@ -124,6 +137,7 @@ export function PaymentHistory({
             </Text>
           </Paper>
         ) : (
+          <>
           <Table striped highlightOnHover>
             <Table.Thead>
               <Table.Tr>
@@ -133,7 +147,7 @@ export function PaymentHistory({
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {payments.map((payment) => (
+              {paginatedPayments.map((payment) => (
                 <Table.Tr key={payment.id}>
                   <Table.Td>
                     {editingId === payment.id ? (
@@ -207,6 +221,18 @@ export function PaymentHistory({
               ))}
             </Table.Tbody>
           </Table>
+
+          {totalPages > 1 && (
+            <Group justify="center" mt="sm">
+              <Pagination
+                total={totalPages}
+                value={currentPage}
+                onChange={setCurrentPage}
+                size="xs"
+              />
+            </Group>
+          )}
+          </>
         )}
 
         <Group justify="flex-end">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Table,
   Group,
@@ -12,6 +12,7 @@ import {
   TextInput,
   Select,
   Menu,
+  Pagination,
 } from '@mantine/core';
 import { IconEdit, IconCash, IconPlus, IconFilterOff, IconSearch, IconX, IconDownload, IconFileTypeCsv, IconFileTypePdf } from '@tabler/icons-react';
 import { exportBillsToCSV, exportBillsToPDF } from '../utils/export';
@@ -116,6 +117,10 @@ export function BillList({
   // Accounts list for filtering
   const [accounts, setAccounts] = useState<string[]>([]);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
+
   // Fetch accounts list when logged in
   useEffect(() => {
     if (isLoggedIn) {
@@ -124,6 +129,18 @@ export function BillList({
         .catch((err) => console.error('Failed to fetch accounts:', err));
     }
   }, [isLoggedIn, bills]); // Refetch when bills change
+
+  // Reset page when bills change (filters applied)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [bills.length]);
+
+  // Paginated bills
+  const totalPages = Math.ceil(bills.length / ITEMS_PER_PAGE);
+  const paginatedBills = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return bills.slice(start, start + ITEMS_PER_PAGE);
+  }, [bills, currentPage]);
   if (!isLoggedIn) {
     return (
       <Card p="xl" withBorder>
@@ -285,7 +302,7 @@ export function BillList({
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {bills.map((bill) => (
+            {paginatedBills.map((bill) => (
               <Table.Tr
                 key={bill.id}
                 style={{
@@ -376,6 +393,17 @@ export function BillList({
           </Table.Tbody>
         </Table>
       </Paper>
+
+      {totalPages > 1 && (
+        <Group justify="center">
+          <Pagination
+            total={totalPages}
+            value={currentPage}
+            onChange={setCurrentPage}
+            size="sm"
+          />
+        </Group>
+      )}
     </Stack>
   );
 }

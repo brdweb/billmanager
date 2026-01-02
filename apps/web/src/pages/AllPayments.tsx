@@ -16,6 +16,7 @@ import {
   Button,
   Collapse,
   Menu,
+  Pagination,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
@@ -53,6 +54,10 @@ export function AllPayments() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editAmount, setEditAmount] = useState<number | ''>('');
   const [editDate, setEditDate] = useState<Date | null>(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
 
   useEffect(() => {
     fetchPayments();
@@ -122,6 +127,18 @@ export function AllPayments() {
 
     return result;
   }, [payments, searchName, dateFrom, dateTo, amountMin, amountMax, sortBy]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchName, dateFrom, dateTo, amountMin, amountMax, sortBy]);
+
+  // Paginated payments
+  const totalPages = Math.ceil(filteredPayments.length / ITEMS_PER_PAGE);
+  const paginatedPayments = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredPayments.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredPayments, currentPage]);
 
   const clearFilters = () => {
     setSearchName('');
@@ -385,7 +402,7 @@ export function AllPayments() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {filteredPayments.map((payment) => (
+              {paginatedPayments.map((payment) => (
                 <Table.Tr key={payment.id}>
                   <Table.Td>
                     <Group gap="xs">
@@ -455,6 +472,17 @@ export function AllPayments() {
               ))}
             </Table.Tbody>
           </Table>
+
+          {totalPages > 1 && (
+            <Group justify="center" p="md">
+              <Pagination
+                total={totalPages}
+                value={currentPage}
+                onChange={setCurrentPage}
+                size="sm"
+              />
+            </Group>
+          )}
         </Paper>
       )}
     </Stack>
