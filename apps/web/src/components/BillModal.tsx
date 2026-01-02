@@ -23,7 +23,7 @@ import type { Bill } from '../api/client';
 import * as api from '../api/client';
 import { IconPicker } from './IconPicker';
 import { BillIcon } from './BillIcon';
-import { formatDateForAPI } from '../utils/date';
+import { formatDateForAPI, parseLocalDate } from '../utils/date';
 
 interface BillFormValues {
   name: string;
@@ -147,7 +147,7 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
             frequency_type: bill.frequency_type || 'simple',
             monthly_dates: (frequencyConfig && frequencyConfig.dates) ? frequencyConfig.dates.join(', ') : '',
             weekly_days: (frequencyConfig && frequencyConfig.days) ? frequencyConfig.days : [],
-            next_due: bill.next_due ? new Date(bill.next_due) : null,
+            next_due: bill.next_due ? parseLocalDate(bill.next_due) : null,
             auto_payment: bill.auto_payment || false,
             icon: bill.icon || 'payment',
             type: bill.type || 'expense',
