@@ -22,3 +22,16 @@ export function formatDateString(dateStr: string): string {
     year: 'numeric',
   });
 }
+
+/**
+ * Format a Date object as YYYY-MM-DD using local timezone.
+ *
+ * Unlike `date.toISOString().split('T')[0]` which uses UTC,
+ * this preserves the local date the user selected.
+ */
+export function formatDateForAPI(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}

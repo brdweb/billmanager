@@ -27,7 +27,7 @@ import type { PaymentWithBill } from '../api/client';
 import { BillIcon } from '../components/BillIcon';
 import { IconEdit, IconTrash, IconCheck } from '@tabler/icons-react';
 import { exportPaymentsToCSV, exportPaymentsToPDF } from '../utils/export';
-import { parseLocalDate, formatDateString } from '../utils/date';
+import { parseLocalDate, formatDateString, formatDateForAPI } from '../utils/date';
 
 interface MonthlyChartData {
   month: string;
@@ -156,7 +156,7 @@ export function AllPayments() {
     if (editingId === null || editAmount === '' || !editDate) return;
 
     try {
-      await updatePayment(editingId, editAmount as number, editDate.toISOString().split('T')[0]);
+      await updatePayment(editingId, editAmount as number, formatDateForAPI(editDate));
       await fetchPayments();
       handleCancelEdit();
     } catch (error) {

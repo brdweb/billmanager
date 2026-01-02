@@ -23,6 +23,7 @@ import type { Bill } from '../api/client';
 import * as api from '../api/client';
 import { IconPicker } from './IconPicker';
 import { BillIcon } from './BillIcon';
+import { formatDateForAPI } from '../utils/date';
 
 interface BillFormValues {
   name: string;
@@ -172,14 +173,14 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
     const nextDateThisMonth = dates.find((d) => d > currentDay);
     if (nextDateThisMonth) {
       const nextDue = new Date(currentYear, currentMonth, nextDateThisMonth);
-      return nextDue.toISOString().split('T')[0];
+      return formatDateForAPI(nextDue);
     }
 
     // Otherwise, use first date of next month
     const nextMonth = currentMonth + 1;
     const nextYear = nextMonth > 11 ? currentYear + 1 : currentYear;
     const nextDue = new Date(nextYear, nextMonth % 12, dates[0]);
-    return nextDue.toISOString().split('T')[0];
+    return formatDateForAPI(nextDue);
   };
 
   const handleSubmit = async (values: BillFormValues) => {
@@ -209,10 +210,10 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
         nextDue = calculatedNextDue;
       } else if (values.next_due) {
         nextDue = values.next_due instanceof Date
-          ? values.next_due.toISOString().split('T')[0]
+          ? formatDateForAPI(values.next_due)
           : String(values.next_due).split('T')[0];
       } else {
-        nextDue = new Date().toISOString().split('T')[0];
+        nextDue = formatDateForAPI(new Date());
       }
 
       const billData: Partial<Bill> = {

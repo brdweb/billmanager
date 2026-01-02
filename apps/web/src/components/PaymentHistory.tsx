@@ -17,7 +17,7 @@ import { IconEdit, IconTrash, IconCheck, IconX } from '@tabler/icons-react';
 import type { Payment } from '../api/client';
 import { getPayments, updatePayment, deletePayment } from '../api/client';
 import { PaymentHistoryChart } from './PaymentHistoryChart';
-import { parseLocalDate, formatDateString } from '../utils/date';
+import { parseLocalDate, formatDateString, formatDateForAPI } from '../utils/date';
 
 interface PaymentHistoryProps {
   opened: boolean;
@@ -78,7 +78,7 @@ export function PaymentHistory({
       await updatePayment(
         editingId,
         editAmount as number,
-        editDate.toISOString().split('T')[0]
+        formatDateForAPI(editDate)
       );
       await fetchPayments();
       onPaymentsChanged();
