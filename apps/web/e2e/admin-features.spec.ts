@@ -13,7 +13,7 @@ const TEST_PASSWORD = 'TestPassword123!';
 test.describe.serial('Admin Features v3.4.3', () => {
   test('should complete initial login and password change', async ({ page }) => {
     // Get initial password from env or use the current test password
-    const initialPassword = process.env.INITIAL_PASSWORD || 's83xMVeZWaooTedU';
+    const initialPassword = process.env.INITIAL_PASSWORD || 'GRKir2VGylKACVrb';
 
     await page.goto('/login');
     await page.getByLabel('Username').fill('admin');

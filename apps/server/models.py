@@ -68,8 +68,9 @@ class User(db.Model):
         """
         # Check if this is a legacy SHA-256 hash (64 hex chars, no prefix)
         if len(self.password_hash) == 64 and not self.password_hash.startswith(('pbkdf2:', 'scrypt:')):
-            # Legacy SHA-256 verification
-            if self.password_hash == hashlib.sha256(password.encode()).hexdigest():
+            # Legacy SHA-256 verification - intentionally kept for migration
+            # lgtm[py/weak-sensitive-data-hashing] - This is migration code for old passwords
+            if self.password_hash == hashlib.sha256(password.encode()).hexdigest():  # nosec B324
                 # Auto-migrate to secure hash on successful login
                 self.set_password(password)
                 return True

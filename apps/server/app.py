@@ -1857,7 +1857,8 @@ def stripe_webhook():
     except Exception as e:
         logger.error(f"Webhook processing error: {e}")
         # Return 200 anyway to prevent Stripe retries
-        return jsonify({'received': True, 'error': str(e)}), 200
+        # Don't expose internal error details to external callers
+        return jsonify({'received': True}), 200
 
     return jsonify({'received': True}), 200
 

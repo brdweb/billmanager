@@ -114,7 +114,7 @@ def create_checkout_session(
         }
     except stripe.error.StripeError as e:
         logger.error(f"Stripe checkout error: {e}")
-        return {'error': str(e)}
+        return {'error': 'Payment service error. Please try again.'}
 
 
 def create_portal_session(customer_id: str) -> dict:
@@ -136,7 +136,7 @@ def create_portal_session(customer_id: str) -> dict:
         return {'url': session.url}
     except stripe.error.StripeError as e:
         logger.error(f"Stripe portal error: {e}")
-        return {'error': str(e)}
+        return {'error': 'Unable to access billing portal. Please try again.'}
 
 
 def construct_webhook_event(payload: bytes, sig_header: str) -> dict:
@@ -182,7 +182,7 @@ def get_subscription(subscription_id: str) -> dict:
         }
     except stripe.error.StripeError as e:
         logger.error(f"Stripe subscription error: {e}")
-        return {'error': str(e)}
+        return {'error': 'Unable to retrieve subscription details.'}
 
 
 def update_subscription(subscription_id: str, new_price_id: str, prorate: bool = True) -> dict:
@@ -238,7 +238,7 @@ def update_subscription(subscription_id: str, new_price_id: str, prorate: bool =
         }
     except stripe.error.StripeError as e:
         logger.error(f"Stripe update subscription error: {e}")
-        return {'error': str(e)}
+        return {'error': 'Unable to update subscription. Please try again.'}
 
 
 def cancel_subscription(subscription_id: str, at_period_end: bool = True) -> dict:
@@ -264,4 +264,4 @@ def cancel_subscription(subscription_id: str, at_period_end: bool = True) -> dic
         }
     except stripe.error.StripeError as e:
         logger.error(f"Stripe cancel error: {e}")
-        return {'error': str(e)}
+        return {'error': 'Unable to cancel subscription. Please try again.'}
