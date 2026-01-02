@@ -64,6 +64,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userDatabases, setUserDatabases] = useState<number[]>([]);
   const [userEmail, setUserEmail] = useState('');
+  const [userRole, setUserRole] = useState<'admin' | 'user'>('user');
   const [accessLoading, setAccessLoading] = useState(false);
 
   // Fetch data on mount and when tab becomes active
@@ -167,6 +168,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
   const handleEditUser = async (user: User) => {
     setEditingUser(user);
     setUserEmail(user.email || '');
+    setUserRole(user.role);
     setAccessLoading(true);
     try {
       // Fetch both fresh databases list and user's current access
@@ -188,10 +190,21 @@ export function UsersTab({ isActive }: UsersTabProps) {
 
     setAccessLoading(true);
     try {
-      // Update email if changed
+      // Build update payload for changed fields
+      const updatePayload: { email?: string | null; role?: 'admin' | 'user' } = {};
+
       const newEmail = userEmail.trim() || null;
       if (newEmail !== (editingUser.email || null)) {
-        await updateUser(editingUser.id, { email: newEmail });
+        updatePayload.email = newEmail;
+      }
+
+      if (userRole !== editingUser.role) {
+        updatePayload.role = userRole;
+      }
+
+      // Update user if there are changes
+      if (Object.keys(updatePayload).length > 0) {
+        await updateUser(editingUser.id, updatePayload);
       }
 
       // Get current databases
@@ -528,6 +541,16 @@ export function UsersTab({ isActive }: UsersTabProps) {
                 placeholder="user@example.com"
                 value={userEmail}
                 onChange={(e) => setUserEmail(e.currentTarget.value)}
+              />
+
+              <Select
+                label="Role"
+                value={userRole}
+                onChange={(val) => setUserRole((val as 'admin' | 'user') || 'user')}
+                data={[
+                  { value: 'user', label: 'User' },
+                  { value: 'admin', label: 'Admin' },
+                ]}
               />
 
               <Text size="sm" fw={500}>

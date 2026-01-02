@@ -590,6 +590,26 @@ def delete_database(db_id):
             return jsonify({'error': 'Access denied'}), 403
     db.session.delete(target_db); db.session.commit(); return jsonify({'message': 'Deleted'})
 
+@api_bp.route('/databases/<int:db_id>', methods=['PUT'])
+@admin_required
+def update_database(db_id):
+    target_db = db.get_or_404(Database,db_id)
+    # In SaaS mode, only allow updating databases you own
+    if is_saas():
+        current_user_id = session.get('user_id')
+        if target_db.owner_id != current_user_id:
+            return jsonify({'error': 'Access denied'}), 403
+    data = request.get_json()
+    if 'display_name' in data:
+        display_name = data['display_name'].strip()
+        if not display_name:
+            return jsonify({'error': 'Display name cannot be empty'}), 400
+        target_db.display_name = display_name
+    if 'description' in data:
+        target_db.description = data['description'].strip() if data['description'] else ''
+    db.session.commit()
+    return jsonify({'id': target_db.id, 'name': target_db.name, 'display_name': target_db.display_name, 'description': target_db.description})
+
 @api_bp.route('/databases/<int:db_id>/access', methods=['GET', 'POST'])
 @admin_required
 def database_access_handler(db_id):
@@ -673,6 +693,7 @@ def users_handler():
 def update_user(user_id):
     user = db.get_or_404(User,user_id)
     current_user_id = session.get('user_id')
+    current_user = db.session.get(User,current_user_id)
     # In SaaS mode, only allow updating users you created (or yourself, or legacy users)
     if is_saas() and user.id != current_user_id:
         if user.created_by_id is not None and user.created_by_id != current_user_id:
@@ -687,6 +708,18 @@ def update_user(user_id):
             if existing:
                 return jsonify({'error': 'Email already in use'}), 400
         user.email = new_email
+    # Update role if provided
+    if 'role' in data:
+        new_role = data['role']
+        if new_role not in ['admin', 'user']:
+            return jsonify({'error': 'Invalid role. Must be "admin" or "user"'}), 400
+        # Prevent demoting yourself
+        if user.id == current_user_id and new_role != 'admin':
+            return jsonify({'error': 'Cannot change your own role'}), 400
+        # In SaaS mode, prevent changing account owner's role
+        if is_saas() and user.is_account_owner and new_role != 'admin':
+            return jsonify({'error': 'Cannot demote account owner'}), 400
+        user.role = new_role
     db.session.commit()
     return jsonify({'id': user.id, 'username': user.username, 'role': user.role, 'email': user.email})
 
@@ -1089,7 +1122,7 @@ def process_auto_payments():
 
 @api_bp.route('/api/version', methods=['GET'])
 def get_version():
-    return jsonify({'version': '3.4.2', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites']})
+    return jsonify({'version': '3.4.3', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites']})
 
 @api_bp.route('/ping')
 def ping(): return jsonify({'status': 'ok'})
@@ -2602,10 +2635,15 @@ def jwt_update_database(database_id):
 
     data = request.get_json()
     if 'display_name' in data:
-        database.display_name = data['display_name'].strip()
+        display_name = data['display_name'].strip()
+        if not display_name:
+            return jsonify({'success': False, 'error': 'Display name cannot be empty'}), 400
+        database.display_name = display_name
+    if 'description' in data:
+        database.description = data['description'].strip() if data['description'] else ''
 
     db.session.commit()
-    return jsonify({'success': True, 'data': {'id': database.id, 'name': database.name, 'display_name': database.display_name}})
+    return jsonify({'success': True, 'data': {'id': database.id, 'name': database.name, 'display_name': database.display_name, 'description': database.description}})
 
 @api_v2_bp.route('/databases/<int:database_id>', methods=['DELETE'])
 @jwt_admin_required
@@ -2670,7 +2708,7 @@ def jwt_get_version():
     return jsonify({
         'success': True,
         'data': {
-            'version': '3.4.2',
+            'version': '3.4.3',
             'api_version': 'v2',
             'license': "O'Saasy",
             'license_url': 'https://osaasy.dev/',

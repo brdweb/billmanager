@@ -3,7 +3,8 @@
 
 services:
   billmanager:
-    image: ghcr.io/brdweb/billmanager:latest
+    build: .
+    # image: ghcr.io/brdweb/billmanager:latest
     ports:
       - "5000:5000"
     environment:

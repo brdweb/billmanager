@@ -17,6 +17,7 @@ import { IconEdit, IconTrash, IconCheck, IconX } from '@tabler/icons-react';
 import type { Payment } from '../api/client';
 import { getPayments, updatePayment, deletePayment } from '../api/client';
 import { PaymentHistoryChart } from './PaymentHistoryChart';
+import { parseLocalDate, formatDateString } from '../utils/date';
 
 interface PaymentHistoryProps {
   opened: boolean;
@@ -61,7 +62,7 @@ export function PaymentHistory({
   const handleEdit = (payment: Payment) => {
     setEditingId(payment.id);
     setEditAmount(payment.amount);
-    setEditDate(new Date(payment.payment_date));
+    setEditDate(parseLocalDate(payment.payment_date));
   };
 
   const handleCancelEdit = () => {
@@ -99,13 +100,6 @@ export function PaymentHistory({
     }
   };
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
 
   return (
     <Modal
@@ -150,7 +144,7 @@ export function PaymentHistory({
                         w={140}
                       />
                     ) : (
-                      formatDate(payment.payment_date)
+                      formatDateString(payment.payment_date)
                     )}
                   </Table.Td>
                   <Table.Td>

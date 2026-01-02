@@ -27,6 +27,7 @@ import type { PaymentWithBill } from '../api/client';
 import { BillIcon } from '../components/BillIcon';
 import { IconEdit, IconTrash, IconCheck } from '@tabler/icons-react';
 import { exportPaymentsToCSV, exportPaymentsToPDF } from '../utils/export';
+import { parseLocalDate, formatDateString } from '../utils/date';
 
 interface MonthlyChartData {
   month: string;
@@ -81,12 +82,12 @@ export function AllPayments() {
 
     // Filter by date range
     if (dateFrom) {
-      result = result.filter((p) => new Date(p.payment_date) >= dateFrom);
+      result = result.filter((p) => parseLocalDate(p.payment_date) >= dateFrom);
     }
     if (dateTo) {
       const endDate = new Date(dateTo);
       endDate.setHours(23, 59, 59, 999);
-      result = result.filter((p) => new Date(p.payment_date) <= endDate);
+      result = result.filter((p) => parseLocalDate(p.payment_date) <= endDate);
     }
 
     // Filter by amount range
@@ -100,10 +101,10 @@ export function AllPayments() {
     // Sort
     switch (sortBy) {
       case 'date_desc':
-        result.sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime());
+        result.sort((a, b) => parseLocalDate(b.payment_date).getTime() - parseLocalDate(a.payment_date).getTime());
         break;
       case 'date_asc':
-        result.sort((a, b) => new Date(a.payment_date).getTime() - new Date(b.payment_date).getTime());
+        result.sort((a, b) => parseLocalDate(a.payment_date).getTime() - parseLocalDate(b.payment_date).getTime());
         break;
       case 'amount_desc':
         result.sort((a, b) => b.amount - a.amount);
@@ -138,18 +139,11 @@ export function AllPayments() {
     amountMin !== '' ||
     amountMax !== '';
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
 
   const handleEdit = (payment: PaymentWithBill) => {
     setEditingId(payment.id);
     setEditAmount(payment.amount);
-    setEditDate(new Date(payment.payment_date));
+    setEditDate(parseLocalDate(payment.payment_date));
   };
 
   const handleCancelEdit = () => {
@@ -189,7 +183,7 @@ export function AllPayments() {
     const monthlyTotals: Record<string, number> = {};
 
     filteredPayments.forEach((p) => {
-      const date = new Date(p.payment_date);
+      const date = parseLocalDate(p.payment_date);
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       monthlyTotals[key] = (monthlyTotals[key] || 0) + p.amount;
     });
@@ -408,7 +402,7 @@ export function AllPayments() {
                         w={140}
                       />
                     ) : (
-                      formatDate(payment.payment_date)
+                      formatDateString(payment.payment_date)
                     )}
                   </Table.Td>
                   <Table.Td>

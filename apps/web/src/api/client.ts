@@ -137,6 +137,9 @@ export const createDatabase = (name: string, display_name: string, description: 
 export const deleteDatabase = (dbId: number) =>
   unwrap(api.delete(`/databases/${dbId}`));
 
+export const updateDatabase = (dbId: number, display_name: string, description: string) =>
+  unwrap(api.put<Database>(`/databases/${dbId}`, { display_name, description }));
+
 export const getDatabaseAccess = (dbId: number) =>
   unwrap(api.get<User[]>(`/databases/${dbId}/access`));
 
@@ -161,7 +164,7 @@ export const addUser = (
 export const deleteUser = (userId: number) =>
   unwrap(api.delete(`/users/${userId}`));
 
-export const updateUser = (userId: number, data: { email?: string | null }) =>
+export const updateUser = (userId: number, data: { email?: string | null; role?: 'admin' | 'user' }) =>
   unwrap(api.put<User>(`/users/${userId}`, data));
 
 export const getUserDatabases = (userId: number) =>

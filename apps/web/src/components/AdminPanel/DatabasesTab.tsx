@@ -11,12 +11,13 @@ import {
   Loader,
   Center,
 } from '@mantine/core';
-import { IconTrash, IconPlus } from '@tabler/icons-react';
+import { IconTrash, IconPlus, IconEdit, IconCheck, IconX } from '@tabler/icons-react';
 import type { Database } from '../../api/client';
 import {
   getDatabases,
   createDatabase,
   deleteDatabase,
+  updateDatabase,
   getDatabaseAccess,
 } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -31,6 +32,12 @@ export function DatabasesTab() {
   const [newDisplayName, setNewDisplayName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [addLoading, setAddLoading] = useState(false);
+
+  // Edit state
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editDisplayName, setEditDisplayName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
 
   useEffect(() => {
     fetchDatabases();
@@ -70,6 +77,35 @@ export function DatabasesTab() {
       alert(err.response?.data?.error || 'Failed to create bill group');
     } finally {
       setAddLoading(false);
+    }
+  };
+
+  const handleStartEdit = (db: Database) => {
+    setEditingId(db.id!);
+    setEditDisplayName(db.display_name);
+    setEditDescription(db.description || '');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditDisplayName('');
+    setEditDescription('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId || !editDisplayName.trim()) return;
+
+    setEditLoading(true);
+    try {
+      await updateDatabase(editingId, editDisplayName, editDescription);
+      await fetchDatabases();
+      await refreshAuth();
+      handleCancelEdit();
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      alert(err.response?.data?.error || 'Failed to update bill group');
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -125,22 +161,74 @@ export function DatabasesTab() {
                 </Text>
               </Table.Td>
               <Table.Td>
-                <Text fw={500}>{db.display_name}</Text>
+                {editingId === db.id ? (
+                  <TextInput
+                    size="sm"
+                    value={editDisplayName}
+                    onChange={(e) => setEditDisplayName(e.currentTarget.value)}
+                    placeholder="Display Name"
+                  />
+                ) : (
+                  <Text fw={500}>{db.display_name}</Text>
+                )}
               </Table.Td>
               <Table.Td>
-                <Text size="sm" c="dimmed">
-                  {db.description || '-'}
-                </Text>
+                {editingId === db.id ? (
+                  <TextInput
+                    size="sm"
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.currentTarget.value)}
+                    placeholder="Description (optional)"
+                  />
+                ) : (
+                  <Text size="sm" c="dimmed">
+                    {db.description || '-'}
+                  </Text>
+                )}
               </Table.Td>
               <Table.Td>
-                <ActionIcon
-                  variant="subtle"
-                  color="red"
-                  onClick={() => handleDeleteDatabase(db)}
-                  title="Delete"
-                >
-                  <IconTrash size={18} />
-                </ActionIcon>
+                {editingId === db.id ? (
+                  <Group gap="xs">
+                    <ActionIcon
+                      variant="subtle"
+                      color="green"
+                      onClick={handleSaveEdit}
+                      loading={editLoading}
+                      disabled={!editDisplayName.trim()}
+                      title="Save"
+                    >
+                      <IconCheck size={18} />
+                    </ActionIcon>
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      onClick={handleCancelEdit}
+                      disabled={editLoading}
+                      title="Cancel"
+                    >
+                      <IconX size={18} />
+                    </ActionIcon>
+                  </Group>
+                ) : (
+                  <Group gap="xs">
+                    <ActionIcon
+                      variant="subtle"
+                      color="blue"
+                      onClick={() => handleStartEdit(db)}
+                      title="Edit"
+                    >
+                      <IconEdit size={18} />
+                    </ActionIcon>
+                    <ActionIcon
+                      variant="subtle"
+                      color="red"
+                      onClick={() => handleDeleteDatabase(db)}
+                      title="Delete"
+                    >
+                      <IconTrash size={18} />
+                    </ActionIcon>
+                  </Group>
+                )}
               </Table.Td>
             </Table.Tr>
           ))}
