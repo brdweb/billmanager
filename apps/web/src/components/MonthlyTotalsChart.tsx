@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Modal, Stack, Text, Loader, Center, Paper, Group, SegmentedControl, SimpleGrid } from '@mantine/core';
+import { Modal, Stack, Text, Loader, Center, Paper, Group, SegmentedControl, SimpleGrid, Alert } from '@mantine/core';
 import { LineChart, BarChart } from '@mantine/charts';
-import { getMonthlyPayments } from '../api/client';
+import { IconAlertCircle } from '@tabler/icons-react';
+import { getMonthlyPayments, ApiError } from '../api/client';
 
 interface MonthlyTotalsChartProps {
   opened: boolean;
@@ -17,6 +18,7 @@ interface ChartData {
 export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps) {
   const [data, setData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [chartType, setChartType] = useState<string>('bar');
   const [monthRange, setMonthRange] = useState<string>('12');
 
@@ -29,9 +31,10 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
 
   const fetchData = async () => {
     setLoading(true);
+    setError(null);
     try {
       const response = await getMonthlyPayments();
-      const monthlyData = response;
+      const monthlyData = response ?? {};
 
       // Generate last 12 months of data
       const months: ChartData[] = [];
@@ -52,8 +55,10 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
       }
 
       setData(months);
-    } catch (error) {
-      console.error('Failed to fetch monthly payments:', error);
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Failed to load spending data';
+      setError(message);
+      setData([]);
     } finally {
       setLoading(false);
     }
@@ -73,6 +78,10 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
           <Center py="xl">
             <Loader />
           </Center>
+        ) : error ? (
+          <Alert icon={<IconAlertCircle size={16} />} title="Error loading data" color="red">
+            {error}
+          </Alert>
         ) : data.length === 0 || totalSpent === 0 ? (
           <Paper p="xl" withBorder>
             <Text ta="center" c="dimmed">

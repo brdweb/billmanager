@@ -17,6 +17,7 @@ import {
   Divider,
   Alert,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { IconTrash, IconEdit, IconMail, IconX, IconMailOff, IconUserPlus } from '@tabler/icons-react';
 import type { User, Database, UserInvite } from '../../api/client';
 import {
@@ -31,6 +32,7 @@ import {
   getInvites,
   cancelInvite,
   addUser,
+  ApiError,
 } from '../../api/client';
 import { useConfig } from '../../context/ConfigContext';
 
@@ -100,19 +102,34 @@ export function UsersTab({ isActive }: UsersTabProps) {
   };
 
   const handleInviteUser = async () => {
-    if (!inviteEmail) return;
+    if (!inviteEmail) {
+      notifications.show({
+        title: 'Validation error',
+        message: 'Email address is required',
+        color: 'red',
+      });
+      return;
+    }
 
     setInviteLoading(true);
     try {
       await inviteUser(inviteEmail, inviteRole, selectedDatabases);
+      notifications.show({
+        message: 'Invitation sent successfully',
+        color: 'green',
+      });
       await fetchData();
       setShowInviteForm(false);
       setInviteEmail('');
       setInviteRole('user');
       setSelectedDatabases([]);
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { error?: string } } };
-      alert(err.response?.data?.error || 'Failed to send invitation');
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Failed to send invitation';
+      notifications.show({
+        title: 'Failed to send invitation',
+        message,
+        color: 'red',
+      });
     } finally {
       setInviteLoading(false);
     }
@@ -120,22 +137,34 @@ export function UsersTab({ isActive }: UsersTabProps) {
 
   const handleCreateUser = async () => {
     if (!createUsername || !createPassword) {
-      alert('Username and password are required');
+      notifications.show({
+        title: 'Validation error',
+        message: 'Username and password are required',
+        color: 'red',
+      });
       return;
     }
 
     setCreateLoading(true);
     try {
       await addUser(createUsername, createPassword, createRole, createDatabases);
+      notifications.show({
+        message: 'User created successfully',
+        color: 'green',
+      });
       await fetchData();
       setShowCreateForm(false);
       setCreateUsername('');
       setCreatePassword('');
       setCreateRole('user');
       setCreateDatabases([]);
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { error?: string } } };
-      alert(err.response?.data?.error || 'Failed to create user');
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Failed to create user';
+      notifications.show({
+        title: 'Failed to create user',
+        message,
+        color: 'red',
+      });
     } finally {
       setCreateLoading(false);
     }
@@ -146,10 +175,18 @@ export function UsersTab({ isActive }: UsersTabProps) {
 
     try {
       await cancelInvite(inviteId);
+      notifications.show({
+        message: 'Invitation cancelled',
+        color: 'green',
+      });
       await fetchData();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { error?: string } } };
-      alert(err.response?.data?.error || 'Failed to cancel invitation');
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Failed to cancel invitation';
+      notifications.show({
+        title: 'Failed to cancel invitation',
+        message,
+        color: 'red',
+      });
     }
   };
 
@@ -158,10 +195,18 @@ export function UsersTab({ isActive }: UsersTabProps) {
 
     try {
       await deleteUser(userId);
+      notifications.show({
+        message: 'User deleted successfully',
+        color: 'green',
+      });
       await fetchData();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { error?: string } } };
-      alert(err.response?.data?.error || 'Failed to delete user');
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Failed to delete user';
+      notifications.show({
+        title: 'Failed to delete user',
+        message,
+        color: 'red',
+      });
     }
   };
 
@@ -221,11 +266,19 @@ export function UsersTab({ isActive }: UsersTabProps) {
         ...toRemove.map((dbId) => revokeDatabaseAccess(dbId, editingUser.id)),
       ]);
 
+      notifications.show({
+        message: 'User updated successfully',
+        color: 'green',
+      });
       await fetchData();
       setEditingUser(null);
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { error?: string } } };
-      alert(err.response?.data?.error || 'Failed to update user');
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Failed to update user';
+      notifications.show({
+        title: 'Failed to update user',
+        message,
+        color: 'red',
+      });
     } finally {
       setAccessLoading(false);
     }

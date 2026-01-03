@@ -27,18 +27,36 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange, onShowChart
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPaymentsLoading(true);
       getMonthlyPayments()
-        .then((res) => setMonthlyPayments(res))
-        .catch((err) => console.error('Failed to fetch monthly payments:', err))
+        .then((res) => setMonthlyPayments(res ?? {}))
+        .catch(() => {
+          // Silently fail - monthly payments are non-critical
+          setMonthlyPayments({});
+        })
         .finally(() => setPaymentsLoading(false));
     }
   }, [isLoggedIn, bills]); // Refetch when bills change (payment made)
 
   // Parse date directly to avoid timezone issues
-  const parseDate = (dateStr: string) => {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const d = new Date(year, month - 1, day);
-    d.setHours(0, 0, 0, 0);
-    return d;
+  // Returns current date if parsing fails
+  const parseDate = (dateStr: string): Date => {
+    try {
+      if (!dateStr || typeof dateStr !== 'string') {
+        return new Date();
+      }
+      const parts = dateStr.split('-');
+      if (parts.length !== 3) {
+        return new Date();
+      }
+      const [year, month, day] = parts.map(Number);
+      if (isNaN(year) || isNaN(month) || isNaN(day)) {
+        return new Date();
+      }
+      const d = new Date(year, month - 1, day);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    } catch {
+      return new Date();
+    }
   };
 
   // Get month info for display

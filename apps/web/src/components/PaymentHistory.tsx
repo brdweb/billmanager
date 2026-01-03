@@ -14,9 +14,10 @@ import {
   Pagination,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
+import { notifications } from '@mantine/notifications';
 import { IconEdit, IconTrash, IconCheck, IconX } from '@tabler/icons-react';
 import type { Payment } from '../api/client';
-import { getPayments, updatePayment, deletePayment } from '../api/client';
+import { getPayments, updatePayment, deletePayment, ApiError } from '../api/client';
 import { PaymentHistoryChart } from './PaymentHistoryChart';
 import { parseLocalDate, formatDateString, formatDateForAPI } from '../utils/date';
 
@@ -66,7 +67,13 @@ export function PaymentHistory({
       const response = await getPayments(billId);
       setPayments(response);
     } catch (error) {
-      console.error('Failed to fetch payments:', error);
+      const message = error instanceof ApiError ? error.message : 'Failed to load payment history';
+      notifications.show({
+        title: 'Error loading payments',
+        message,
+        color: 'red',
+      });
+      setPayments([]);
     } finally {
       setLoading(false);
     }
@@ -93,11 +100,20 @@ export function PaymentHistory({
         editAmount as number,
         formatDateForAPI(editDate)
       );
+      notifications.show({
+        message: 'Payment updated successfully',
+        color: 'green',
+      });
       await fetchPayments();
       onPaymentsChanged();
       handleCancelEdit();
     } catch (error) {
-      console.error('Failed to update payment:', error);
+      const message = error instanceof ApiError ? error.message : 'Failed to update payment';
+      notifications.show({
+        title: 'Error updating payment',
+        message,
+        color: 'red',
+      });
     }
   };
 
@@ -106,10 +122,19 @@ export function PaymentHistory({
 
     try {
       await deletePayment(paymentId);
+      notifications.show({
+        message: 'Payment deleted successfully',
+        color: 'green',
+      });
       await fetchPayments();
       onPaymentsChanged();
     } catch (error) {
-      console.error('Failed to delete payment:', error);
+      const message = error instanceof ApiError ? error.message : 'Failed to delete payment';
+      notifications.show({
+        title: 'Error deleting payment',
+        message,
+        color: 'red',
+      });
     }
   };
 
