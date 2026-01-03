@@ -155,8 +155,13 @@ def create_refresh_token(user_id, device_info=None):
         expires_at=expires_at,
         device_info=device_info
     )
-    db.session.add(refresh)
-    db.session.commit()
+    try:
+        db.session.add(refresh)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to create refresh token for user {user_id}: {e}")
+        raise
 
     return token
 
@@ -572,13 +577,19 @@ def databases_handler():
         # In SaaS mode, set owner to current admin
         if is_saas():
             new_db.owner_id = current_user.id
-        db.session.add(new_db)
-        # In SaaS mode, only grant access to this admin; in self-hosted, grant to all admins
-        if is_saas():
-            current_user.accessible_databases.append(new_db)
-        else:
-            for admin in User.query.filter_by(role='admin').all(): admin.accessible_databases.append(new_db)
-        db.session.commit(); return jsonify({'message': 'Created', 'id': new_db.id}), 201
+        try:
+            db.session.add(new_db)
+            # In SaaS mode, only grant access to this admin; in self-hosted, grant to all admins
+            if is_saas():
+                current_user.accessible_databases.append(new_db)
+            else:
+                for admin in User.query.filter_by(role='admin').all(): admin.accessible_databases.append(new_db)
+            db.session.commit()
+            return jsonify({'message': 'Created', 'id': new_db.id}), 201
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to create database '{name}': {e}")
+            return jsonify({'error': 'Failed to create bill group. Please try again.'}), 500
 
 @api_bp.route('/databases/<int:db_id>', methods=['DELETE'])
 @admin_required
@@ -790,8 +801,13 @@ def invite_user():
     # Store database IDs in a simple format (we'll use them when accepting)
     invite.database_ids = ','.join(str(id) for id in database_ids) if database_ids else ''
 
-    db.session.add(invite)
-    db.session.commit()
+    try:
+        db.session.add(invite)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to create invitation for {email}: {e}")
+        return jsonify({'error': 'Failed to create invitation. Please try again.'}), 500
 
     # Send invitation email
     invited_by_name = current_user.username
@@ -1032,14 +1048,32 @@ def pay_bill(bill_id):
     bill = db.get_or_404(Bill,bill_id)
     if bill.database_id != target_db.id: return jsonify({'error': 'Access denied'}), 403
     data = request.get_json()
-    payment = Payment(bill_id=bill.id, amount=data.get('amount'), payment_date=datetime.date.today().isoformat(), notes=data.get('notes'))
-    db.session.add(payment)
-    if data.get('advance_due', True):
-        # Update existing bill instead of creating new
-        next_due = calculate_next_due_date(bill.due_date, bill.frequency, bill.frequency_type, json.loads(bill.frequency_config))
-        bill.due_date = next_due.isoformat()
-        bill.archived = False # Ensure active
-    db.session.commit(); return jsonify({'message': 'Paid'})
+    if not data:
+        return jsonify({'error': 'Invalid request data'}), 400
+
+    amount = data.get('amount')
+    if amount is None:
+        return jsonify({'error': 'Payment amount is required'}), 400
+
+    try:
+        payment = Payment(bill_id=bill.id, amount=amount, payment_date=datetime.date.today().isoformat(), notes=data.get('notes'))
+        db.session.add(payment)
+        if data.get('advance_due', True):
+            # Update existing bill instead of creating new
+            freq_config = json.loads(bill.frequency_config) if bill.frequency_config else {}
+            next_due = calculate_next_due_date(bill.due_date, bill.frequency, bill.frequency_type, freq_config)
+            bill.due_date = next_due.isoformat()
+            bill.archived = False # Ensure active
+        db.session.commit()
+        return jsonify({'message': 'Paid'})
+    except json.JSONDecodeError:
+        db.session.rollback()
+        logger.error(f"Invalid frequency config for bill {bill_id}")
+        return jsonify({'error': 'Invalid bill configuration'}), 500
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to record payment for bill {bill_id}: {e}")
+        return jsonify({'error': 'Failed to record payment. Please try again.'}), 500
 
 @api_bp.route('/bills/<string:name>/payments', methods=['GET'])
 @login_required
@@ -1065,11 +1099,18 @@ def update_payment(id):
     payment = db.get_or_404(Payment,id)
     if payment.bill.database_id != target_db.id: return jsonify({'error': 'Access denied'}), 403
     data = request.get_json()
-    if 'amount' in data: payment.amount = data['amount']
-    if 'payment_date' in data: payment.payment_date = data['payment_date']
-    if 'notes' in data: payment.notes = data['notes']
-    db.session.commit()
-    return jsonify({'message': 'Payment updated'})
+    if not data:
+        return jsonify({'error': 'Invalid request data'}), 400
+    try:
+        if 'amount' in data: payment.amount = data['amount']
+        if 'payment_date' in data: payment.payment_date = data['payment_date']
+        if 'notes' in data: payment.notes = data['notes']
+        db.session.commit()
+        return jsonify({'message': 'Payment updated'})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to update payment {id}: {e}")
+        return jsonify({'error': 'Failed to update payment. Please try again.'}), 500
 
 @api_bp.route('/payments/<int:id>', methods=['DELETE'])
 @login_required
@@ -1078,9 +1119,14 @@ def delete_payment(id):
     if not target_db: return jsonify({'error': 'No database selected'}), 400
     payment = db.get_or_404(Payment,id)
     if payment.bill.database_id != target_db.id: return jsonify({'error': 'Access denied'}), 403
-    db.session.delete(payment)
-    db.session.commit()
-    return jsonify({'message': 'Payment deleted'})
+    try:
+        db.session.delete(payment)
+        db.session.commit()
+        return jsonify({'message': 'Payment deleted'})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to delete payment {id}: {e}")
+        return jsonify({'error': 'Failed to delete payment. Please try again.'}), 500
 
 @api_bp.route('/api/payments/all', methods=['GET'])
 @login_required

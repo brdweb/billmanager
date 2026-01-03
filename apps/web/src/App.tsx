@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Stack, Loader, Center, Divider, Text, Anchor } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
@@ -24,7 +25,27 @@ import { useAuth } from './context/AuthContext';
 import { useConfig } from './context/ConfigContext';
 import * as api from './api/client';
 import type { Bill } from './api/client';
-import { archiveBill, unarchiveBill, deleteBillPermanent } from './api/client';
+import { archiveBill, unarchiveBill, deleteBillPermanent, ApiError } from './api/client';
+
+// Helper to show error notifications
+function showError(title: string, error: unknown) {
+  const message = error instanceof ApiError ? error.message : 'An unexpected error occurred';
+  notifications.show({
+    title,
+    message,
+    color: 'red',
+    autoClose: 5000,
+  });
+}
+
+// Helper to show success notifications
+function showSuccess(message: string) {
+  notifications.show({
+    message,
+    color: 'green',
+    autoClose: 3000,
+  });
+}
 
 // Filter types
 export type DateRangeFilter = 'all' | 'overdue' | 'thisWeek' | 'nextWeek' | 'next21Days' | 'next30Days';
@@ -207,33 +228,64 @@ function App() {
   };
 
   const handleSaveBill = async (billData: Partial<Bill>) => {
-    if (currentBill) {
-      await api.updateBill(currentBill.id, billData);
-    } else {
-      await api.addBill(billData);
+    try {
+      if (currentBill) {
+        await api.updateBill(currentBill.id, billData);
+        showSuccess('Bill updated successfully');
+      } else {
+        await api.addBill(billData);
+        showSuccess('Bill created successfully');
+      }
+      await fetchBills();
+    } catch (error) {
+      showError('Failed to save bill', error);
+      throw error; // Re-throw to let BillModal handle loading state
     }
-    await fetchBills();
   };
 
   const handleArchiveBill = async (bill: Bill) => {
-    await archiveBill(bill.id);
-    await fetchBills();
+    try {
+      await archiveBill(bill.id);
+      showSuccess('Bill archived successfully');
+      await fetchBills();
+    } catch (error) {
+      showError('Failed to archive bill', error);
+      throw error;
+    }
   };
 
   const handleDeleteBill = async (bill: Bill) => {
-    await deleteBillPermanent(bill.id);
-    await fetchBills();
+    try {
+      await deleteBillPermanent(bill.id);
+      showSuccess('Bill deleted permanently');
+      await fetchBills();
+    } catch (error) {
+      showError('Failed to delete bill', error);
+      throw error;
+    }
   };
 
   const handleUnarchiveBill = async (bill: Bill) => {
-    await unarchiveBill(bill.id);
-    await fetchBills();
+    try {
+      await unarchiveBill(bill.id);
+      showSuccess('Bill restored successfully');
+      await fetchBills();
+    } catch (error) {
+      showError('Failed to restore bill', error);
+      throw error;
+    }
   };
 
   const handlePay = async (amount: number, advanceDue: boolean) => {
     if (!currentBill) return;
-    await api.payBill(currentBill.id, amount, advanceDue);
-    await fetchBills();
+    try {
+      await api.payBill(currentBill.id, amount, advanceDue);
+      showSuccess('Payment recorded successfully');
+      await fetchBills();
+    } catch (error) {
+      showError('Failed to record payment', error);
+      throw error;
+    }
   };
 
   if (isLoading) {

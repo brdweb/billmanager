@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 const api = axios.create({
   timeout: 10000,
@@ -10,14 +10,74 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// Custom error class for API errors with user-friendly messages
+export class ApiError extends Error {
+  public statusCode: number;
+  public originalError: AxiosError;
+
+  constructor(message: string, statusCode: number, originalError: AxiosError) {
+    super(message);
+    this.name = 'ApiError';
+    this.statusCode = statusCode;
+    this.originalError = originalError;
+  }
+}
+
+// Map HTTP status codes to user-friendly messages
+function getErrorMessage(error: AxiosError): string {
+  const status = error.response?.status;
+  const serverMessage = (error.response?.data as { error?: string })?.error;
+
+  // Return server message if available
+  if (serverMessage) {
+    return serverMessage;
+  }
+
+  // Network errors
+  if (error.code === 'ECONNABORTED') {
+    return 'Request timed out. Please check your connection and try again.';
+  }
+  if (!error.response) {
+    return 'Unable to connect to server. Please check your internet connection.';
+  }
+
+  // HTTP status code based messages
+  switch (status) {
+    case 400:
+      return 'Invalid request. Please check your input and try again.';
+    case 401:
+      return 'Your session has expired. Please log in again.';
+    case 403:
+      return 'You do not have permission to perform this action.';
+    case 404:
+      return 'The requested resource was not found.';
+    case 409:
+      return 'This action conflicts with existing data.';
+    case 422:
+      return 'The provided data is invalid. Please check your input.';
+    case 429:
+      return 'Too many requests. Please wait a moment and try again.';
+    case 500:
+      return 'Server error. Please try again later.';
+    case 502:
+    case 503:
+    case 504:
+      return 'Service temporarily unavailable. Please try again later.';
+    default:
+      return 'An unexpected error occurred. Please try again.';
+  }
+}
+
 // Only log errors in development, never log request data (may contain passwords)
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  (error: AxiosError) => {
     if (import.meta.env.DEV) {
       console.error('API Error:', error.config?.method?.toUpperCase(), error.config?.url, error.response?.status);
     }
-    return Promise.reject(error);
+    const message = getErrorMessage(error);
+    const statusCode = error.response?.status || 0;
+    return Promise.reject(new ApiError(message, statusCode, error));
   }
 );
 

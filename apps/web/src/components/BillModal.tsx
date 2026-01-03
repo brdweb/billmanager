@@ -233,6 +233,9 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
       await onSave(billData);
       window.umami?.track(bill ? 'bill_updated' : 'bill_created', { type: values.type });
       onClose();
+    } catch {
+      // Error is already handled by App.tsx with notification
+      // Just keep the modal open so user can try again
     } finally {
       setLoading(false);
     }

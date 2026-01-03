@@ -14,6 +14,17 @@ interface ChartData {
   total: number;
 }
 
+// Safe date parser that handles invalid month strings
+function parseMonthString(monthStr: string): { year: number; month: number } | null {
+  if (!monthStr || typeof monthStr !== 'string') return null;
+  const parts = monthStr.split('-');
+  if (parts.length !== 2) return null;
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  if (isNaN(year) || isNaN(month) || month < 1 || month > 12) return null;
+  return { year, month };
+}
+
 export function PaymentHistoryChart({ billName }: PaymentHistoryChartProps) {
   const [data, setData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -30,24 +41,27 @@ export function PaymentHistoryChart({ billName }: PaymentHistoryChartProps) {
     setLoading(true);
     try {
       const response = await getBillMonthlyPayments(billName);
-      const monthlyData: MonthlyBillPayment[] = response;
+      const monthlyData: MonthlyBillPayment[] = response ?? [];
 
       // Transform and reverse to show chronological order (oldest first)
       const chartData: ChartData[] = monthlyData
         .map((item) => {
-          const [year, month] = item.month.split('-');
-          const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+          const parsed = parseMonthString(item.month);
+          if (!parsed) return null;
+          const date = new Date(parsed.year, parsed.month - 1, 1);
           return {
             month: item.month,
             label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
-            total: item.total,
+            total: item.total ?? 0,
           };
         })
+        .filter((item): item is ChartData => item !== null)
         .reverse();
 
       setData(chartData);
-    } catch (error) {
-      console.error('Failed to fetch bill monthly payments:', error);
+    } catch {
+      // Silently fail - chart is non-critical
+      setData([]);
     } finally {
       setLoading(false);
     }
