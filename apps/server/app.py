@@ -1774,8 +1774,10 @@ def billing_status():
             'billing_interval': subscription.billing_interval,
             'limits': get_tier_limits(effective_tier),
             'trial_ends_at': subscription.trial_ends_at.isoformat() if subscription.trial_ends_at else None,
+            'trial_days_remaining': subscription.trial_days_remaining,
             'current_period_end': subscription.current_period_end.isoformat() if subscription.current_period_end else None,
             'canceled_at': subscription.canceled_at.isoformat() if subscription.canceled_at else None,
+            'cancel_at_period_end': subscription.cancel_at_period_end,
             'days_until_renewal': subscription.days_until_renewal
         }
     })

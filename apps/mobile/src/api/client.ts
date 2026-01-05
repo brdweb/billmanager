@@ -625,7 +625,7 @@ class BillManagerApi {
 
   async createCheckoutSession(tier: 'basic' | 'plus', interval: 'monthly' | 'annual'): Promise<ApiResponse<{ url: string }>> {
     try {
-      const response = await this.client.post<ApiResponse<{ url: string }>>('/billing/checkout', {
+      const response = await this.client.post<ApiResponse<{ url: string }>>('/billing/create-checkout', {
         tier,
         interval,
       });

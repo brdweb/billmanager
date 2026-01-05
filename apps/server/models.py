@@ -322,3 +322,23 @@ class Subscription(db.Model):
             return None
         delta = self.current_period_end - datetime.now(timezone.utc)
         return max(0, delta.days)
+
+    @property
+    def trial_days_remaining(self):
+        """Calculate days remaining in trial period"""
+        if not self.trial_ends_at:
+            return None
+        if not self.is_trialing:
+            return None
+        delta = self.trial_ends_at - datetime.now(timezone.utc)
+        return max(0, delta.days)
+
+    @property
+    def cancel_at_period_end(self):
+        """Check if subscription is canceled but active until period end"""
+        if not self.canceled_at:
+            return False
+        if not self.current_period_end:
+            return False
+        # If canceled but current period hasn't ended yet
+        return datetime.now(timezone.utc) < self.current_period_end
