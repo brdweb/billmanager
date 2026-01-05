@@ -623,7 +623,6 @@ const iconMap: Record<string, React.ComponentType<IconProps>> = {
   food: IconShoppingCart,
   pizza: IconShoppingCart,
   local_pizza: IconShoppingCart,
-  delivery: IconShoppingCart,
   coffee: IconShoppingCart,
   local_cafe: IconShoppingCart,
   cafe: IconShoppingCart,
