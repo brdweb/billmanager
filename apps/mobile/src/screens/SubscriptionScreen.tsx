@@ -196,15 +196,31 @@ export default function SubscriptionScreen({ navigation }: Props) {
           <Text style={styles.headerTitle}>Billing & Subscription</Text>
           <View style={styles.placeholder} />
         </View>
-        <View style={styles.selfHostedContainer}>
-          <Text style={styles.selfHostedTitle}>Self-Hosted Server</Text>
-          <Text style={styles.selfHostedText}>
-            You are connected to a self-hosted BillManager server. Subscription management is only available for BillManager Cloud users.
-          </Text>
-          <Text style={styles.selfHostedText}>
-            Self-hosted servers have unlimited access to all features.
-          </Text>
-        </View>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.selfHostedCard}>
+            <Text style={styles.selfHostedTitle}>Self-Hosted Instance</Text>
+            <Text style={styles.selfHostedDescription}>
+              You are connected to a self-hosted BillManager server.
+            </Text>
+            <Text style={styles.selfHostedSubtitle}>Unlimited Access to All Features:</Text>
+            <View style={styles.featuresList}>
+              {[
+                'Unlimited bills and income tracking',
+                'Unlimited family members and users',
+                'Unlimited bill groups',
+                'Full analytics and reporting',
+                'Export to CSV/PDF',
+                'Mobile app access',
+                'No subscription required',
+              ].map((feature, index) => (
+                <View key={index} style={styles.featureRow}>
+                  <Text style={styles.featureCheck}>✓</Text>
+                  <Text style={styles.selfHostedFeature}>{feature}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -310,6 +326,64 @@ export default function SubscriptionScreen({ navigation }: Props) {
             </View>
           )}
         </View>
+
+        {/* Current Usage - Only show for free tier */}
+        {isFreeTier && usage && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Current Usage</Text>
+            <View style={styles.usageCard}>
+              {/* Bills Usage */}
+              <View style={styles.usageItem}>
+                <View style={styles.usageHeader}>
+                  <Text style={styles.usageLabel}>Bills</Text>
+                  <Text style={styles.usageValue}>
+                    {usage.usage.bills.unlimited
+                      ? 'Unlimited'
+                      : `${usage.usage.bills.used} / ${usage.usage.bills.limit}`}
+                  </Text>
+                </View>
+                {!usage.usage.bills.unlimited && (
+                  <View style={styles.progressBar}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          width: `${Math.min((usage.usage.bills.used / usage.usage.bills.limit) * 100, 100)}%`,
+                          backgroundColor: usage.usage.bills.used >= usage.usage.bills.limit ? colors.danger : colors.success,
+                        }
+                      ]}
+                    />
+                  </View>
+                )}
+              </View>
+
+              {/* Bill Groups Usage */}
+              <View style={styles.usageItem}>
+                <View style={styles.usageHeader}>
+                  <Text style={styles.usageLabel}>Bill Groups</Text>
+                  <Text style={styles.usageValue}>
+                    {usage.usage.bill_groups.unlimited
+                      ? 'Unlimited'
+                      : `${usage.usage.bill_groups.used} / ${usage.usage.bill_groups.limit}`}
+                  </Text>
+                </View>
+                {!usage.usage.bill_groups.unlimited && (
+                  <View style={styles.progressBar}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          width: `${Math.min((usage.usage.bill_groups.used / usage.usage.bill_groups.limit) * 100, 100)}%`,
+                          backgroundColor: usage.usage.bill_groups.used >= usage.usage.bill_groups.limit ? colors.danger : colors.success,
+                        }
+                      ]}
+                    />
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Pricing Plans - Only show if not subscribed */}
         {isFreeTier && (
@@ -703,12 +777,31 @@ const createStyles = (colors: any) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  selfHostedCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 24,
+    marginTop: 16,
+  },
   selfHostedTitle: {
     fontSize: 22,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 16,
+    marginBottom: 12,
     textAlign: 'center',
+  },
+  selfHostedDescription: {
+    fontSize: 15,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  selfHostedSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
   },
   selfHostedText: {
     fontSize: 15,
@@ -716,5 +809,45 @@ const createStyles = (colors: any) => StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 12,
+  },
+  featuresList: {
+    marginTop: 8,
+  },
+  selfHostedFeature: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  usageCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 20,
+  },
+  usageItem: {
+    marginBottom: 16,
+  },
+  usageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  usageLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.text,
+  },
+  usageValue: {
+    fontSize: 14,
+    color: colors.textMuted,
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: colors.border,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
   },
 });
