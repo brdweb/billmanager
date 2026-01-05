@@ -17,6 +17,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 import { Bill } from '../types';
+import IconPicker from '../components/IconPicker';
+import { BillIcon } from '../components/BillIcon';
 
 type Props = NativeStackScreenProps<any, 'AddBill'>;
 
@@ -49,6 +51,8 @@ export default function AddBillScreen({ navigation, route }: Props) {
   const [account, setAccount] = useState(editBill?.account || '');
   const [notes, setNotes] = useState(editBill?.notes || '');
   const [autoPayment, setAutoPayment] = useState(editBill?.auto_payment || false);
+  const [icon, setIcon] = useState(editBill?.icon || 'receipt');
+  const [showIconPicker, setShowIconPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [accounts, setAccounts] = useState<string[]>([]);
 
@@ -119,6 +123,7 @@ export default function AddBillScreen({ navigation, route }: Props) {
       account: account.trim() || null,
       notes: notes.trim() || null,
       auto_payment: autoPayment,
+      icon,
     };
 
     try {
@@ -163,7 +168,6 @@ export default function AddBillScreen({ navigation, route }: Props) {
 
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
         {/* Type Toggle */}
-        <Text style={styles.label}>Type</Text>
         <View style={styles.typeToggle}>
           <TouchableOpacity
             style={[
@@ -191,15 +195,23 @@ export default function AddBillScreen({ navigation, route }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* Name */}
-        <Text style={styles.label}>Name</Text>
-        <TextInput
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          placeholder="e.g., Electric Bill"
-          placeholderTextColor={colors.textMuted}
-        />
+        {/* Name & Icon */}
+        <Text style={styles.label}>Name & Icon</Text>
+        <View style={styles.nameRow}>
+          <TouchableOpacity 
+            style={styles.iconButton}
+            onPress={() => setShowIconPicker(true)}
+          >
+            <BillIcon icon={icon} size={28} color={type === 'deposit' ? colors.success : colors.primary} />
+          </TouchableOpacity>
+          <TextInput
+            style={[styles.input, styles.nameInput]}
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g., Electric Bill"
+            placeholderTextColor={colors.textMuted}
+          />
+        </View>
 
         {/* Amount */}
         <View style={styles.amountRow}>
@@ -323,6 +335,14 @@ export default function AddBillScreen({ navigation, route }: Props) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Icon Picker Modal */}
+      <IconPicker
+        visible={showIconPicker}
+        onClose={() => setShowIconPicker(false)}
+        onSelect={setIcon}
+        currentIcon={icon}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -380,6 +400,23 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
+  nameRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  nameInput: {
+    flex: 1,
+  },
+  iconButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   inputDisabled: {
     opacity: 0.5,
   },
@@ -390,6 +427,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   typeToggle: {
     flexDirection: 'row',
     gap: 12,
+    marginBottom: 8,
   },
   typeButton: {
     flex: 1,

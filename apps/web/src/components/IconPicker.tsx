@@ -12,66 +12,161 @@ import {
 } from '@mantine/core';
 import { IconSearch } from '@tabler/icons-react';
 import {
+  // Finance & Banking
   IconCreditCard,
-  IconHome,
-  IconBulb,
-  IconDroplet,
-  IconFlame,
-  IconWifi,
-  IconCar,
-  IconGasStation,
-  IconShoppingCart,
-  IconToolsKitchen2,
-  IconPill,
-  IconHeartbeat,
-  IconDeviceTv,
-  IconMusic,
-  IconMovie,
-  IconDeviceGamepad2,
-  IconPhone,
-  IconSchool,
   IconBuildingBank,
-  IconReceipt,
   IconWallet,
   IconCoin,
   IconCash,
   IconPigMoney,
   IconReportMoney,
-  IconShield,
-  IconLock,
-  IconBriefcase,
-  IconBuilding,
-  IconPlane,
-  IconBus,
+  IconReceipt,
+  IconCurrencyDollar,
+  IconCurrencyEuro,
+  IconCurrencyPound,
+  IconCurrencyYen,
+
+  // Home & Property
+  IconHome,
+  IconBuildingSkyscraper,
+  IconBuildingCottage,
+  IconParking,
+  IconPool,
+  IconFence,
+  IconLadder,
+
+  // Utilities
+  IconBulb,
+  IconDroplet,
+  IconFlame,
+  IconWifi,
+  IconDeviceTv,
+  IconTrash,
+  IconRecycle,
+  IconPlug,
+  IconBatteryCharging,
+  IconSolarPanel,
+  IconWind,
+
+  // Vehicles
+  IconCar,
+  IconTruck,
+  IconCaravan,
+  IconMotorbike,
+  IconScooter,
   IconBike,
-  IconRun,
-  IconSwimming,
-  IconBarbell,
-  IconCut,
-  IconDog,
-  IconCat,
-  IconBabyCarriage,
-  IconGift,
-  IconCake,
-  IconBottle,
-  IconCoffee,
-  IconPizza,
-  IconBeer,
-  IconGlassFull,
-  IconSun,
-  IconMoon,
-  IconCloud,
-  IconUmbrella,
-  IconTree,
-  IconLeaf,
+  IconBus,
+  IconPlane,
+  IconHelicopter,
+  IconSailboat,
+  IconKayak,
+  IconGasStation,
+  IconCarCrash,
+  IconWash,
+
+  // Sports & Activities (Kids)
   IconBallFootball,
   IconBallBaseball,
   IconBallBasketball,
   IconBallTennis,
   IconBallVolleyball,
+  IconBallBowling,
   IconPlayFootball,
   IconGolf,
+  IconSwimming,
+  IconIceSkating,
+  IconSkiJumping,
+  IconGymnastics,
+  IconRun,
+  IconBarbell,
   IconTrophy,
+  IconMedal,
+  IconAward,
+
+  // Healthcare & Medical
+  IconHeartbeat,
+  IconHeartRateMonitor,
+  IconPill,
+  IconVaccine,
+  IconDental,
+  IconStethoscope,
+  IconAmbulance,
+  IconFirstAidKit,
+  IconBandage,
+  IconThermometer,
+  IconEye,
+  IconEyeglass,
+  IconDisabled,
+
+  // Shopping
+  IconShoppingCart,
+
+  // Entertainment & Media
+  IconMovie,
+  IconMusic,
+  IconDeviceGamepad2,
+  IconBook,
+  IconBackpack,
+  IconNotebook,
+
+  // Technology
+  IconPhone,
+  IconDeviceMobile,
+  IconDeviceLaptop,
+  IconDeviceDesktop,
+  IconDeviceWatch,
+  IconHeadphones,
+  IconKeyboard,
+  IconMouse,
+  IconPrinter,
+  IconRouter,
+
+  // Work & Education
+  IconSchool,
+  IconBriefcase,
+  IconBuilding,
+  IconCertificate,
+  IconPencil,
+
+  // Insurance & Legal
+  IconShield,
+  IconLock,
+  IconFileText,
+  IconFileSpreadsheet,
+
+  // Personal Care & Services
+  IconCut,
+  IconSpray,
+  IconLeaf,
+
+  // Pets
+  IconDog,
+  IconCat,
+  IconPaw,
+  IconBone,
+
+  // Childcare & Family
+  IconBabyCarriage,
+
+  // Home Services & Maintenance
+  IconHammer,
+  IconAxe,
+  IconShovel,
+  IconPaint,
+  IconBrush,
+
+  // Garden & Outdoor
+  IconTree,
+  IconFlower,
+  IconPlant,
+  IconGardenCart,
+
+  // Misc
+  IconGift,
+  IconSun,
+  IconMoon,
+  IconCloud,
+  IconUmbrella,
 } from '@tabler/icons-react';
 import type { IconProps } from '@tabler/icons-react';
 
@@ -83,106 +178,184 @@ interface IconDefinition {
 }
 
 const icons: IconDefinition[] = [
-  // Finance
-  { name: 'payment', component: IconCreditCard, label: 'Credit Card', category: 'Finance' },
-  { name: 'account_balance', component: IconBuildingBank, label: 'Bank', category: 'Finance' },
-  { name: 'account_balance_wallet', component: IconWallet, label: 'Wallet', category: 'Finance' },
-  { name: 'attach_money', component: IconCoin, label: 'Coin', category: 'Finance' },
-  { name: 'monetization_on', component: IconCash, label: 'Cash', category: 'Finance' },
+  // Finance & Banking
+  { name: 'credit_card', component: IconCreditCard, label: 'Credit Card', category: 'Finance' },
+  { name: 'bank', component: IconBuildingBank, label: 'Bank', category: 'Finance' },
+  { name: 'wallet', component: IconWallet, label: 'Wallet', category: 'Finance' },
+  { name: 'coin', component: IconCoin, label: 'Coin/Money', category: 'Finance' },
+  { name: 'cash', component: IconCash, label: 'Cash', category: 'Finance' },
   { name: 'savings', component: IconPigMoney, label: 'Savings', category: 'Finance' },
-  { name: 'currency_exchange', component: IconReportMoney, label: 'Exchange', category: 'Finance' },
-  { name: 'receipt', component: IconReceipt, label: 'Receipt', category: 'Finance' },
+  { name: 'loan', component: IconReportMoney, label: 'Loan/Investment', category: 'Finance' },
+  { name: 'receipt', component: IconReceipt, label: 'Receipt/Bill', category: 'Finance' },
+  { name: 'dollar', component: IconCurrencyDollar, label: 'US Dollar', category: 'Finance' },
+  { name: 'euro', component: IconCurrencyEuro, label: 'Euro', category: 'Finance' },
+  { name: 'pound', component: IconCurrencyPound, label: 'British Pound', category: 'Finance' },
+  { name: 'yen', component: IconCurrencyYen, label: 'Yen/Yuan', category: 'Finance' },
 
-  // Home & Utilities
-  { name: 'home', component: IconHome, label: 'Home', category: 'Home' },
-  { name: 'lightbulb', component: IconBulb, label: 'Electricity', category: 'Home' },
-  { name: 'water_drop', component: IconDroplet, label: 'Water', category: 'Home' },
-  { name: 'local_fire_department', component: IconFlame, label: 'Gas/Heating', category: 'Home' },
-  { name: 'wifi', component: IconWifi, label: 'Internet/WiFi', category: 'Home' },
-  { name: 'cable', component: IconDeviceTv, label: 'Cable/TV', category: 'Home' },
+  // Home & Property
+  { name: 'home', component: IconHome, label: 'Home/Mortgage', category: 'Property' },
+  { name: 'apartment', component: IconBuildingSkyscraper, label: 'Apartment/Condo', category: 'Property' },
+  { name: 'cottage', component: IconBuildingCottage, label: 'Cottage/Cabin', category: 'Property' },
+  { name: 'parking', component: IconParking, label: 'Parking/HOA', category: 'Property' },
+  { name: 'garage', component: IconBuilding, label: 'Garage/Storage', category: 'Property' },
+  { name: 'pool', component: IconPool, label: 'Pool Maintenance', category: 'Property' },
+  { name: 'fence', component: IconFence, label: 'Fence/Security', category: 'Property' },
 
-  // Transportation
-  { name: 'directions_car', component: IconCar, label: 'Car', category: 'Transport' },
-  { name: 'local_gas_station', component: IconGasStation, label: 'Gas Station', category: 'Transport' },
-  { name: 'flight', component: IconPlane, label: 'Flight', category: 'Transport' },
-  { name: 'bus', component: IconBus, label: 'Bus/Transit', category: 'Transport' },
-  { name: 'pedal_bike', component: IconBike, label: 'Bike', category: 'Transport' },
+  // Utilities
+  { name: 'electricity', component: IconBulb, label: 'Electricity', category: 'Utilities' },
+  { name: 'water', component: IconDroplet, label: 'Water/Sewer', category: 'Utilities' },
+  { name: 'gas', component: IconFlame, label: 'Gas/Heating', category: 'Utilities' },
+  { name: 'internet', component: IconWifi, label: 'Internet/WiFi', category: 'Utilities' },
+  { name: 'cable', component: IconDeviceTv, label: 'Cable/Streaming', category: 'Utilities' },
+  { name: 'trash', component: IconTrash, label: 'Trash/Waste', category: 'Utilities' },
+  { name: 'recycle', component: IconRecycle, label: 'Recycling', category: 'Utilities' },
+  { name: 'power', component: IconPlug, label: 'Electric/Power', category: 'Utilities' },
+  { name: 'battery', component: IconBatteryCharging, label: 'Battery/Charging', category: 'Utilities' },
+  { name: 'solar', component: IconSolarPanel, label: 'Solar Power', category: 'Utilities' },
+  { name: 'wind', component: IconWind, label: 'Wind Power', category: 'Utilities' },
 
-  // Shopping & Food
-  { name: 'shopping_cart', component: IconShoppingCart, label: 'Shopping', category: 'Shopping' },
-  { name: 'restaurant', component: IconToolsKitchen2, label: 'Restaurant', category: 'Shopping' },
-  { name: 'local_pizza', component: IconPizza, label: 'Food Delivery', category: 'Shopping' },
-  { name: 'local_cafe', component: IconCoffee, label: 'Coffee', category: 'Shopping' },
-  { name: 'local_bar', component: IconBeer, label: 'Bar', category: 'Shopping' },
-  { name: 'cake', component: IconCake, label: 'Bakery', category: 'Shopping' },
-  { name: 'local_drink', component: IconBottle, label: 'Drinks', category: 'Shopping' },
-  { name: 'wine', component: IconGlassFull, label: 'Wine', category: 'Shopping' },
+  // Vehicles
+  { name: 'car', component: IconCar, label: 'Car Payment', category: 'Vehicles' },
+  { name: 'truck', component: IconTruck, label: 'Truck', category: 'Vehicles' },
+  { name: 'rv', component: IconCaravan, label: 'RV/Camper', category: 'Vehicles' },
+  { name: 'motorcycle', component: IconMotorbike, label: 'Motorcycle', category: 'Vehicles' },
+  { name: 'scooter', component: IconScooter, label: 'Scooter/Moped', category: 'Vehicles' },
+  { name: 'bike', component: IconBike, label: 'Bicycle', category: 'Vehicles' },
+  { name: 'bus', component: IconBus, label: 'Bus/Transit', category: 'Vehicles' },
+  { name: 'flight', component: IconPlane, label: 'Flight/Travel', category: 'Vehicles' },
+  { name: 'helicopter', component: IconHelicopter, label: 'Helicopter', category: 'Vehicles' },
+  { name: 'boat', component: IconSailboat, label: 'Boat/Yacht', category: 'Vehicles' },
+  { name: 'kayak', component: IconKayak, label: 'Kayak/Canoe', category: 'Vehicles' },
+  { name: 'fuel', component: IconGasStation, label: 'Gas/Fuel', category: 'Vehicles' },
+  { name: 'car_insurance', component: IconCarCrash, label: 'Auto Insurance', category: 'Vehicles' },
+  { name: 'car_wash', component: IconWash, label: 'Car Wash', category: 'Vehicles' },
 
-  // Health & Fitness
-  { name: 'medical_services', component: IconHeartbeat, label: 'Healthcare', category: 'Health' },
-  { name: 'local_pharmacy', component: IconPill, label: 'Pharmacy', category: 'Health' },
-  { name: 'fitness_center', component: IconBarbell, label: 'Gym', category: 'Health' },
-  { name: 'spa', component: IconLeaf, label: 'Wellness', category: 'Health' },
-  { name: 'pool', component: IconSwimming, label: 'Swimming', category: 'Health' },
-  { name: 'hiking', component: IconRun, label: 'Running', category: 'Health' },
-
-  // Sports (Kids Activities)
+  // Sports & Youth Activities
   { name: 'soccer', component: IconPlayFootball, label: 'Soccer', category: 'Sports' },
   { name: 'football', component: IconBallFootball, label: 'Football', category: 'Sports' },
   { name: 'baseball', component: IconBallBaseball, label: 'Baseball', category: 'Sports' },
   { name: 'basketball', component: IconBallBasketball, label: 'Basketball', category: 'Sports' },
   { name: 'tennis', component: IconBallTennis, label: 'Tennis', category: 'Sports' },
   { name: 'volleyball', component: IconBallVolleyball, label: 'Volleyball', category: 'Sports' },
+  { name: 'bowling', component: IconBallBowling, label: 'Bowling', category: 'Sports' },
   { name: 'golf', component: IconGolf, label: 'Golf', category: 'Sports' },
-  { name: 'trophy', component: IconTrophy, label: 'Trophy/Award', category: 'Sports' },
+  { name: 'swimming', component: IconSwimming, label: 'Swimming Lessons', category: 'Sports' },
+  { name: 'ice_skating', component: IconIceSkating, label: 'Ice Skating', category: 'Sports' },
+  { name: 'skiing', component: IconSkiJumping, label: 'Skiing', category: 'Sports' },
+  { name: 'gymnastics', component: IconGymnastics, label: 'Gymnastics', category: 'Sports' },
+  { name: 'running', component: IconRun, label: 'Running/Track', category: 'Sports' },
+  { name: 'gym', component: IconBarbell, label: 'Gym Membership', category: 'Sports' },
+  { name: 'trophy', component: IconTrophy, label: 'Competition/Team', category: 'Sports' },
+  { name: 'medal', component: IconMedal, label: 'Medal/Award', category: 'Sports' },
+  { name: 'award', component: IconAward, label: 'Award/Trophy', category: 'Sports' },
 
-  // Entertainment
-  { name: 'movie', component: IconMovie, label: 'Movies', category: 'Entertainment' },
-  { name: 'music_note', component: IconMusic, label: 'Music', category: 'Entertainment' },
-  { name: 'tv', component: IconDeviceTv, label: 'Streaming', category: 'Entertainment' },
-  { name: 'videogame_asset', component: IconDeviceGamepad2, label: 'Gaming', category: 'Entertainment' },
-  { name: 'gift', component: IconGift, label: 'Gift', category: 'Entertainment' },
+  // Healthcare & Medical
+  { name: 'healthcare', component: IconHeartbeat, label: 'Health Insurance', category: 'Medical' },
+  { name: 'heart_monitor', component: IconHeartRateMonitor, label: 'Heart Monitor', category: 'Medical' },
+  { name: 'pharmacy', component: IconPill, label: 'Pharmacy/Rx', category: 'Medical' },
+  { name: 'vaccine', component: IconVaccine, label: 'Vaccine/Shot', category: 'Medical' },
+  { name: 'dental', component: IconDental, label: 'Dental', category: 'Medical' },
+  { name: 'doctor', component: IconStethoscope, label: 'Doctor Visit', category: 'Medical' },
+  { name: 'ambulance', component: IconAmbulance, label: 'Ambulance/Emergency', category: 'Medical' },
+  { name: 'first_aid', component: IconFirstAidKit, label: 'First Aid', category: 'Medical' },
+  { name: 'bandage', component: IconBandage, label: 'Bandage/Wound Care', category: 'Medical' },
+  { name: 'thermometer', component: IconThermometer, label: 'Thermometer', category: 'Medical' },
+  { name: 'vision', component: IconEye, label: 'Vision/Eye', category: 'Medical' },
+  { name: 'glasses', component: IconEyeglass, label: 'Glasses/Contacts', category: 'Medical' },
+  { name: 'disability', component: IconDisabled, label: 'Disability/Accessibility', category: 'Medical' },
+  { name: 'wellness', component: IconLeaf, label: 'Wellness/Spa', category: 'Medical' },
 
-  // Technology
-  { name: 'phone', component: IconPhone, label: 'Phone', category: 'Tech' },
+  // Shopping
+  { name: 'groceries', component: IconShoppingCart, label: 'Groceries', category: 'Shopping' },
+
+  // Entertainment & Media
+  { name: 'streaming', component: IconMovie, label: 'Streaming Service', category: 'Entertainment' },
+  { name: 'music', component: IconMusic, label: 'Music Streaming', category: 'Entertainment' },
+  { name: 'gaming', component: IconDeviceGamepad2, label: 'Gaming', category: 'Entertainment' },
+  { name: 'books', component: IconBook, label: 'Books/Magazines', category: 'Entertainment' },
+  { name: 'newspaper', component: IconNotebook, label: 'Newspaper', category: 'Entertainment' },
+  { name: 'gift', component: IconGift, label: 'Gift/Subscription', category: 'Entertainment' },
+
+  // Technology & Devices
+  { name: 'phone', component: IconPhone, label: 'Phone Service', category: 'Technology' },
+  { name: 'mobile', component: IconDeviceMobile, label: 'Mobile Phone', category: 'Technology' },
+  { name: 'laptop', component: IconDeviceLaptop, label: 'Laptop', category: 'Technology' },
+  { name: 'desktop', component: IconDeviceDesktop, label: 'Desktop Computer', category: 'Technology' },
+  { name: 'watch', component: IconDeviceWatch, label: 'Smartwatch', category: 'Technology' },
+  { name: 'headphones', component: IconHeadphones, label: 'Headphones/Audio', category: 'Technology' },
+  { name: 'keyboard', component: IconKeyboard, label: 'Keyboard', category: 'Technology' },
+  { name: 'mouse', component: IconMouse, label: 'Mouse', category: 'Technology' },
+  { name: 'printer', component: IconPrinter, label: 'Printer', category: 'Technology' },
+  { name: 'router', component: IconRouter, label: 'Router/Modem', category: 'Technology' },
 
   // Work & Education
-  { name: 'school', component: IconSchool, label: 'School', category: 'Work' },
-  { name: 'work', component: IconBriefcase, label: 'Work', category: 'Work' },
-  { name: 'business', component: IconBuilding, label: 'Business', category: 'Work' },
+  { name: 'school', component: IconSchool, label: 'School/Tuition', category: 'Education' },
+  { name: 'backpack', component: IconBackpack, label: 'School Supplies', category: 'Education' },
+  { name: 'certificate', component: IconCertificate, label: 'Certification', category: 'Education' },
+  { name: 'pencil', component: IconPencil, label: 'Supplies', category: 'Education' },
+  { name: 'work', component: IconBriefcase, label: 'Work/Professional', category: 'Education' },
+  { name: 'business', component: IconBuilding, label: 'Business/Office', category: 'Education' },
 
-  // Insurance & Security
-  { name: 'security', component: IconShield, label: 'Insurance', category: 'Insurance' },
-  { name: 'lock', component: IconLock, label: 'Security', category: 'Insurance' },
+  // Insurance & Legal
+  { name: 'insurance', component: IconShield, label: 'Insurance', category: 'Insurance' },
+  { name: 'security', component: IconLock, label: 'Security System', category: 'Insurance' },
+  { name: 'legal', component: IconFileText, label: 'Legal/Attorney', category: 'Insurance' },
+  { name: 'tax', component: IconFileSpreadsheet, label: 'Tax/Accounting', category: 'Insurance' },
 
-  // Personal
-  { name: 'content_cut', component: IconCut, label: 'Haircut', category: 'Personal' },
-  { name: 'pets', component: IconDog, label: 'Dog/Pet', category: 'Personal' },
-  { name: 'cat', component: IconCat, label: 'Cat', category: 'Personal' },
-  { name: 'child_care', component: IconBabyCarriage, label: 'Childcare', category: 'Personal' },
+  // Personal Care & Services
+  { name: 'haircut', component: IconCut, label: 'Haircut/Salon', category: 'Personal' },
+  { name: 'salon', component: IconSpray, label: 'Salon/Spa', category: 'Personal' },
 
-  // Nature
-  { name: 'sun', component: IconSun, label: 'Sun', category: 'Nature' },
-  { name: 'moon', component: IconMoon, label: 'Moon', category: 'Nature' },
-  { name: 'cloud', component: IconCloud, label: 'Cloud', category: 'Nature' },
-  { name: 'umbrella', component: IconUmbrella, label: 'Umbrella', category: 'Nature' },
-  { name: 'tree', component: IconTree, label: 'Tree', category: 'Nature' },
+  // Pets
+  { name: 'dog', component: IconDog, label: 'Dog', category: 'Pets' },
+  { name: 'cat', component: IconCat, label: 'Cat', category: 'Pets' },
+  { name: 'pet', component: IconPaw, label: 'Pet/Vet', category: 'Pets' },
+  { name: 'pet_food', component: IconBone, label: 'Pet Food', category: 'Pets' },
+
+  // Family & Childcare
+  { name: 'childcare', component: IconBabyCarriage, label: 'Childcare/Daycare', category: 'Family' },
+
+  // Home Services & Maintenance
+  { name: 'repairs', component: IconHammer, label: 'Home Repairs', category: 'Services' },
+  { name: 'ladder', component: IconLadder, label: 'Ladder/Roofing', category: 'Services' },
+  { name: 'tools', component: IconHammer, label: 'Tools/Equipment', category: 'Services' },
+  { name: 'chopping', component: IconAxe, label: 'Tree Service', category: 'Services' },
+  { name: 'digging', component: IconShovel, label: 'Landscaping', category: 'Services' },
+  { name: 'painting', component: IconPaint, label: 'Painting', category: 'Services' },
+  { name: 'brush', component: IconBrush, label: 'Cleaning', category: 'Services' },
+
+  // Garden & Lawn
+  { name: 'tree', component: IconTree, label: 'Tree/Landscape', category: 'Garden' },
+  { name: 'flowers', component: IconFlower, label: 'Flowers', category: 'Garden' },
+  { name: 'plants', component: IconPlant, label: 'Plants/Garden', category: 'Garden' },
+  { name: 'lawn', component: IconGardenCart, label: 'Lawn Care', category: 'Garden' },
+
+  // Weather & Misc
+  { name: 'sun', component: IconSun, label: 'Solar/Sun', category: 'Misc' },
+  { name: 'moon', component: IconMoon, label: 'Night/Moon', category: 'Misc' },
+  { name: 'cloud', component: IconCloud, label: 'Cloud Storage', category: 'Misc' },
+  { name: 'umbrella', component: IconUmbrella, label: 'Umbrella Insurance', category: 'Misc' },
 ];
 
 const categories = [
   'All',
   'Finance',
-  'Home',
-  'Transport',
-  'Shopping',
-  'Health',
+  'Property',
+  'Utilities',
+  'Vehicles',
   'Sports',
+  'Medical',
+  'Shopping',
   'Entertainment',
-  'Tech',
-  'Work',
+  'Technology',
+  'Education',
   'Insurance',
   'Personal',
-  'Nature',
+  'Pets',
+  'Family',
+  'Services',
+  'Garden',
+  'Misc',
 ];
 
 interface IconPickerProps {

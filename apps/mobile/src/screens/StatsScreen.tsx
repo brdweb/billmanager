@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,9 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { History, TrendingUp, TrendingDown, ChevronRight, BarChart3, LineChart, Wallet } from 'lucide-react-native';
+import { BarChart, LineChart as RNLineChart } from 'react-native-chart-kit';
 import { api } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -23,20 +26,276 @@ type SettingsStackParamList = {
 };
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH - 32; // Full width minus padding
-const CARD_MARGIN = 8;
+
+// Define createStyles function here
+const createStyles = (colors: any, insets: any) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: insets.top + 8,
+    paddingBottom: 12,
+    backgroundColor: colors.surface,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  usernameText: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  sectionContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  paymentHistoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  paymentHistoryIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  paymentHistoryContent: {
+    flex: 1,
+  },
+  paymentHistoryTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  paymentHistorySubtitle: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  carouselSection: {
+    paddingTop: 16,
+  },
+  carouselHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  carouselIndicator: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  carouselContent: {
+    paddingHorizontal: 0,
+  },
+  carouselCard: {
+    borderRadius: 16,
+    padding: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  monthTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  miniBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  miniBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statBox: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  statHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textMuted,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  statSubtext: {
+    fontSize: 10,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  trendsSection: {
+    padding: 16,
+  },
+  trendsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  trendsControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  buttonGroup: {
+    flexDirection: 'row',
+    backgroundColor: colors.border + '40',
+    borderRadius: 8,
+    padding: 2,
+  },
+  segmentButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  segmentText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  segmentTextActive: {
+    color: '#fff',
+  },
+  chartCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chart: {
+    marginVertical: 8,
+    borderRadius: 16,
+  },
+  dotContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginHorizontal: 3,
+  },
+  errorContainer: {
+    padding: 32,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  emptyCard: {
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    marginHorizontal: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  footer: {
+    height: 40,
+  },
+});
 
 export default function StatsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<SettingsStackParamList>>();
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { user, currentDatabase, databases } = useAuth();
-  const [monthlyStats, setMonthlyStats] = useState<MonthlyStats[]>([]);
+  const [monthlyStats, setMonthlyStats] = useState<any[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [chartType, setChartType] = useState<'bar' | 'line'>('line');
+  const [chartRange, setChartRange] = useState<6 | 12>(6);
   const carouselRef = useRef<FlatList>(null);
+
+  const styles = createStyles(colors, insets);
 
   const fetchData = useCallback(async () => {
     if (!currentDatabase) {
@@ -46,47 +305,77 @@ export default function StatsScreen() {
     }
 
     try {
-      // Fetch stats and bills separately to handle errors better
-      let statsData: MonthlyStats[] = [];
+      const [statsRes, billsRes, paymentsRes] = await Promise.all([
+        api.getMonthlyStats(),
+        api.getBills(),
+        api.getAllPayments()
+      ]);
+
       let billsData: Bill[] = [];
-
-      try {
-        const statsRes = await api.getMonthlyStats();
-        console.log('[StatsScreen] getMonthlyStats response:', JSON.stringify(statsRes, null, 2));
-        if (statsRes.success && statsRes.data) {
-          // Handle both array format and object format
-          let data = statsRes.data;
-          if (!Array.isArray(data)) {
-            // Convert object format { "2025-12": {...}, ... } to array format
-            data = Object.entries(data).map(([month, values]: [string, any]) => ({
-              month,
-              total_expenses: values.expenses || 0,
-              total_deposits: values.deposits || 0,
-              net: (values.deposits || 0) - (values.expenses || 0),
-            }));
-          }
-          // Sort by month descending (most recent first)
-          statsData = [...data].sort((a, b) => b.month.localeCompare(a.month));
-          console.log('[StatsScreen] Processed stats:', statsData);
-        }
-      } catch (statsErr) {
-        console.log('[StatsScreen] Stats API error:', statsErr);
+      if (billsRes.success && Array.isArray(billsRes.data)) {
+        billsData = billsRes.data;
       }
 
-      try {
-        const billsRes = await api.getBills();
-        if (billsRes.success && Array.isArray(billsRes.data)) {
-          billsData = billsRes.data;
-        }
-      } catch (billsErr) {
-        console.log('Bills API error:', billsErr);
+      let paymentsData: Payment[] = [];
+      if (paymentsRes.success && Array.isArray(paymentsRes.data)) {
+        paymentsData = paymentsRes.data;
       }
 
-      setMonthlyStats(statsData);
+      const processedStats: any[] = [];
+      const now = new Date();
+      
+      const months = [];
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      }
+
+      const rawStats = (statsRes.data || {}) as any;
+      
+      months.forEach(monthKey => {
+        const statsForMonth = Array.isArray(rawStats) 
+          ? rawStats.find((s: any) => s.month === monthKey) 
+          : rawStats[monthKey];
+        
+        const paid = statsForMonth?.total_expenses || statsForMonth?.expenses || 0;
+        const income = statsForMonth?.total_deposits || statsForMonth?.deposits || 0;
+        
+        // Calculate counts from paymentsData
+        const monthPayments = paymentsData.filter(p => p.payment_date.startsWith(monthKey));
+        // We need to know if the payment is an expense or deposit. 
+        // In enriched payments it has bill_type, but api.getAllPayments() returns raw Payment objects.
+        // Wait, I need to check the Payment type in types/index.ts or the server response.
+        // Server response for /payments (JWT) includes bill_type.
+        const paidCount = monthPayments.filter((p: any) => p.bill_type === 'expense').length;
+        const incomeCount = monthPayments.filter((p: any) => p.bill_type === 'deposit').length;
+        
+        let remaining = 0;
+        let remainingCount = 0;
+        
+        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        
+        if (monthKey === currentMonthKey) {
+           const unpaidBills = billsData.filter(b => b.type === 'expense' && !b.archived);
+           remaining = unpaidBills.reduce((sum, b) => sum + (b.amount || 0), 0);
+           remainingCount = unpaidBills.length;
+        }
+
+        processedStats.push({
+          month: monthKey,
+          paid,
+          paidCount,
+          incomeCount,
+          remaining,
+          income,
+          remainingCount,
+          net: income - paid
+        });
+      });
+
+      setMonthlyStats(processedStats);
       setBills(billsData);
       setError(null);
     } catch (err) {
-      console.log('Stats fetch error:', err);
       setError('Failed to load statistics');
     } finally {
       setIsLoading(false);
@@ -110,7 +399,7 @@ export default function StatsScreen() {
   }, [fetchData]);
 
   const formatCurrency = (amount: number): string => {
-    return `$${Math.abs(amount).toFixed(2)}`;
+    return `$${Math.abs(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatMonth = (monthStr: string): string => {
@@ -121,43 +410,56 @@ export default function StatsScreen() {
 
   const currentDbInfo = databases.find(db => db.name === currentDatabase);
 
-  // Calculate upcoming bills (due in next 30 days)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const thirtyDaysFromNow = new Date(today);
-  thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-
-  const upcomingBills = bills.filter(bill => {
-    const dueDate = new Date(bill.next_due + 'T00:00:00');
-    return dueDate >= today && dueDate <= thirtyDaysFromNow && bill.type === 'expense';
-  });
-
-  const upcomingTotal = upcomingBills.reduce((sum, bill) => sum + (bill.amount || 0), 0);
-
-  const upcomingIncome = bills.filter(bill => {
-    const dueDate = new Date(bill.next_due + 'T00:00:00');
-    return dueDate >= today && dueDate <= thirtyDaysFromNow && bill.type === 'deposit';
-  });
-
-  const upcomingIncomeTotal = upcomingIncome.reduce((sum, bill) => sum + (bill.amount || 0), 0);
-
-  // Find max value for chart scaling
-  const maxValue = Math.max(
-    ...monthlyStats.map(s => Math.max(s.total_expenses, s.total_deposits, Math.abs(s.net))),
-    1
-  );
+  const chartData = useMemo(() => {
+    const data = [...monthlyStats].reverse().slice(-chartRange);
+    return {
+      labels: data.map(d => {
+        const [_, m] = d.month.split('-');
+        const date = new Date(2000, parseInt(m) - 1, 1);
+        return date.toLocaleDateString('en-US', { month: 'short' });
+      }),
+      datasets: [{
+        data: data.map(d => d.paid),
+        color: (opacity = 1) => colors.danger,
+      }]
+    };
+  }, [monthlyStats, chartRange, colors.danger]);
 
   if (isLoading) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
+  const chartConfig = {
+    backgroundGradientFrom: colors.surface,
+    backgroundGradientTo: colors.surface,
+    fillShadowGradientFrom: colors.danger,
+    fillShadowGradientTo: colors.danger,
+    fillShadowGradientFromOpacity: 0.2,
+    fillShadowGradientToOpacity: 0.05,
+    color: (opacity = 1) => colors.danger,
+    labelColor: (opacity = 1) => colors.textMuted,
+    strokeWidth: 2,
+    barPercentage: 0.7,
+    useShadowColorFromDataset: false,
+    decimalPlaces: 0,
+    propsForDots: {
+      r: "4",
+      strokeWidth: "2",
+      stroke: colors.danger
+    },
+    propsForBackgroundLines: {
+      strokeDasharray: "",
+      stroke: colors.border + '40',
+    }
+  };
+
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
+      style={styles.container}
       refreshControl={
         <RefreshControl
           refreshing={isRefreshing}
@@ -167,89 +469,55 @@ export default function StatsScreen() {
         />
       }
     >
-      <View style={[styles.header, { backgroundColor: colors.surface }]}>
+      <View style={styles.header}>
         <View style={styles.headerRow}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Statistics</Text>
-          <Text style={[styles.usernameText, { color: colors.textMuted }]}>
-            {user?.username}
-          </Text>
+          <Text style={styles.headerTitle}>Statistics</Text>
+          <Text style={styles.usernameText}>{user?.username}</Text>
         </View>
-        <Text style={[styles.headerSubtitle, { color: colors.textMuted }]}>
-          {currentDbInfo?.display_name || 'Financial Overview'}
+        <Text style={styles.headerSubtitle}>
+          {currentDbInfo?.display_name || 'Overview'}
         </Text>
       </View>
 
       {error ? (
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
-          <TouchableOpacity
-            style={[styles.retryButton, { backgroundColor: colors.primary }]}
-            onPress={fetchData}
-          >
+          <TouchableOpacity style={styles.retryButton} onPress={fetchData}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <>
-          {/* Payment History Quick Access - at the top */}
           <View style={styles.sectionContainer}>
             <TouchableOpacity
-              style={[styles.paymentHistoryButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              style={styles.paymentHistoryButton}
               onPress={() => navigation.navigate('PaymentHistory' as never)}
             >
-              <View style={styles.paymentHistoryContent}>
-                <Text style={[styles.paymentHistoryTitle, { color: colors.text }]}>
-                  Payment History
-                </Text>
-                <Text style={[styles.paymentHistorySubtitle, { color: colors.textMuted }]}>
-                  View all recorded payments
-                </Text>
+              <View style={styles.paymentHistoryIconContainer}>
+                <History size={20} color={colors.primary} />
               </View>
-              <Text style={[styles.paymentHistoryArrow, { color: colors.textMuted }]}>→</Text>
+              <View style={styles.paymentHistoryContent}>
+                <Text style={styles.paymentHistoryTitle}>Payment History</Text>
+                <Text style={styles.paymentHistorySubtitle}>All recorded payments</Text>
+              </View>
+              <ChevronRight size={20} color={colors.textMuted} />
             </TouchableOpacity>
-          </View>
-
-          {/* Quick Summary Cards */}
-          <View style={styles.summaryContainer}>
-            <View style={[styles.summaryCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>
-                Upcoming Expenses (30d)
-              </Text>
-              <Text style={[styles.summaryValue, { color: colors.danger }]}>
-                -{formatCurrency(upcomingTotal)}
-              </Text>
-              <Text style={[styles.summarySubtext, { color: colors.textMuted }]}>
-                {upcomingBills.length} bill{upcomingBills.length !== 1 ? 's' : ''}
-              </Text>
-            </View>
-            <View style={[styles.summaryCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>
-                Upcoming Income (30d)
-              </Text>
-              <Text style={[styles.summaryValue, { color: colors.success }]}>
-                +{formatCurrency(upcomingIncomeTotal)}
-              </Text>
-              <Text style={[styles.summarySubtext, { color: colors.textMuted }]}>
-                {upcomingIncome.length} deposit{upcomingIncome.length !== 1 ? 's' : ''}
-              </Text>
-            </View>
           </View>
 
           {/* Monthly History Carousel */}
           <View style={styles.carouselSection}>
             <View style={styles.carouselHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Monthly History</Text>
+              <Text style={styles.sectionTitle}>Monthly History</Text>
               {monthlyStats.length > 0 && (
-                <Text style={[styles.carouselIndicator, { color: colors.textMuted }]}>
+                <Text style={styles.carouselIndicator}>
                   {currentIndex + 1} / {Math.min(monthlyStats.length, 12)}
                 </Text>
               )}
             </View>
+            
             {monthlyStats.length === 0 ? (
-              <View style={[styles.emptyCard, { backgroundColor: colors.surface, marginHorizontal: 16 }]}>
-                <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                  No payment history yet
-                </Text>
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>No data available</Text>
               </View>
             ) : (
               <>
@@ -259,91 +527,63 @@ export default function StatsScreen() {
                   horizontal
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}
-                  snapToInterval={CARD_WIDTH + CARD_MARGIN * 2}
+                  snapToInterval={SCREEN_WIDTH}
                   decelerationRate="fast"
                   contentContainerStyle={styles.carouselContent}
                   onMomentumScrollEnd={(e) => {
-                    const index = Math.round(e.nativeEvent.contentOffset.x / (CARD_WIDTH + CARD_MARGIN * 2));
+                    const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
                     setCurrentIndex(index);
                   }}
                   keyExtractor={(item) => item.month}
-                  renderItem={({ item: stat, index }) => (
-                    <View style={[styles.carouselCard, { backgroundColor: colors.surface, width: CARD_WIDTH }]}>
-                      <Text style={[styles.monthTitle, { color: colors.text }]}>
-                        {formatMonth(stat.month)}
-                      </Text>
-
-                      {/* Summary Stats */}
-                      <View style={styles.carouselStats}>
-                        <View style={styles.carouselStatItem}>
-                          <Text style={[styles.carouselStatLabel, { color: colors.textMuted }]}>Expenses</Text>
-                          <Text style={[styles.carouselStatValue, { color: colors.danger }]}>
-                            -{formatCurrency(stat.total_expenses)}
-                          </Text>
-                        </View>
-                        <View style={[styles.carouselStatDivider, { backgroundColor: colors.border }]} />
-                        <View style={styles.carouselStatItem}>
-                          <Text style={[styles.carouselStatLabel, { color: colors.textMuted }]}>Income</Text>
-                          <Text style={[styles.carouselStatValue, { color: colors.success }]}>
-                            +{formatCurrency(stat.total_deposits)}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Mini bar chart */}
-                      <View style={styles.barContainer}>
-                        <View style={styles.barRow}>
-                          <Text style={[styles.barLabel, { color: colors.textMuted }]}>Expenses</Text>
-                          <View style={[styles.barTrack, { backgroundColor: colors.border }]}>
-                            <View
-                              style={[
-                                styles.bar,
-                                {
-                                  backgroundColor: colors.danger,
-                                  width: `${(stat.total_expenses / maxValue) * 100}%`,
-                                },
-                              ]}
-                            />
+                  renderItem={({ item: stat }) => (
+                    <View style={{ width: SCREEN_WIDTH, paddingHorizontal: 16 }}>
+                      <View style={styles.carouselCard}>
+                        <View style={styles.cardTopRow}>
+                          <Text style={styles.monthTitle}>{formatMonth(stat.month)}</Text>
+                          <View style={[styles.miniBadge, { backgroundColor: stat.net >= 0 ? colors.success + '15' : colors.danger + '15' }]}>
+                            <Text style={[styles.miniBadgeText, { color: stat.net >= 0 ? colors.success : colors.danger }]}>
+                              {stat.net >= 0 ? '+' : '-'}{formatCurrency(stat.net)} Net
+                            </Text>
                           </View>
                         </View>
-                        <View style={styles.barRow}>
-                          <Text style={[styles.barLabel, { color: colors.textMuted }]}>Income</Text>
-                          <View style={[styles.barTrack, { backgroundColor: colors.border }]}>
-                            <View
-                              style={[
-                                styles.bar,
-                                {
-                                  backgroundColor: colors.success,
-                                  width: `${(stat.total_deposits / maxValue) * 100}%`,
-                                },
-                              ]}
-                            />
+
+                        <View style={styles.statsGrid}>
+                          <View style={styles.statBox}>
+                                                      <View style={styles.statHeader}>
+                                                        <TrendingDown size={16} color={colors.danger} />
+                                                        <Text style={styles.statLabel}>Paid</Text>
+                                                      </View>
+                                                      <Text style={[styles.statValue, { color: colors.danger }]}>
+                                                        -{formatCurrency(stat.paid)}
+                                                      </Text>
+                                                      {stat.paidCount > 0 && (
+                                                        <Text style={styles.statSubtext}>{stat.paidCount} items</Text>
+                                                      )}
+                                                    </View>
+                          <View style={styles.statBox}>
+                            <View style={styles.statHeader}>
+                              <Wallet size={16} color={colors.warning || '#f59e0b'} />
+                              <Text style={styles.statLabel}>Remaining</Text>
+                            </View>
+                            <Text style={[styles.statValue, { color: colors.warning || '#f59e0b' }]}>
+                              {formatCurrency(stat.remaining)}
+                            </Text>
+                            {stat.remainingCount > 0 && (
+                              <Text style={styles.statSubtext}>{stat.remainingCount} items</Text>
+                            )}
                           </View>
                         </View>
-                      </View>
-
-                      <View style={[styles.netRow, { borderTopColor: colors.border }]}>
-                        <Text style={[styles.netLabel, { color: colors.text }]}>Net</Text>
-                        <Text style={[
-                          styles.netValue,
-                          { color: stat.net >= 0 ? colors.success : colors.danger }
-                        ]}>
-                          {stat.net >= 0 ? '+' : ''}{formatCurrency(stat.net)}
-                        </Text>
                       </View>
                     </View>
                   )}
                 />
-                {/* Dot Indicators */}
                 <View style={styles.dotContainer}>
                   {monthlyStats.slice(0, 12).map((_, index) => (
                     <View
                       key={index}
                       style={[
                         styles.dot,
-                        {
-                          backgroundColor: index === currentIndex ? colors.primary : colors.border,
-                        },
+                        { backgroundColor: index === currentIndex ? colors.primary : colors.border },
                       ]}
                     />
                   ))}
@@ -352,229 +592,80 @@ export default function StatsScreen() {
             )}
           </View>
 
+          {/* Spending Trends Section */}
+          <View style={styles.trendsSection}>
+            <View style={styles.trendsHeader}>
+              <Text style={styles.sectionTitle}>Spending Trends</Text>
+              <View style={styles.trendsControls}>
+                <View style={styles.buttonGroup}>
+                  <TouchableOpacity 
+                    onPress={() => setChartRange(6)}
+                    style={[styles.segmentButton, chartRange === 6 && styles.segmentButtonActive]}
+                  >
+                    <Text style={[styles.segmentText, chartRange === 6 && styles.segmentTextActive]}>6M</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    onPress={() => setChartRange(12)}
+                    style={[styles.segmentButton, chartRange === 12 && styles.segmentButtonActive]}
+                  >
+                    <Text style={[styles.segmentText, chartRange === 12 && styles.segmentTextActive]}>12M</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.buttonGroup}>
+                  <TouchableOpacity 
+                    onPress={() => setChartType('line')}
+                    style={[styles.segmentButton, chartType === 'line' && styles.segmentButtonActive]}
+                  >
+                    <LineChart size={16} color={chartType === 'line' ? '#fff' : colors.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    onPress={() => setChartType('bar')}
+                    style={[styles.segmentButton, chartType === 'bar' && styles.segmentButtonActive]}
+                  >
+                    <BarChart3 size={16} color={chartType === 'bar' ? '#fff' : colors.primary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.chartCard}>
+              {monthlyStats.length > 0 ? (
+                chartType === 'bar' ? (
+                  <BarChart
+                    data={chartData}
+                    width={SCREEN_WIDTH - 64}
+                    height={220}
+                    yAxisLabel="$"
+                    yAxisSuffix=""
+                    chartConfig={chartConfig}
+                    verticalLabelRotation={0}
+                    flatColor={true}
+                    fromZero={true}
+                    showValuesOnTopOfBars={false}
+                    withInnerLines={true}
+                    style={styles.chart}
+                  />
+                ) : (
+                  <RNLineChart
+                    data={chartData}
+                    width={SCREEN_WIDTH - 64}
+                    height={220}
+                    yAxisLabel="$"
+                    chartConfig={chartConfig}
+                    bezier
+                    style={styles.chart}
+                  />
+                )
+              ) : (
+                <ActivityIndicator color={colors.primary} />
+              )}
+            </View>
+          </View>
+
           <View style={styles.footer} />
         </>
       )}
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    padding: 20,
-    paddingTop: 60,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
-  usernameText: {
-    fontSize: 14,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  errorContainer: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  errorText: {
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  retryButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  summaryContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 12,
-  },
-  summaryCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  summaryLabel: {
-    fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  summaryValue: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  summarySubtext: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  sectionContainer: {
-    padding: 16,
-    paddingTop: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  carouselSection: {
-    paddingTop: 8,
-  },
-  carouselHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  carouselIndicator: {
-    fontSize: 14,
-  },
-  carouselContent: {
-    paddingHorizontal: 16,
-  },
-  carouselCard: {
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: CARD_MARGIN,
-  },
-  carouselStats: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    marginTop: 8,
-  },
-  carouselStatItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  carouselStatLabel: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  carouselStatValue: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  carouselStatDivider: {
-    width: 1,
-    marginHorizontal: 16,
-  },
-  dotContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginHorizontal: 4,
-  },
-  monthTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  barContainer: {
-    gap: 8,
-  },
-  barRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  barLabel: {
-    width: 60,
-    fontSize: 12,
-  },
-  barTrack: {
-    flex: 1,
-    height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  bar: {
-    height: '100%',
-    borderRadius: 4,
-    minWidth: 4,
-  },
-  barValue: {
-    width: 80,
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'right',
-  },
-  netRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-  },
-  netLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  netValue: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  emptyCard: {
-    borderRadius: 12,
-    padding: 32,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
-  },
-  paymentHistoryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  paymentHistoryContent: {
-    flex: 1,
-  },
-  paymentHistoryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  paymentHistorySubtitle: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  paymentHistoryArrow: {
-    fontSize: 20,
-    marginLeft: 12,
-  },
-  footer: {
-    height: 40,
-  },
-});

@@ -28,7 +28,7 @@ from services.stripe_service import (
 )
 from config import (
     DEPLOYMENT_MODE, ENABLE_REGISTRATION, REQUIRE_EMAIL_VERIFICATION,
-    ENABLE_BILLING, is_saas, is_self_hosted, get_public_config
+    ENABLE_BILLING, EMAIL_ENABLED, is_saas, is_self_hosted, get_public_config
 )
 from validation import (
     validate_email, validate_username, validate_password, validate_amount,
@@ -1198,8 +1198,8 @@ def jwt_login():
     # Commit any password hash migration that occurred during check_password
     db.session.commit()
 
-    # Check email verification if required
-    if REQUIRE_EMAIL_VERIFICATION and not user.is_email_verified:
+    # Check email verification only if email service is configured and verification is required
+    if EMAIL_ENABLED and REQUIRE_EMAIL_VERIFICATION and not user.is_email_verified:
         return jsonify({
             'success': False,
             'error': 'Please verify your email before logging in',
@@ -1919,12 +1919,15 @@ def jwt_me():
     return jsonify({
         'success': True,
         'data': {
-            'id': user.id,
-            'username': user.username,
-            'role': user.role,
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'role': user.role,
+                'is_account_owner': user.is_account_owner if is_saas() else (user.role == 'admin')
+            },
             'databases': databases,
-            'current_db': g.jwt_db_name,
-            'is_account_owner': user.is_account_owner if is_saas() else (user.role == 'admin')
+            'current_db': g.jwt_db_name
         }
     })
 

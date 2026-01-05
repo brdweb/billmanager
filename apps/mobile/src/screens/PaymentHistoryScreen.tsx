@@ -16,6 +16,7 @@ import {
 import { Swipeable } from 'react-native-gesture-handler';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { api } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 import { Payment, Bill } from '../types';
@@ -35,6 +36,7 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'expense' | 'deposit'>('all');
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<PaymentWithBill | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [editModal, setEditModal] = useState<PaymentWithBill | null>(null);
@@ -97,6 +99,18 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
     setIsRefreshing(true);
     fetchData();
   }, [fetchData]);
+
+  const prevMonth = () => {
+    const newDate = new Date(selectedDate);
+    newDate.setMonth(newDate.getMonth() - 1);
+    setSelectedDate(newDate);
+  };
+
+  const nextMonth = () => {
+    const newDate = new Date(selectedDate);
+    newDate.setMonth(newDate.getMonth() + 1);
+    setSelectedDate(newDate);
+  };
 
   const handleSwipeDelete = (payment: PaymentWithBill) => {
     // Close the swipeable and show confirmation modal
@@ -191,34 +205,21 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
     });
   };
 
-  const groupPaymentsByMonth = (payments: PaymentWithBill[]) => {
-    const groups: { [key: string]: PaymentWithBill[] } = {};
-
-    payments.forEach(payment => {
-      const date = new Date(payment.payment_date + 'T00:00:00');
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const monthLabel = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-      if (!groups[monthKey]) {
-        groups[monthKey] = [];
-      }
-      groups[monthKey].push({ ...payment, monthLabel } as any);
-    });
-
-    return Object.entries(groups).map(([key, items]) => ({
-      key,
-      label: items[0] ? (items[0] as any).monthLabel : key,
-      data: items,
-      total: items.reduce((sum, p) => sum + p.amount, 0),
-    }));
+  const formatMonthYear = (date: Date): string => {
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
 
   const filteredPayments = payments.filter(p => {
-    if (filter === 'all') return true;
-    return p.bill_type === filter;
-  });
+    // Type filter
+    if (filter !== 'all' && p.bill_type !== filter) return false;
 
-  const groupedPayments = groupPaymentsByMonth(filteredPayments);
+    // Date filter
+    const paymentDate = new Date(p.payment_date + 'T00:00:00');
+    return (
+      paymentDate.getMonth() === selectedDate.getMonth() &&
+      paymentDate.getFullYear() === selectedDate.getFullYear()
+    );
+  });
 
   const renderPayment = ({ item }: { item: PaymentWithBill }) => {
     const isDeposit = item.bill_type === 'deposit';
@@ -260,22 +261,6 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
     );
   };
 
-  const renderMonthSection = ({ item }: { item: { key: string; label: string; data: PaymentWithBill[]; total: number } }) => (
-    <View style={styles.monthSection}>
-      <View style={styles.monthHeader}>
-        <Text style={[styles.monthLabel, { color: colors.text }]}>{item.label}</Text>
-        <Text style={[styles.monthTotal, { color: colors.textMuted }]}>
-          {item.data.length} payment{item.data.length !== 1 ? 's' : ''} • {formatCurrency(item.total)}
-        </Text>
-      </View>
-      {item.data.map(payment => (
-        <View key={payment.id}>
-          {renderPayment({ item: payment })}
-        </View>
-      ))}
-    </View>
-  );
-
   if (isLoading) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
@@ -288,9 +273,19 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.surface }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={[styles.backButtonText, { color: colors.primary }]}>← Back</Text>
+          <Text style={[styles.backButtonText, { color: colors.primary }]}>←</Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Payment History</Text>
+        
+        <View style={styles.monthSelector}>
+          <TouchableOpacity onPress={prevMonth} style={styles.arrowButton}>
+            <ChevronLeft size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>{formatMonthYear(selectedDate)}</Text>
+          <TouchableOpacity onPress={nextMonth} style={styles.arrowButton}>
+            <ChevronRight size={24} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.placeholder} />
       </View>
 
@@ -358,9 +353,9 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
         </View>
       ) : (
         <FlatList
-          data={groupedPayments}
-          keyExtractor={(item) => item.key}
-          renderItem={renderMonthSection}
+          data={filteredPayments}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderPayment}
           contentContainerStyle={styles.list}
           refreshControl={
             <RefreshControl
@@ -372,24 +367,20 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No payments recorded</Text>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                No payments in {formatMonthYear(selectedDate)}
+              </Text>
               <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
-                Record a payment on a bill to see it here
+                Select a different month or add a payment
               </Text>
             </View>
           }
-          ListHeaderComponent={
+          ListFooterComponent={
             filteredPayments.length > 0 ? (
-              <Text style={[styles.totalHeader, { color: colors.textMuted }]}>
-                {filteredPayments.length} payment{filteredPayments.length !== 1 ? 's' : ''} •
-                Total: {formatCurrency(filteredPayments.reduce((sum, p) => sum + p.amount, 0))}
+              <Text style={[styles.hint, { color: colors.textMuted }]}>
+                Swipe left to delete • Swipe right to edit
               </Text>
             ) : null
-          }
-          ListFooterComponent={
-            <Text style={[styles.hint, { color: colors.textMuted }]}>
-              Swipe left to delete • Swipe right to edit
-            </Text>
           }
         />
       )}
@@ -512,22 +503,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 60,
-    paddingBottom: 20,
+    paddingBottom: 16,
   },
   backButton: {
-    padding: 4,
+    padding: 8,
+    width: 40,
   },
   backButtonText: {
-    fontSize: 16,
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  monthSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  arrowButton: {
+    padding: 8,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
   },
   placeholder: {
-    width: 60,
+    width: 40,
   },
   filterContainer: {
     flexDirection: 'row',

@@ -65,22 +65,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const response = await api.getUserInfo();
         console.log('[AuthContext] initializeAuth - getUserInfo response:', JSON.stringify(response, null, 2));
 
-        // API returns user data directly in response.data (not nested under .user)
-        if (response.success && response.data && response.data.username) {
-          const userData: User = {
-            id: response.data.id,
-            username: response.data.username,
-            email: response.data.email,
-            role: response.data.role,
-            is_account_owner: response.data.is_account_owner,
-          };
+        let userData: User | null = null;
+        let databases: DatabaseInfo[] = [];
+        let currentDb: string | null = null;
+
+        if (response.success && response.data) {
+          // Check for nested user object (New Server)
+          if (response.data.user) {
+             userData = {
+              id: response.data.user.id,
+              username: response.data.user.username,
+              email: response.data.user.email,
+              role: response.data.user.role,
+              is_account_owner: response.data.user.is_account_owner,
+            };
+            databases = response.data.databases || [];
+            currentDb = api.getCurrentDatabase();
+          } 
+          // Check for flat user properties (Legacy/Cloud Server)
+          else if ((response.data as any).username) {
+             const data = response.data as any;
+             userData = {
+              id: data.id,
+              username: data.username,
+              email: data.email,
+              role: data.role,
+              is_account_owner: data.is_account_owner,
+            };
+            databases = data.databases || [];
+            currentDb = data.current_db || api.getCurrentDatabase();
+          }
+        }
+
+        if (userData) {
           console.log('[AuthContext] initializeAuth - Setting user:', userData);
           setState({
             isLoading: false,
             isAuthenticated: true,
             user: userData,
-            databases: response.data.databases || [],
-            currentDatabase: response.data.current_db || api.getCurrentDatabase(),
+            databases: databases,
+            currentDatabase: currentDb,
             serverType,
           });
           return;
@@ -143,21 +167,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userInfoResponse = await api.getUserInfo();
       console.log('[AuthContext] getUserInfo response:', JSON.stringify(userInfoResponse, null, 2));
 
-      // API returns user data directly in response.data (not nested under .user)
-      if (userInfoResponse.success && userInfoResponse.data && userInfoResponse.data.username) {
-        const userData: User = {
-          id: userInfoResponse.data.id,
-          username: userInfoResponse.data.username,
-          email: userInfoResponse.data.email,
-          role: userInfoResponse.data.role,
-          is_account_owner: userInfoResponse.data.is_account_owner,
-        };
+      let userData: User | null = null;
+      let databases: DatabaseInfo[] = [];
+      let currentDb: string | null = null;
+
+      if (userInfoResponse.success && userInfoResponse.data) {
+          if (userInfoResponse.data.user) {
+            userData = {
+              id: userInfoResponse.data.user.id,
+              username: userInfoResponse.data.user.username,
+              email: userInfoResponse.data.user.email,
+              role: userInfoResponse.data.user.role,
+              is_account_owner: userInfoResponse.data.user.is_account_owner,
+            };
+            databases = userInfoResponse.data.databases || [];
+            currentDb = userInfoResponse.data.databases?.[0]?.name || null;
+          } else if ((userInfoResponse.data as any).username) {
+            const data = userInfoResponse.data as any;
+            userData = {
+              id: data.id,
+              username: data.username,
+              email: data.email,
+              role: data.role,
+              is_account_owner: data.is_account_owner,
+            };
+            databases = data.databases || [];
+            currentDb = data.current_db || data.databases?.[0]?.name || null;
+          }
+      }
+
+      if (userData) {
         setState({
           isLoading: false,
           isAuthenticated: true,
           user: userData,
-          databases: userInfoResponse.data.databases || [],
-          currentDatabase: userInfoResponse.data.current_db || userInfoResponse.data.databases?.[0]?.name || null,
+          databases: databases,
+          currentDatabase: currentDb,
           serverType,
         });
         return { success: true };
@@ -185,18 +230,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUserInfo = useCallback(async () => {
     const response = await api.getUserInfo();
-    if (response.success && response.data && response.data.username) {
-      const userData: User = {
-        id: response.data.id,
-        username: response.data.username,
-        email: response.data.email,
-        role: response.data.role,
-        is_account_owner: response.data.is_account_owner,
-      };
+    let userData: User | null = null;
+    let databases: DatabaseInfo[] = [];
+
+    if (response.success && response.data) {
+        if (response.data.user) {
+            userData = {
+                id: response.data.user.id,
+                username: response.data.user.username,
+                email: response.data.user.email,
+                role: response.data.user.role,
+                is_account_owner: response.data.user.is_account_owner,
+            };
+            databases = response.data.databases || [];
+        } else if ((response.data as any).username) {
+            const data = response.data as any;
+            userData = {
+                id: data.id,
+                username: data.username,
+                email: data.email,
+                role: data.role,
+                is_account_owner: data.is_account_owner,
+            };
+            databases = data.databases || [];
+        }
+    }
+
+    if (userData) {
       setState(prev => ({
         ...prev,
         user: userData,
-        databases: response.data!.databases || [],
+        databases: databases,
       }));
     }
   }, []);

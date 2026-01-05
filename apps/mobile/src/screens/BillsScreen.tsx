@@ -12,10 +12,13 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Plus, Search, X, ChevronDown } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { api } from '../api/client';
 import { Bill } from '../types';
+import { BillIcon } from '../components/BillIcon';
 
 type BillsStackParamList = {
   BillsList: undefined;
@@ -52,18 +55,18 @@ const getDaysUntil = (dateStr: string): number => {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
-// Web app color scheme for due dates
 const getDueBadgeColor = (daysUntil: number): string => {
-  if (daysUntil < 0) return '#ef4444';  // red - overdue
-  if (daysUntil <= 7) return '#ef4444'; // red - due within a week
-  if (daysUntil <= 14) return '#f97316'; // orange - due within 2 weeks
-  if (daysUntil <= 21) return '#eab308'; // yellow - due within 3 weeks
-  if (daysUntil <= 30) return '#3b82f6'; // blue - due within a month
-  return '#6b7280'; // gray - more than a month away
+  if (daysUntil < 0) return '#ef4444';
+  if (daysUntil <= 7) return '#ef4444';
+  if (daysUntil <= 14) return '#f97316';
+  if (daysUntil <= 21) return '#eab308';
+  if (daysUntil <= 30) return '#3b82f6';
+  return '#6b7280';
 };
 
 export default function BillsScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { currentDatabase, databases, selectDatabase } = useAuth();
   const [bills, setBills] = useState<Bill[]>([]);
@@ -75,7 +78,7 @@ export default function BillsScreen() {
   const [showSearch, setShowSearch] = useState(false);
   const [showDbPicker, setShowDbPicker] = useState(false);
 
-  const styles = createStyles(colors);
+  const styles = createStyles(colors, insets);
 
   const fetchBills = useCallback(async () => {
     if (!currentDatabase) return;
@@ -163,11 +166,11 @@ export default function BillsScreen() {
     const isDeposit = bill.type === 'deposit';
     const badgeColor = getDueBadgeColor(daysUntil);
 
-    const badgeText = isOverdue
-      ? `${Math.abs(daysUntil)}d overdue`
+    const dueText = isOverdue
+      ? `Due ${Math.abs(daysUntil)}d ago`
       : daysUntil === 0
-      ? 'Due today'
-      : `${daysUntil}d`;
+      ? 'Due Today'
+      : `Due in ${daysUntil}d`;
 
     return (
       <TouchableOpacity
@@ -175,22 +178,33 @@ export default function BillsScreen() {
         onPress={() => handleBillPress(bill)}
         activeOpacity={0.7}
       >
-        <View style={styles.billCardTop}>
-          <View style={styles.billInfo}>
-            <Text style={styles.billName}>{bill.name}</Text>
+        <View style={styles.cardContent}>
+          <BillIcon 
+            icon={bill.icon} 
+            size={24} 
+            containerSize={48} 
+            color={isDeposit ? colors.success : colors.primary}
+            backgroundColor={isDeposit ? colors.success + '15' : colors.primary + '15'}
+          />
+
+          <View style={styles.cardMiddle}>
+            <Text style={styles.billName} numberOfLines={1}>{bill.name}</Text>
+            <View style={styles.dueRow}>
+              <View style={[styles.dueDot, { backgroundColor: badgeColor }]} />
+              <Text style={[styles.dueText, { color: badgeColor }]}>
+                {formatDate(bill.next_due)} • {dueText}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.cardRight}>
+            <Text style={[styles.billAmount, { color: isDeposit ? colors.success : colors.text }]}>
+              {isDeposit ? '+' : ''}{formatCurrency(bill.amount, bill.avg_amount)}
+            </Text>
             {bill.account && (
-              <Text style={styles.billAccount}>{bill.account}</Text>
+              <Text style={styles.billAccount} numberOfLines={1}>{bill.account}</Text>
             )}
           </View>
-          <Text style={[styles.billAmount, { color: isDeposit ? colors.success : colors.danger }]}>
-            {isDeposit ? '+' : '-'}{formatCurrency(bill.amount, bill.avg_amount)}
-          </Text>
-        </View>
-        <View style={styles.billCardBottom}>
-          <View style={[styles.badge, { backgroundColor: badgeColor + '20', borderColor: badgeColor }]}>
-            <Text style={[styles.badgeText, { color: badgeColor }]}>{badgeText}</Text>
-          </View>
-          <Text style={styles.billDate}>{formatDate(bill.next_due)}</Text>
         </View>
       </TouchableOpacity>
     );
@@ -249,7 +263,6 @@ export default function BillsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <TouchableOpacity
@@ -261,17 +274,25 @@ export default function BillsScreen() {
               {currentDbInfo?.display_name || 'Bills'}
             </Text>
             {databases.length > 1 && (
-              <Text style={styles.dropdownArrow}>▼</Text>
+              <ChevronDown size={16} color={colors.textMuted} style={styles.dropdownArrow} />
             )}
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setShowSearch(!showSearch)}
-            style={[styles.searchButton, showSearch && styles.searchButtonActive]}
-          >
-            <Text style={showSearch ? styles.searchIconActive : styles.searchIcon}>
-              {showSearch ? '✕' : '🔍'}
-            </Text>
-          </TouchableOpacity>
+          
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              onPress={handleAddBill}
+              style={styles.iconButton}
+            >
+              <Plus size={24} color={colors.primary} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={() => setShowSearch(!showSearch)}
+              style={[styles.iconButton, showSearch && styles.iconButtonActive]}
+            >
+              <Search size={22} color={showSearch ? '#fff' : colors.textMuted} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <Text style={styles.headerSubtitle}>
@@ -294,7 +315,7 @@ export default function BillsScreen() {
                 onPress={() => setSearchQuery('')}
                 style={styles.clearSearchButton}
               >
-                <Text style={styles.clearSearchText}>✕</Text>
+                <X size={16} color="#fff" />
               </TouchableOpacity>
             )}
           </View>
@@ -323,7 +344,6 @@ export default function BillsScreen() {
         {renderFilterTabs()}
       </View>
 
-      {/* Bills List */}
       <FlatList
         data={filteredBills}
         keyExtractor={(item) => item.id.toString()}
@@ -353,12 +373,6 @@ export default function BillsScreen() {
         }
       />
 
-      {/* FAB */}
-      <TouchableOpacity style={styles.fab} onPress={handleAddBill}>
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
-
-      {/* Database Picker Modal */}
       <Modal
         visible={showDbPicker}
         animationType="fade"
@@ -401,7 +415,7 @@ export default function BillsScreen() {
   );
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
+const createStyles = (colors: any, insets: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -415,7 +429,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   header: {
     backgroundColor: colors.surface,
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: insets.top + 8,
     paddingBottom: 12,
   },
   headerTop: {
@@ -433,24 +447,21 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.textMuted,
     marginTop: 4,
   },
-  searchButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.border,
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
-  searchButtonActive: {
+  iconButtonActive: {
     backgroundColor: colors.primary,
-  },
-  searchIcon: {
-    fontSize: 16,
-    color: colors.textMuted,
-  },
-  searchIconActive: {
-    fontSize: 16,
-    color: '#fff',
   },
   searchContainer: {
     marginTop: 12,
@@ -476,11 +487,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  clearSearchText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
   },
   activeFilterBanner: {
     marginTop: 12,
@@ -541,55 +547,58 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    paddingBottom: 100,
+    paddingBottom: 40,
   },
   billCard: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 16,
+    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  billCardTop: {
+  cardContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
-  billInfo: {
+  cardMiddle: {
     flex: 1,
-    marginRight: 12,
+    marginLeft: 12,
+    marginRight: 8,
+    justifyContent: 'center',
   },
   billName: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.text,
+    marginBottom: 4,
   },
-  billAccount: {
-    fontSize: 13,
-    color: colors.textMuted,
-    marginTop: 2,
+  dueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dueDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  dueText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cardRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   billAmount: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
+    marginBottom: 4,
   },
-  billCardBottom: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  badgeText: {
+  billAccount: {
     fontSize: 12,
-    fontWeight: '600',
-  },
-  billDate: {
-    fontSize: 13,
     color: colors.textMuted,
   },
   emptyContainer: {
@@ -620,36 +629,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  fabText: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: '300',
-  },
   dbSelector: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   dropdownArrow: {
-    fontSize: 10,
-    color: colors.textMuted,
-    marginTop: 2,
+    marginTop: 4,
   },
   modalOverlay: {
     flex: 1,
