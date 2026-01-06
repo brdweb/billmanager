@@ -433,7 +433,7 @@ export const createCheckoutSession = (tier: string = 'basic', interval: string =
 export const createPortalSession = () =>
   unwrap(api.post<CheckoutResponse>('/api/v2/billing/portal'));
 
-// Telemetry API (v2)
+// Telemetry API (v1 - session auth)
 export interface TelemetryNoticeResponse {
   success: boolean;
   data: {
@@ -447,14 +447,14 @@ export interface TelemetryNoticeResponse {
 }
 
 export const getTelemetryNotice = async () => {
-  const response = await unwrap(api.get<TelemetryNoticeResponse>('/api/v2/telemetry/notice'));
-  return response.data;
+  const response = await unwrap(api.get<TelemetryNoticeResponse>('/telemetry/notice'));
+  return response;
 };
 
 export const acceptTelemetry = () =>
-  unwrap(api.post<AuthResponse>('/api/v2/telemetry/accept'));
+  unwrap(api.post<AuthResponse>('/telemetry/accept'));
 
 export const optOutTelemetry = () =>
-  unwrap(api.post<AuthResponse>('/api/v2/telemetry/opt-out'));
+  unwrap(api.post<AuthResponse>('/telemetry/opt-out'));
 
 export default api;

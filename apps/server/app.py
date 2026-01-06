@@ -1171,7 +1171,7 @@ def process_auto_payments():
 
 @api_bp.route('/api/version', methods=['GET'])
 def get_version():
-    return jsonify({'version': '3.4.6', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites']})
+    return jsonify({'version': '3.5.0', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites']})
 
 @api_bp.route('/ping')
 def ping(): return jsonify({'status': 'ok'})
@@ -2764,7 +2764,7 @@ def jwt_get_version():
     return jsonify({
         'success': True,
         'data': {
-            'version': '3.4.6',
+            'version': '3.5.0',
             'api_version': 'v2',
             'license': "O'Saasy",
             'license_url': 'https://osaasy.dev/',
@@ -3411,7 +3411,102 @@ def jwt_sync_full():
     })
 
 
-# --- Telemetry Consent Endpoints ---
+# --- Telemetry Consent Endpoints (V1 - Session Auth) ---
+
+@api_bp.route('/telemetry/notice', methods=['GET'])
+@login_required
+def get_telemetry_notice_v1():
+    """
+    Check if user needs to see telemetry notice (session auth version).
+
+    Returns notice status and telemetry configuration.
+    """
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    # Only account owners see/manage telemetry settings
+    if not user.is_account_owner:
+        return jsonify({
+            'success': True,
+            'data': {
+                'show_notice': False,
+                'reason': 'not_account_owner'
+            }
+        })
+
+    # Check if notice was already shown
+    if user.telemetry_notice_shown_at:
+        return jsonify({
+            'success': True,
+            'data': {
+                'show_notice': False,
+                'opted_out': user.telemetry_opt_out,
+                'notice_shown_at': user.telemetry_notice_shown_at.isoformat()
+            }
+        })
+
+    # User needs to see the notice
+    return jsonify({
+        'success': True,
+        'data': {
+            'show_notice': True,
+            'telemetry_enabled': os.environ.get('TELEMETRY_ENABLED', 'true').lower() == 'true',
+            'deployment_mode': os.environ.get('DEPLOYMENT_MODE', 'unknown')
+        }
+    })
+
+@api_bp.route('/telemetry/accept', methods=['POST'])
+@login_required
+def accept_telemetry_v1():
+    """Accept telemetry (session auth version)."""
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    if not user.is_account_owner:
+        return jsonify({'success': False, 'error': 'Only account owners can manage telemetry'}), 403
+
+    user.telemetry_notice_shown_at = datetime.datetime.now(datetime.timezone.utc)
+    user.telemetry_opt_out = False
+    db.session.commit()
+
+    logger.info(f"User {user.username} accepted telemetry")
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'message': 'Telemetry accepted',
+            'opted_out': False
+        }
+    })
+
+@api_bp.route('/telemetry/opt-out', methods=['POST'])
+@login_required
+def opt_out_telemetry_v1():
+    """Opt out of telemetry (session auth version)."""
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    if not user.is_account_owner:
+        return jsonify({'success': False, 'error': 'Only account owners can manage telemetry'}), 403
+
+    user.telemetry_notice_shown_at = datetime.datetime.now(datetime.timezone.utc)
+    user.telemetry_opt_out = True
+    db.session.commit()
+
+    logger.info(f"User {user.username} opted out of telemetry")
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'message': 'Telemetry disabled',
+            'opted_out': True
+        }
+    })
+
+# --- Telemetry Consent Endpoints (V2 - JWT Auth) ---
 
 @api_v2_bp.route('/telemetry/notice', methods=['GET'])
 @jwt_required

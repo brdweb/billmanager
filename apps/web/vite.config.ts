@@ -73,6 +73,7 @@ export default defineConfig({
       '/users': 'http://localhost:5001',
       '/api': 'http://localhost:5001',
       '/debug-db': 'http://localhost:5001',
+      '/telemetry': 'http://localhost:5001',
     },
   },
   build: {
