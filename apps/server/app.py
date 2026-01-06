@@ -26,6 +26,8 @@ from services.stripe_service import (
     create_checkout_session, create_portal_session, construct_webhook_event,
     get_subscription, cancel_subscription, update_subscription, STRIPE_PUBLISHABLE_KEY
 )
+from services.telemetry import telemetry
+from services.scheduler import scheduler
 from config import (
     DEPLOYMENT_MODE, ENABLE_REGISTRATION, REQUIRE_EMAIL_VERIFICATION,
     ENABLE_BILLING, EMAIL_ENABLED, is_saas, is_self_hosted, get_public_config
@@ -3468,6 +3470,10 @@ def create_app():
     CORS(app, origins=allowed_origins, supports_credentials=True)
     db.init_app(app); Migrate(app, db)
 
+    # Initialize telemetry and scheduler
+    telemetry.init_app(app, db)
+    scheduler.init_app(app)
+
     # Initialize rate limiter
     limiter.init_app(app)
 
@@ -3511,6 +3517,14 @@ def create_app():
     # Register API Blueprints first, then SPA
     app.register_blueprint(api_bp)
     app.register_blueprint(api_v2_bp)  # JWT auth for mobile
+
+    # Register telemetry receiver (only on production server for collecting telemetry)
+    enable_telemetry_receiver = os.environ.get('ENABLE_TELEMETRY_RECEIVER', 'false').lower() == 'true'
+    if enable_telemetry_receiver:
+        from services.telemetry_receiver import telemetry_receiver_bp
+        app.register_blueprint(telemetry_receiver_bp)
+        logger.info("📊 Telemetry receiver enabled - this server will collect installation statistics")
+
     app.register_blueprint(spa_bp)
 
     with app.app_context():
@@ -3562,6 +3576,14 @@ def create_app():
             else:
                 logger.info(f"📦 Existing installation detected ({user_count} users) - skipping default creation")
         except Exception as e: logger.error(f"❌ Startup Error: {e}")
+
+    # Start background scheduler for telemetry and other periodic tasks
+    try:
+        scheduler.start()
+        logger.info("✅ Background scheduler started")
+    except Exception as e:
+        logger.error(f"Failed to start scheduler: {e}")
+
     return app
 
 app = create_app()

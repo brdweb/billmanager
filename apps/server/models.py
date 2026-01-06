@@ -342,3 +342,42 @@ class Subscription(db.Model):
             return False
         # If canceled but current period hasn't ended yet
         return datetime.now(timezone.utc) < self.current_period_end
+
+
+class TelemetryLog(db.Model):
+    """Tracks telemetry submissions (local tracking only, not sent to server)"""
+    __tablename__ = 'telemetry_log'
+    id = db.Column(db.Integer, primary_key=True)
+    instance_id = db.Column(db.String(64), nullable=False)
+    version = db.Column(db.String(20), nullable=True)
+    deployment_mode = db.Column(db.String(20), nullable=True)  # saas, self-hosted, local-dev
+    last_sent_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    metrics_snapshot = db.Column(db.Text, nullable=True)  # JSON string of last metrics sent
+    send_successful = db.Column(db.Boolean, default=True)
+    error_message = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    @property
+    def days_since_last_sent(self):
+        """Calculate days since last successful send"""
+        if not self.last_sent_at:
+            return None
+        delta = datetime.now(timezone.utc) - self.last_sent_at
+        return delta.days
+
+
+class TelemetrySubmission(db.Model):
+    """Stores telemetry data received from BillManager installations (production server only)"""
+    __tablename__ = 'telemetry_submissions'
+    id = db.Column(db.Integer, primary_key=True)
+    instance_id = db.Column(db.String(64), nullable=False, index=True)
+    version = db.Column(db.String(20), nullable=True)
+    deployment_mode = db.Column(db.String(20), nullable=True, index=True)
+    installation_date = db.Column(db.String(50), nullable=True)
+    metrics_json = db.Column(db.Text, nullable=True)
+    platform_json = db.Column(db.Text, nullable=True)
+    received_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+
+    __table_args__ = (
+        db.Index('idx_instance_received', 'instance_id', 'received_at'),
+    )
