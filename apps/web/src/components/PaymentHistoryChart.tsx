@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Paper, Text, Loader, Center } from '@mantine/core';
 import { AreaChart } from '@mantine/charts';
 import { getBillMonthlyPayments } from '../api/client';
@@ -29,13 +29,7 @@ export function PaymentHistoryChart({ billName }: PaymentHistoryChartProps) {
   const [data, setData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (billName) {
-      fetchData();
-    }
-  }, [billName]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!billName) return;
 
     setLoading(true);
@@ -65,7 +59,13 @@ export function PaymentHistoryChart({ billName }: PaymentHistoryChartProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [billName]);
+
+  useEffect(() => {
+    if (billName) {
+      fetchData();
+    }
+  }, [billName, fetchData]);
 
   if (loading) {
     return (

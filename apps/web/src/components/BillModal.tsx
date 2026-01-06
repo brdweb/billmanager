@@ -160,7 +160,7 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
         // Form initialization error - silent fail, form will be in default state
       }
     }
-  }, [bill, opened]);
+  }, [bill, opened, form]);
 
   // Calculate next due date for specific monthly dates
   const calculateNextDueForSpecificDates = (dates: number[]): string => {

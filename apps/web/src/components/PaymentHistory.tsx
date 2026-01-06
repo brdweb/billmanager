@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Modal,
   Stack,
@@ -46,21 +46,7 @@ export function PaymentHistory({
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 5;
 
-  useEffect(() => {
-    if (opened && billId) {
-      fetchPayments();
-      setCurrentPage(1); // Reset page when opening new bill
-    }
-  }, [opened, billId]);
-
-  // Paginated payments
-  const totalPages = Math.ceil(payments.length / ITEMS_PER_PAGE);
-  const paginatedPayments = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return payments.slice(start, start + ITEMS_PER_PAGE);
-  }, [payments, currentPage]);
-
-  const fetchPayments = async () => {
+  const fetchPayments = useCallback(async () => {
     if (!billId) return;
     setLoading(true);
     try {
@@ -77,7 +63,21 @@ export function PaymentHistory({
     } finally {
       setLoading(false);
     }
-  };
+  }, [billId]);
+
+  useEffect(() => {
+    if (opened && billId) {
+      fetchPayments();
+      setCurrentPage(1); // Reset page when opening new bill
+    }
+  }, [opened, billId, fetchPayments]);
+
+  // Paginated payments
+  const totalPages = Math.ceil(payments.length / ITEMS_PER_PAGE);
+  const paginatedPayments = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return payments.slice(start, start + ITEMS_PER_PAGE);
+  }, [payments, currentPage]);
 
   const handleEdit = (payment: Payment) => {
     setEditingId(payment.id);

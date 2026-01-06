@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { Bill, PaymentWithBill } from '../api/client';
+import { formatDateForAPI } from './date';
 
 // Format date for display
 function formatDate(dateStr: string): string {
@@ -144,8 +145,8 @@ export function exportPaymentsToCSV(
   let exportFilename = filename;
   if (!exportFilename) {
     if (dateRange?.from || dateRange?.to) {
-      const from = dateRange.from ? dateRange.from.toISOString().split('T')[0] : 'start';
-      const to = dateRange.to ? dateRange.to.toISOString().split('T')[0] : 'end';
+      const from = dateRange.from ? formatDateForAPI(dateRange.from) : 'start';
+      const to = dateRange.to ? formatDateForAPI(dateRange.to) : 'end';
       exportFilename = `payments-${from}-to-${to}.csv`;
     } else {
       exportFilename = `payments-${getDateForFilename()}.csv`;
@@ -204,8 +205,8 @@ export function exportPaymentsToPDF(
   let exportFilename = filename;
   if (!exportFilename) {
     if (dateRange?.from || dateRange?.to) {
-      const from = dateRange.from ? dateRange.from.toISOString().split('T')[0] : 'start';
-      const to = dateRange.to ? dateRange.to.toISOString().split('T')[0] : 'end';
+      const from = dateRange.from ? formatDateForAPI(dateRange.from) : 'start';
+      const to = dateRange.to ? formatDateForAPI(dateRange.to) : 'end';
       exportFilename = `payments-${from}-to-${to}.pdf`;
     } else {
       exportFilename = `payments-${getDateForFilename()}.pdf`;
