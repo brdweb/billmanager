@@ -38,6 +38,10 @@ class User(db.Model):
     # Trial tracking
     trial_ends_at = db.Column(db.DateTime, nullable=True)
 
+    # Telemetry consent (for existing users opt-out notification)
+    telemetry_notice_shown_at = db.Column(db.DateTime, nullable=True)
+    telemetry_opt_out = db.Column(db.Boolean, default=False)
+
     # Relationships
     accessible_databases = db.relationship('Database', secondary=user_database_access, backref='users')
     created_by = db.relationship('User', remote_side='User.id', foreign_keys=[created_by_id], backref='created_users')

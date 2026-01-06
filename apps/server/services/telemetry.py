@@ -86,6 +86,10 @@ class TelemetryCollector:
                 "installation_date": self._get_installation_date(),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
 
+                # Server identification (for SaaS contact)
+                "server_url": self._get_server_url(),
+                "server_ip": self._get_server_ip(),
+
                 # User metrics
                 "metrics": {
                     "users": self._get_user_metrics(),
@@ -296,6 +300,40 @@ class TelemetryCollector:
             logger.error(f"Failed to collect platform info: {e}")
             return {}
 
+    def _get_server_url(self) -> Optional[str]:
+        """Get the server URL from APP_URL environment variable."""
+        return os.environ.get('APP_URL', None)
+
+    def _get_server_ip(self) -> Optional[str]:
+        """Get the server's external IP address."""
+        try:
+            # Try to get external IP from ipify.org
+            response = requests.get('https://api.ipify.org?format=text', timeout=5)
+            if response.status_code == 200:
+                return response.text.strip()
+        except Exception as e:
+            logger.debug(f"Failed to get external IP: {e}")
+
+        return None
+
+    def _is_opted_out(self) -> bool:
+        """Check if any account owner has opted out of telemetry."""
+        from models import User
+
+        try:
+            # Check if any account owner (self-registered admin) has opted out
+            opted_out = self.db.session.query(User).filter(
+                User.role == 'admin',
+                User.created_by_id.is_(None),
+                User.telemetry_opt_out == True
+            ).first()
+
+            return opted_out is not None
+        except Exception as e:
+            logger.error(f"Failed to check telemetry opt-out status: {e}")
+            # If we can't check, err on the side of privacy - don't send
+            return True
+
     def send_telemetry(self, metrics: Optional[Dict[str, Any]] = None) -> bool:
         """
         Send telemetry data to collection endpoint.
@@ -304,7 +342,12 @@ class TelemetryCollector:
             bool: True if sent successfully, False otherwise
         """
         if not self.telemetry_enabled:
-            logger.debug("Telemetry disabled, skipping send")
+            logger.debug("Telemetry disabled via TELEMETRY_ENABLED, skipping send")
+            return False
+
+        # Check if account owner has opted out
+        if self._is_opted_out():
+            logger.debug("Telemetry disabled by user opt-out, skipping send")
             return False
 
         if not self.telemetry_url:

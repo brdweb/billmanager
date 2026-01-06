@@ -91,12 +91,17 @@ def _send_saas_deployment_alert(instance_id: str, data: dict):
         metrics = data.get('metrics', {})
         platform = data.get('platform', {})
         version = data.get('version', 'unknown')
+        server_url = data.get('server_url', 'Not set')
+        server_ip = data.get('server_ip', 'Unknown')
 
         message = (
             f"🚀 New BillManager SaaS Deployment Detected!\n\n"
             f"Instance ID: {instance_id}\n"
             f"Version: {version}\n"
             f"Installation Date: {data.get('installation_date', 'unknown')}\n\n"
+            f"Contact Info:\n"
+            f"- Server URL: {server_url}\n"
+            f"- Server IP: {server_ip}\n\n"
             f"Stats:\n"
             f"- Users: {metrics.get('users', {}).get('total', 0)}\n"
             f"- Databases: {metrics.get('data', {}).get('databases', 0)}\n"

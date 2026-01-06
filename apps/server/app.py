@@ -3411,6 +3411,104 @@ def jwt_sync_full():
     })
 
 
+# --- Telemetry Consent Endpoints ---
+
+@api_v2_bp.route('/telemetry/notice', methods=['GET'])
+@jwt_required
+def get_telemetry_notice():
+    """
+    Check if user needs to see telemetry notice.
+
+    Returns notice status and telemetry configuration.
+    """
+    user = User.query.get(g.jwt_user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    # Only account owners see/manage telemetry settings
+    if not user.is_account_owner:
+        return jsonify({
+            'success': True,
+            'data': {
+                'show_notice': False,
+                'reason': 'not_account_owner'
+            }
+        })
+
+    # Check if notice was already shown
+    if user.telemetry_notice_shown_at:
+        return jsonify({
+            'success': True,
+            'data': {
+                'show_notice': False,
+                'opted_out': user.telemetry_opt_out,
+                'notice_shown_at': user.telemetry_notice_shown_at.isoformat()
+            }
+        })
+
+    # User needs to see the notice
+    return jsonify({
+        'success': True,
+        'data': {
+            'show_notice': True,
+            'telemetry_enabled': os.environ.get('TELEMETRY_ENABLED', 'true').lower() == 'true',
+            'deployment_mode': os.environ.get('DEPLOYMENT_MODE', 'unknown')
+        }
+    })
+
+
+@api_v2_bp.route('/telemetry/accept', methods=['POST'])
+@jwt_required
+def accept_telemetry():
+    """Accept telemetry (dismiss notice without opting out)."""
+    user = User.query.get(g.jwt_user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    if not user.is_account_owner:
+        return jsonify({'success': False, 'error': 'Only account owners can manage telemetry'}), 403
+
+    user.telemetry_notice_shown_at = datetime.datetime.now(datetime.timezone.utc)
+    user.telemetry_opt_out = False
+    db.session.commit()
+
+    logger.info(f"User {user.username} accepted telemetry")
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'message': 'Telemetry accepted',
+            'opted_out': False
+        }
+    })
+
+
+@api_v2_bp.route('/telemetry/opt-out', methods=['POST'])
+@jwt_required
+def opt_out_telemetry():
+    """Opt out of telemetry."""
+    user = User.query.get(g.jwt_user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    if not user.is_account_owner:
+        return jsonify({'success': False, 'error': 'Only account owners can manage telemetry'}), 403
+
+    user.telemetry_notice_shown_at = datetime.datetime.now(datetime.timezone.utc)
+    user.telemetry_opt_out = True
+    db.session.commit()
+
+    logger.info(f"User {user.username} opted out of telemetry")
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'message': 'Telemetry disabled',
+            'opted_out': True
+        }
+    })
+
+
 # --- SPA Catch-all Routes ---
 
 def get_client_dir():
