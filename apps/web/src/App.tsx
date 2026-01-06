@@ -13,6 +13,7 @@ import { Calendar } from './components/Calendar';
 import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { AdminModal } from './components/AdminPanel/AdminModal';
 import { MonthlyTotalsChart } from './components/MonthlyTotalsChart';
+import { TelemetryNoticeModal } from './components/TelemetryNoticeModal';
 import { AllPayments } from './pages/AllPayments';
 import { Login } from './pages/Login';
 import { VerifyEmail } from './pages/VerifyEmail';
@@ -86,6 +87,7 @@ function App() {
   const [payModalOpened, { open: openPayModal, close: closePayModal }] = useDisclosure(false);
   const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false);
   const [chartOpened, { open: openChart, close: closeChart }] = useDisclosure(false);
+  const [telemetryModalOpened, { open: openTelemetryModal, close: closeTelemetryModal }] = useDisclosure(false);
 
   // Current editing/paying bill
   const [currentBill, setCurrentBill] = useState<Bill | null>(null);
@@ -201,6 +203,25 @@ function App() {
   useEffect(() => {
     fetchBills();
   }, [fetchBills]);
+
+  // Check telemetry notice status on login
+  useEffect(() => {
+    const checkTelemetryNotice = async () => {
+      if (!isLoggedIn || isLoading) return;
+
+      try {
+        const noticeData = await api.getTelemetryNotice();
+        if (noticeData.show_notice) {
+          openTelemetryModal();
+        }
+      } catch (error) {
+        // Silently fail - telemetry notice is not critical
+        console.debug('Failed to check telemetry notice:', error);
+      }
+    };
+
+    checkTelemetryNotice();
+  }, [isLoggedIn, isLoading, openTelemetryModal]);
 
   // Handle password change required - derive directly from auth state
   const passwordChangeOpened = !!pendingPasswordChange;
@@ -444,6 +465,8 @@ function App() {
       />
 
       <MonthlyTotalsChart opened={chartOpened} onClose={closeChart} />
+
+      <TelemetryNoticeModal opened={telemetryModalOpened} onClose={closeTelemetryModal} />
     </>
   );
 }

@@ -433,4 +433,28 @@ export const createCheckoutSession = (tier: string = 'basic', interval: string =
 export const createPortalSession = () =>
   unwrap(api.post<CheckoutResponse>('/api/v2/billing/portal'));
 
+// Telemetry API (v2)
+export interface TelemetryNoticeResponse {
+  success: boolean;
+  data: {
+    show_notice: boolean;
+    opted_out?: boolean;
+    notice_shown_at?: string;
+    reason?: string;
+    telemetry_enabled?: boolean;
+    deployment_mode?: string;
+  };
+}
+
+export const getTelemetryNotice = async () => {
+  const response = await unwrap(api.get<TelemetryNoticeResponse>('/api/v2/telemetry/notice'));
+  return response.data;
+};
+
+export const acceptTelemetry = () =>
+  unwrap(api.post<AuthResponse>('/api/v2/telemetry/accept'));
+
+export const optOutTelemetry = () =>
+  unwrap(api.post<AuthResponse>('/api/v2/telemetry/opt-out'));
+
 export default api;

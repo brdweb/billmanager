@@ -644,6 +644,49 @@ class BillManagerApi {
     }
   }
 
+  // ============ Telemetry ============
+
+  async getTelemetryNotice(): Promise<ApiResponse<{
+    show_notice: boolean;
+    opted_out?: boolean;
+    notice_shown_at?: string;
+    reason?: string;
+    telemetry_enabled?: boolean;
+    deployment_mode?: string;
+  }>> {
+    try {
+      const response = await this.client.get<ApiResponse<{
+        show_notice: boolean;
+        opted_out?: boolean;
+        notice_shown_at?: string;
+        reason?: string;
+        telemetry_enabled?: boolean;
+        deployment_mode?: string;
+      }>>('/telemetry/notice');
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async acceptTelemetry(): Promise<ApiResponse<void>> {
+    try {
+      const response = await this.client.post<ApiResponse<void>>('/telemetry/accept');
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async optOutTelemetry(): Promise<ApiResponse<void>> {
+    try {
+      const response = await this.client.post<ApiResponse<void>>('/telemetry/opt-out');
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
   // ============ Helpers ============
 
   private handleError(error: unknown): ApiResponse<any> {

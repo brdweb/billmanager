@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import TelemetryNoticeModal from '../components/TelemetryNoticeModal';
+import { api } from '../api/client';
 import LoginScreen from '../screens/LoginScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import BillsScreen from '../screens/BillsScreen';
@@ -187,21 +189,48 @@ function LoadingScreen() {
 // Main navigator
 export default function AppNavigator() {
   const { isLoading, isAuthenticated } = useAuth();
+  const [showTelemetryModal, setShowTelemetryModal] = useState(false);
+
+  // Check telemetry notice status when authenticated
+  useEffect(() => {
+    const checkTelemetryNotice = async () => {
+      if (!isAuthenticated || isLoading) return;
+
+      try {
+        const response = await api.getTelemetryNotice();
+        if (response.success && response.data?.show_notice) {
+          setShowTelemetryModal(true);
+        }
+      } catch (error) {
+        // Silently fail - telemetry notice is not critical
+        console.debug('Failed to check telemetry notice:', error);
+      }
+    };
+
+    checkTelemetryNotice();
+  }, [isAuthenticated, isLoading]);
 
   if (isLoading) {
     return <LoadingScreen />;
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {isAuthenticated ? (
-          <Stack.Screen name="Main" component={MainTabs} />
-        ) : (
-          <Stack.Screen name="Auth" component={AuthStackNavigator} />
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+    <>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {isAuthenticated ? (
+            <Stack.Screen name="Main" component={MainTabs} />
+          ) : (
+            <Stack.Screen name="Auth" component={AuthStackNavigator} />
+          )}
+        </Stack.Navigator>
+      </NavigationContainer>
+
+      <TelemetryNoticeModal
+        visible={showTelemetryModal}
+        onClose={() => setShowTelemetryModal(false)}
+      />
+    </>
   );
 }
 
