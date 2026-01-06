@@ -291,13 +291,13 @@ export function AllPayments() {
             <DatePickerInput
               placeholder="From date"
               value={dateFrom}
-              onChange={(value) => setDateFrom(value ? new Date(value) : null)}
+              onChange={(value) => setDateFrom(value ? parseLocalDate(value) : null)}
               clearable
             />
             <DatePickerInput
               placeholder="To date"
               value={dateTo}
-              onChange={(value) => setDateTo(value ? new Date(value) : null)}
+              onChange={(value) => setDateTo(value ? parseLocalDate(value) : null)}
               clearable
             />
             <NumberInput
@@ -411,7 +411,7 @@ export function AllPayments() {
                     {editingId === payment.id ? (
                       <DatePickerInput
                         value={editDate}
-                        onChange={(value) => setEditDate(value ? new Date(value) : null)}
+                        onChange={(value) => setEditDate(value ? parseLocalDate(value) : null)}
                         size="xs"
                         w={140}
                       />

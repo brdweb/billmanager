@@ -178,7 +178,7 @@ export function PaymentHistory({
                     {editingId === payment.id ? (
                       <DatePickerInput
                         value={editDate}
-                        onChange={(value) => setEditDate(value ? new Date(value) : null)}
+                        onChange={(value) => setEditDate(value ? parseLocalDate(value) : null)}
                         size="xs"
                         w={140}
                       />
