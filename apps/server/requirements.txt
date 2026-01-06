@@ -10,7 +10,7 @@ PyJWT==2.8.0
 resend==2.0.0
 stripe==7.0.0
 APScheduler==3.10.4
-requests==2.31.0
+requests==2.32.4
 
 # Testing
 pytest>=8.0.0
