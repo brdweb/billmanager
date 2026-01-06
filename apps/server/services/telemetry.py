@@ -8,6 +8,8 @@ Collects anonymous usage statistics to help improve the product.
 """
 
 import os
+import sys
+import json
 import uuid
 import platform
 import logging
@@ -125,8 +127,8 @@ class TelemetryCollector:
                 with open(package_json, 'r') as f:
                     data = json.load(f)
                     return data.get('version', 'unknown')
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to read version from package.json: {e}")
 
         return 'unknown'
 
@@ -138,8 +140,8 @@ class TelemetryCollector:
             first_user = self.db.session.query(User).order_by(User.created_at).first()
             if first_user and first_user.created_at:
                 return first_user.created_at.isoformat()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to get installation date: {e}")
 
         return None
 
@@ -207,8 +209,8 @@ class TelemetryCollector:
             try:
                 platforms = self.db.session.query(UserDevice.platform, func.count(UserDevice.id)).group_by(UserDevice.platform).all()
                 metrics["mobile_platforms"] = {platform: count for platform, count in platforms}
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to get mobile platform metrics: {e}")
 
             return metrics
         except Exception as e:
@@ -285,8 +287,8 @@ class TelemetryCollector:
                 result = self.db.session.execute("SELECT version()").fetchone()
                 if result:
                     db_version = result[0].split(',')[0]  # e.g., "PostgreSQL 15.2"
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to get database version: {e}")
 
             return {
                 "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
@@ -424,8 +426,8 @@ class TelemetryCollector:
             # Don't re-raise - telemetry logging failures shouldn't break the app
             try:
                 self.db.session.rollback()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to rollback telemetry transaction: {e}")
 
 
 # Global instance
