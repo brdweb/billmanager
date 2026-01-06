@@ -62,36 +62,6 @@ environment:
   - TELEMETRY_ENABLED=false  # Disable telemetry
 ```
 
-### For SaaS Deployments
-
-Telemetry is enabled by default for SaaS mode. To avoid alerting on your own production instance:
-
-```bash
-# On your main production server
-PRODUCTION_INSTANCE_ID=<your-instance-id>  # Found in .instance_id file
-```
-
-## Telemetry Receiver (Production Server Only)
-
-To enable your production server to receive telemetry from installations:
-
-```bash
-# Enable telemetry receiver endpoint
-ENABLE_TELEMETRY_RECEIVER=true
-
-# Set your production instance ID (to avoid self-alerts)
-PRODUCTION_INSTANCE_ID=<uuid-from-instance-file>
-
-# Configure ntfy alerts for new SaaS deployments
-NTFY_ALERT_URL=https://ntfy.brdweb.com/billmanager-alerts
-```
-
-This will:
-1. Enable `/api/telemetry` endpoint to receive data
-2. Store submissions in `telemetry_submissions` table
-3. Send ntfy alert when new SaaS deployment detected
-4. Provide `/api/telemetry/stats` endpoint for dashboard
-
 ## Telemetry Schedule
 
 - **First send**: 5 minutes after startup
@@ -177,28 +147,6 @@ LIMIT 1;
     "deployment": "docker"
   }
 }
-```
-
-## SaaS Deployment Alerts
-
-When a new SaaS deployment is detected, you'll receive an ntfy notification:
-
-```
-🚀 New BillManager SaaS Deployment Detected!
-
-Instance ID: 550e8400-e29b-41d4-a716-446655440000
-Version: 3.4.7
-Installation Date: 2024-01-15T10:30:00Z
-
-Stats:
-- Users: 5
-- Databases: 2
-- Bills: 127
-
-Platform:
-- Python: 3.11.4
-- OS: Linux
-- Database: PostgreSQL 15.2
 ```
 
 ## FAQ
