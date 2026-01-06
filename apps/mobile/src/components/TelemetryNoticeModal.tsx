@@ -51,7 +51,7 @@ export default function TelemetryNoticeModal({ visible, onClose }: TelemetryNoti
   };
 
   const openDocumentation = () => {
-    Linking.openURL('https://github.com/yourusername/billmanager/blob/main/TELEMETRY.md');
+    Linking.openURL('https://github.com/brdweb/billmanager/blob/main/TELEMETRY.md');
   };
 
   return (

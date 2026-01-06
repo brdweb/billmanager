@@ -98,7 +98,7 @@ export function TelemetryNoticeModal({ opened, onClose }: TelemetryNoticeModalPr
           You can change this preference at any time. All telemetry submissions are logged locally for transparency.
           See{' '}
           <Anchor
-            href="https://github.com/yourusername/billmanager/blob/main/TELEMETRY.md"
+            href="https://github.com/brdweb/billmanager/blob/main/TELEMETRY.md"
             target="_blank"
             size="xs"
           >
