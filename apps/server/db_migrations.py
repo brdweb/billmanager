@@ -241,6 +241,28 @@ def migrate_20241224_02_create_user_devices_table(db):
     logger.info("Created user_devices table")
 
 
+def migrate_20260106_01_add_telemetry_columns(db):
+    """Add telemetry tracking columns to users table."""
+    inspector = inspect(db.engine)
+    columns = [col['name'] for col in inspector.get_columns('users')]
+
+    # Add telemetry_notice_shown_at column if not exists
+    if 'telemetry_notice_shown_at' not in columns:
+        db.session.execute(text('''
+            ALTER TABLE users ADD COLUMN telemetry_notice_shown_at TIMESTAMP
+        '''))
+        logger.info("Added users.telemetry_notice_shown_at column")
+
+    # Add telemetry_opt_out column if not exists
+    if 'telemetry_opt_out' not in columns:
+        db.session.execute(text('''
+            ALTER TABLE users ADD COLUMN telemetry_opt_out BOOLEAN DEFAULT FALSE
+        '''))
+        logger.info("Added users.telemetry_opt_out column")
+
+    db.session.commit()
+
+
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -252,6 +274,7 @@ MIGRATIONS = [
     ('20241223_03', 'Create user_invites table for invite-based registration', migrate_20241223_03_create_user_invites_table),
     ('20241224_01', 'Add updated_at column to payments for sync tracking', migrate_20241224_01_add_payment_updated_at),
     ('20241224_02', 'Create user_devices table for push notifications', migrate_20241224_02_create_user_devices_table),
+    ('20260106_01', 'Add telemetry tracking columns to users table', migrate_20260106_01_add_telemetry_columns),
 ]
 
 
