@@ -21,7 +21,7 @@ import {
 import { DatePickerInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
 import { BarChart } from '@mantine/charts';
-import { IconSearch, IconX, IconArrowLeft, IconChartBar, IconChevronDown, IconChevronUp, IconDownload, IconFileTypeCsv, IconFileTypePdf } from '@tabler/icons-react';
+import { IconSearch, IconX, IconArrowLeft, IconChartBar, IconChevronDown, IconChevronUp, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { getAllPayments, updatePayment, deletePayment } from '../api/client';
 import type { PaymentWithBill } from '../api/client';
@@ -250,13 +250,22 @@ export function AllPayments() {
               >
                 Export as PDF
               </Menu.Item>
+              <Menu.Item
+                leftSection={<IconPrinter size={16} />}
+                onClick={() => {
+                  window.print();
+                  window.umami?.track('print_payments');
+                }}
+              >
+                Print
+              </Menu.Item>
             </Menu.Dropdown>
           </Menu>
         </Group>
       </Group>
 
       {/* Filters */}
-      <Paper p="md" withBorder>
+      <Paper p="md" withBorder className="no-print">
         <Stack gap="sm">
           <Group grow>
             <TextInput
@@ -395,7 +404,7 @@ export function AllPayments() {
                 <Table.Th>Bill</Table.Th>
                 <Table.Th>Date</Table.Th>
                 <Table.Th>Amount</Table.Th>
-                <Table.Th>Actions</Table.Th>
+                <Table.Th className="no-print">Actions</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -434,7 +443,7 @@ export function AllPayments() {
                       <Text fw={500}>${payment.amount.toFixed(2)}</Text>
                     )}
                   </Table.Td>
-                  <Table.Td>
+                  <Table.Td className="no-print">
                     {editingId === payment.id ? (
                       <Group gap="xs">
                         <ActionIcon color="green" variant="subtle" onClick={handleSaveEdit} title="Save">

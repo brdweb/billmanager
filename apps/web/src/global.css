@@ -64,4 +64,8 @@
     background: transparent !important;
     border: 1px solid currentColor !important;
   }
+
+  .no-print {
+    display: none !important;
+  }
 }

@@ -14,7 +14,7 @@ import {
   Menu,
   Pagination,
 } from '@mantine/core';
-import { IconEdit, IconCash, IconPlus, IconFilterOff, IconSearch, IconX, IconDownload, IconFileTypeCsv, IconFileTypePdf } from '@tabler/icons-react';
+import { IconEdit, IconCash, IconPlus, IconFilterOff, IconSearch, IconX, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter } from '@tabler/icons-react';
 import { exportBillsToCSV, exportBillsToPDF } from '../utils/export';
 import type { Bill } from '../api/client';
 import { getAccounts } from '../api/client';
@@ -205,7 +205,7 @@ export function BillList({
 
   return (
     <Stack gap="md">
-      <Group justify="space-between">
+      <Group justify="space-between" className="no-print">
         <Group gap="sm">
           <Select
             placeholder="All types"
@@ -279,6 +279,15 @@ export function BillList({
               >
                 Export as PDF
               </Menu.Item>
+              <Menu.Item
+                leftSection={<IconPrinter size={16} />}
+                onClick={() => {
+                  window.print();
+                  window.umami?.track('print_bills');
+                }}
+              >
+                Print
+              </Menu.Item>
             </Menu.Dropdown>
           </Menu>
           <Button leftSection={<IconPlus size={16} />} onClick={onAdd} size="sm">
@@ -295,7 +304,7 @@ export function BillList({
               <Table.Th>Amount</Table.Th>
               <Table.Th>Due Date</Table.Th>
               <Table.Th>Frequency</Table.Th>
-              <Table.Th>Actions</Table.Th>
+              <Table.Th className="no-print">Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -365,7 +374,7 @@ export function BillList({
                     {getFrequencyText(bill)}
                   </Text>
                 </Table.Td>
-                <Table.Td>
+                <Table.Td className="no-print">
                   <Group gap="xs" onClick={(e) => e.stopPropagation()}>
                     <ActionIcon
                       variant="subtle"
