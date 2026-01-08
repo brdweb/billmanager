@@ -65,7 +65,7 @@ export function PaymentHistoryChart({ billName }: PaymentHistoryChartProps) {
     if (billName) {
       fetchData();
     }
-  }, [billName, fetchData]);
+  }, [billName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
@@ -80,12 +80,13 @@ export function PaymentHistoryChart({ billName }: PaymentHistoryChartProps) {
   }
 
   return (
-    <Paper p="sm" withBorder mb="md">
+    <Paper p="sm" withBorder mb="md" style={{ minWidth: 0 }}>
       <Text size="sm" fw={500} mb="xs" c="dimmed">
         Payment History (Last {data.length} Months)
       </Text>
       <AreaChart
         h={150}
+        w="100%"
         data={data}
         dataKey="label"
         series={[{ name: 'total', color: 'teal.6', label: 'Amount' }]}

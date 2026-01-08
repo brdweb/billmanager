@@ -216,6 +216,130 @@ export function exportPaymentsToPDF(
   doc.save(exportFilename);
 }
 
+// Print payments as clean data-only PDF (no colors)
+export function printPayments(
+  payments: PaymentWithBill[],
+  dateRange?: { from?: Date; to?: Date }
+): void {
+  const doc = new jsPDF();
+
+  // Title
+  doc.setFontSize(16);
+  doc.text('Payment History', 14, 20);
+
+  // Date range
+  doc.setFontSize(9);
+  if (dateRange?.from || dateRange?.to) {
+    const from = dateRange.from ? dateRange.from.toLocaleDateString() : 'Beginning';
+    const to = dateRange.to ? dateRange.to.toLocaleDateString() : 'Present';
+    doc.text(`Period: ${from} - ${to}`, 14, 27);
+  } else {
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 27);
+  }
+
+  // Summary
+  const totalAmount = payments.reduce((sum, p) => sum + p.amount, 0);
+  doc.text(`Total Payments: ${payments.length}`, 14, 33);
+  doc.text(`Total Amount: $${totalAmount.toFixed(2)}`, 14, 38);
+
+  // Clean table with no colors
+  autoTable(doc, {
+    startY: 44,
+    head: [['Bill Name', 'Payment Date', 'Amount']],
+    body: payments.map(payment => [
+      payment.bill_name,
+      formatDate(payment.payment_date),
+      `$${payment.amount.toFixed(2)}`,
+    ]),
+    styles: {
+      fontSize: 9,
+      textColor: [0, 0, 0], // Black text
+      lineColor: [0, 0, 0], // Black borders
+      lineWidth: 0.1,
+    },
+    headStyles: {
+      fillColor: [255, 255, 255], // White background
+      textColor: [0, 0, 0], // Black text
+      fontStyle: 'bold',
+      lineColor: [0, 0, 0],
+      lineWidth: 0.1,
+    },
+    alternateRowStyles: {
+      fillColor: [255, 255, 255] // White background (no alternating colors)
+    },
+    foot: [['', 'Total:', `$${totalAmount.toFixed(2)}`]],
+    footStyles: {
+      fillColor: [255, 255, 255], // White background
+      textColor: [0, 0, 0], // Black text
+      fontStyle: 'bold',
+      lineColor: [0, 0, 0],
+      lineWidth: 0.1,
+    },
+  });
+
+  // Open print dialog
+  doc.autoPrint();
+  window.open(doc.output('bloburl'), '_blank');
+}
+
+// Print bills as clean data-only PDF (no colors)
+export function printBills(bills: Bill[]): void {
+  const doc = new jsPDF();
+
+  // Title
+  doc.setFontSize(16);
+  doc.text('Bills Report', 14, 20);
+
+  // Date
+  doc.setFontSize(9);
+  doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 27);
+
+  // Summary
+  const totalExpenses = bills
+    .filter(b => b.type === 'expense' && !b.archived)
+    .reduce((sum, b) => sum + (b.varies ? (b.avg_amount || 0) : (b.amount || 0)), 0);
+  const totalDeposits = bills
+    .filter(b => b.type === 'deposit' && !b.archived)
+    .reduce((sum, b) => sum + (b.varies ? (b.avg_amount || 0) : (b.amount || 0)), 0);
+
+  doc.text(`Total Monthly Expenses: $${totalExpenses.toFixed(2)}`, 14, 33);
+  doc.text(`Total Monthly Income: $${totalDeposits.toFixed(2)}`, 14, 38);
+
+  // Clean table with no colors
+  autoTable(doc, {
+    startY: 44,
+    head: [['Name', 'Type', 'Amount', 'Next Due', 'Frequency', 'Account']],
+    body: bills.map(bill => [
+      bill.name,
+      bill.type === 'deposit' ? 'Deposit' : 'Expense',
+      bill.varies ? `~$${(bill.avg_amount || 0).toFixed(2)}` : `$${(bill.amount || 0).toFixed(2)}`,
+      formatDate(bill.next_due),
+      formatFrequency(bill),
+      bill.account || '-',
+    ]),
+    styles: {
+      fontSize: 9,
+      textColor: [0, 0, 0], // Black text
+      lineColor: [0, 0, 0], // Black borders
+      lineWidth: 0.1,
+    },
+    headStyles: {
+      fillColor: [255, 255, 255], // White background
+      textColor: [0, 0, 0], // Black text
+      fontStyle: 'bold',
+      lineColor: [0, 0, 0],
+      lineWidth: 0.1,
+    },
+    alternateRowStyles: {
+      fillColor: [255, 255, 255] // White background (no alternating colors)
+    },
+  });
+
+  // Open print dialog
+  doc.autoPrint();
+  window.open(doc.output('bloburl'), '_blank');
+}
+
 // Helper to trigger file download
 function downloadFile(content: string, filename: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });

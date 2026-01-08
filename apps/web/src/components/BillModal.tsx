@@ -138,7 +138,7 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
           } catch {
             // Fallback to empty config if parsing fails
           }
-          
+
           form.setValues({
             name: bill.name || '',
             amount: bill.amount || '',
@@ -160,7 +160,7 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
         // Form initialization error - silent fail, form will be in default state
       }
     }
-  }, [bill, opened, form]);
+  }, [bill, opened]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calculate next due date for specific monthly dates
   const calculateNextDueForSpecificDates = (dates: number[]): string => {

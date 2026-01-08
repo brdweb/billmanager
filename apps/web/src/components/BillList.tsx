@@ -15,7 +15,7 @@ import {
   Pagination,
 } from '@mantine/core';
 import { IconEdit, IconCash, IconPlus, IconFilterOff, IconSearch, IconX, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter } from '@tabler/icons-react';
-import { exportBillsToCSV, exportBillsToPDF } from '../utils/export';
+import { exportBillsToCSV, exportBillsToPDF, printBills } from '../utils/export';
 import type { Bill } from '../api/client';
 import { getAccounts } from '../api/client';
 import { BillIcon } from './BillIcon';
@@ -282,7 +282,7 @@ export function BillList({
               <Menu.Item
                 leftSection={<IconPrinter size={16} />}
                 onClick={() => {
-                  window.print();
+                  printBills(bills);
                   window.umami?.track('print_bills');
                 }}
               >

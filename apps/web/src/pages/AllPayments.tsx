@@ -27,7 +27,7 @@ import { getAllPayments, updatePayment, deletePayment } from '../api/client';
 import type { PaymentWithBill } from '../api/client';
 import { BillIcon } from '../components/BillIcon';
 import { IconEdit, IconTrash, IconCheck } from '@tabler/icons-react';
-import { exportPaymentsToCSV, exportPaymentsToPDF } from '../utils/export';
+import { exportPaymentsToCSV, exportPaymentsToPDF, printPayments } from '../utils/export';
 import { parseLocalDate, formatDateString, formatDateForAPI } from '../utils/date';
 
 interface MonthlyChartData {
@@ -253,7 +253,7 @@ export function AllPayments() {
               <Menu.Item
                 leftSection={<IconPrinter size={16} />}
                 onClick={() => {
-                  window.print();
+                  printPayments(filteredPayments, { from: dateFrom || undefined, to: dateTo || undefined });
                   window.umami?.track('print_payments');
                 }}
               >
