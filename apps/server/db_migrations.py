@@ -263,6 +263,50 @@ def migrate_20260106_01_add_telemetry_columns(db):
     db.session.commit()
 
 
+def migrate_20260107_01_create_bill_shares_table(db):
+    """Create bill_shares table for cross-account bill sharing."""
+    inspector = inspect(db.engine)
+    if 'bill_shares' in inspector.get_table_names():
+        logger.info("bill_shares table already exists")
+        return
+
+    db.session.execute(text('''
+        CREATE TABLE bill_shares (
+            id SERIAL PRIMARY KEY,
+            bill_id INTEGER NOT NULL REFERENCES bills(id) ON DELETE CASCADE,
+            owner_user_id INTEGER NOT NULL REFERENCES users(id),
+            shared_with_user_id INTEGER REFERENCES users(id),
+            shared_with_identifier VARCHAR(255) NOT NULL,
+            identifier_type VARCHAR(20) DEFAULT 'username',
+            invite_token VARCHAR(64) UNIQUE,
+            status VARCHAR(20) DEFAULT 'pending',
+            split_type VARCHAR(20),
+            split_value DECIMAL(10,2),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            accepted_at TIMESTAMP,
+            expires_at TIMESTAMP,
+            UNIQUE(bill_id, shared_with_identifier)
+        )
+    '''))
+
+    # Add indexes for common queries
+    db.session.execute(text('''
+        CREATE INDEX idx_bill_shares_bill_id ON bill_shares(bill_id)
+    '''))
+    db.session.execute(text('''
+        CREATE INDEX idx_bill_shares_shared_with_user ON bill_shares(shared_with_user_id)
+    '''))
+    db.session.execute(text('''
+        CREATE INDEX idx_bill_shares_owner ON bill_shares(owner_user_id)
+    '''))
+    db.session.execute(text('''
+        CREATE INDEX idx_bill_shares_status ON bill_shares(status)
+    '''))
+
+    db.session.commit()
+    logger.info("Created bill_shares table")
+
+
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -275,6 +319,7 @@ MIGRATIONS = [
     ('20241224_01', 'Add updated_at column to payments for sync tracking', migrate_20241224_01_add_payment_updated_at),
     ('20241224_02', 'Create user_devices table for push notifications', migrate_20241224_02_create_user_devices_table),
     ('20260106_01', 'Add telemetry tracking columns to users table', migrate_20260106_01_add_telemetry_columns),
+    ('20260107_01', 'Create bill_shares table for cross-account bill sharing', migrate_20260107_01_create_bill_shares_table),
 ]
 
 

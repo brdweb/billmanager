@@ -18,7 +18,7 @@ from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from sqlalchemy import func, extract, desc
 
-from models import db, User, Database, Bill, Payment, RefreshToken, Subscription, UserInvite, UserDevice
+from models import db, User, Database, Bill, Payment, RefreshToken, Subscription, UserInvite, UserDevice, BillShare
 from migration import migrate_sqlite_to_pg
 from db_migrations import run_pending_migrations
 from services.email import send_verification_email, send_password_reset_email, send_welcome_email, send_invite_email
@@ -1129,6 +1129,338 @@ def delete_payment(id):
         db.session.rollback()
         logger.error(f"Failed to delete payment {id}: {e}")
         return jsonify({'error': 'Failed to delete payment. Please try again.'}), 500
+
+# =============================================================================
+# BILL SHARING ENDPOINTS (api_bp - session-based for web)
+# =============================================================================
+
+@api_bp.route('/bills/<int:bill_id>/share', methods=['POST'])
+@login_required
+def share_bill(bill_id):
+    """Share a bill with another user (session-based)."""
+    target_db = Database.query.filter_by(name=session.get('db_name')).first()
+    if not target_db:
+        return jsonify({'error': 'No database selected'}), 400
+
+    bill = db.get_or_404(Bill, bill_id)
+    if bill.database_id != target_db.id:
+        return jsonify({'error': 'Access denied'}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid request data'}), 400
+
+    identifier = data.get('identifier', '').strip().lower()
+    split_type = data.get('split_type')
+    split_value = data.get('split_value')
+
+    if not identifier:
+        return jsonify({'error': 'Username or email is required'}), 400
+
+    # Check for existing active share
+    existing = BillShare.query.filter_by(
+        bill_id=bill_id,
+        shared_with_identifier=identifier
+    ).filter(BillShare.status.in_(['pending', 'accepted'])).first()
+
+    if existing:
+        return jsonify({'error': 'Bill already shared with this user'}), 400
+
+    current_user_id = session.get('user_id')
+
+    # Determine identifier type
+    if is_saas() and '@' in identifier:
+        identifier_type = 'email'
+        invite_token = secrets.token_urlsafe(32)
+        expires_at = datetime.datetime.now(datetime.timezone.utc) + timedelta(days=7)
+        target_user = User.query.filter_by(email=identifier).first()
+        shared_with_user_id = target_user.id if target_user else None
+        status = 'accepted' if target_user else 'pending'
+        accepted_at = datetime.datetime.now(datetime.timezone.utc) if target_user else None
+    else:
+        identifier_type = 'username'
+        target_user = User.query.filter_by(username=identifier).first()
+
+        if not target_user:
+            return jsonify({'error': 'User not found'}), 404
+
+        if target_user.id == current_user_id:
+            return jsonify({'error': 'Cannot share with yourself'}), 400
+
+        shared_with_user_id = target_user.id
+        invite_token = None
+        expires_at = None
+        status = 'accepted'
+        accepted_at = datetime.datetime.now(datetime.timezone.utc)
+
+    share = BillShare(
+        bill_id=bill_id,
+        owner_user_id=current_user_id,
+        shared_with_user_id=shared_with_user_id,
+        shared_with_identifier=identifier,
+        identifier_type=identifier_type,
+        invite_token=invite_token,
+        status=status,
+        split_type=split_type,
+        split_value=split_value,
+        accepted_at=accepted_at,
+        expires_at=expires_at
+    )
+
+    try:
+        db.session.add(share)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to create bill share: {e}")
+        return jsonify({'error': 'Failed to create share'}), 500
+
+    # Send email if SaaS and pending
+    if is_saas() and status == 'pending' and EMAIL_ENABLED:
+        try:
+            from services.email import send_bill_share_email
+            current_user = db.session.get(User, current_user_id)
+            send_bill_share_email(identifier, invite_token, bill.name, current_user.username)
+        except Exception as e:
+            logger.warning(f"Failed to send share invitation email: {e}")
+
+    return jsonify({
+        'share_id': share.id,
+        'status': status,
+        'message': 'Share created' if status == 'accepted' else 'Invitation sent'
+    }), 201
+
+
+@api_bp.route('/bills/<int:bill_id>/shares', methods=['GET'])
+@login_required
+def get_bill_shares(bill_id):
+    """Get all shares for a bill."""
+    target_db = Database.query.filter_by(name=session.get('db_name')).first()
+    if not target_db:
+        return jsonify({'error': 'No database selected'}), 400
+
+    bill = db.get_or_404(Bill, bill_id)
+    if bill.database_id != target_db.id:
+        return jsonify({'error': 'Access denied'}), 403
+
+    shares = BillShare.query.filter_by(bill_id=bill_id).all()
+    return jsonify([{
+        'id': s.id,
+        'shared_with': s.shared_with_identifier,
+        'identifier_type': s.identifier_type,
+        'status': s.status,
+        'split_type': s.split_type,
+        'split_value': s.split_value,
+        'created_at': s.created_at.isoformat() if s.created_at else None,
+        'accepted_at': s.accepted_at.isoformat() if s.accepted_at else None
+    } for s in shares])
+
+
+@api_bp.route('/shares/<int:share_id>', methods=['DELETE'])
+@login_required
+def revoke_share(share_id):
+    """Revoke a bill share."""
+    share = db.get_or_404(BillShare, share_id)
+    current_user_id = session.get('user_id')
+
+    if share.owner_user_id != current_user_id:
+        return jsonify({'error': 'Access denied'}), 403
+
+    share.status = 'revoked'
+    db.session.commit()
+    return jsonify({'message': 'Share revoked'})
+
+
+@api_bp.route('/shares/<int:share_id>', methods=['PUT'])
+@login_required
+def update_share(share_id):
+    """Update share split configuration."""
+    share = db.get_or_404(BillShare, share_id)
+    current_user_id = session.get('user_id')
+
+    if share.owner_user_id != current_user_id:
+        return jsonify({'error': 'Access denied'}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid request data'}), 400
+
+    if 'split_type' in data:
+        share.split_type = data['split_type']
+    if 'split_value' in data:
+        share.split_value = data['split_value']
+
+    db.session.commit()
+    return jsonify({'message': 'Share updated'})
+
+
+@api_bp.route('/shared-bills', methods=['GET'])
+@login_required
+def get_shared_bills():
+    """Get bills shared with the current user."""
+    current_user_id = session.get('user_id')
+
+    shares = BillShare.query.filter_by(
+        shared_with_user_id=current_user_id,
+        status='accepted'
+    ).all()
+
+    result = []
+    for share in shares:
+        bill = share.bill
+        latest_payment = Payment.query.filter_by(bill_id=bill.id).order_by(
+            desc(Payment.payment_date)
+        ).first()
+
+        result.append({
+            'share_id': share.id,
+            'bill': {
+                'id': bill.id,
+                'name': bill.name,
+                'amount': bill.amount,
+                'next_due': bill.due_date,
+                'icon': bill.icon,
+                'type': bill.type,
+                'frequency': bill.frequency,
+                'is_variable': bill.is_variable,
+                'auto_pay': bill.auto_pay
+            },
+            'owner': share.owner.username,
+            'owner_id': share.owner_user_id,
+            'split_type': share.split_type,
+            'split_value': share.split_value,
+            'my_portion': share.calculate_portion(),
+            'last_payment': {
+                'id': latest_payment.id,
+                'amount': latest_payment.amount,
+                'date': latest_payment.payment_date,
+                'notes': latest_payment.notes
+            } if latest_payment else None,
+            'created_at': share.created_at.isoformat() if share.created_at else None
+        })
+
+    return jsonify(result)
+
+
+@api_bp.route('/shared-bills/pending', methods=['GET'])
+@login_required
+def get_pending_shares():
+    """Get pending share invitations for the current user."""
+    current_user_id = session.get('user_id')
+    current_user = db.session.get(User, current_user_id)
+
+    if not current_user or not current_user.email:
+        return jsonify([])
+
+    shares = BillShare.query.filter_by(
+        shared_with_identifier=current_user.email.lower(),
+        identifier_type='email',
+        status='pending'
+    ).all()
+
+    result = []
+    for share in shares:
+        if share.is_expired:
+            continue
+        bill = share.bill
+        result.append({
+            'share_id': share.id,
+            'bill_name': bill.name,
+            'bill_amount': bill.amount,
+            'owner': share.owner.username,
+            'split_type': share.split_type,
+            'split_value': share.split_value,
+            'my_portion': share.calculate_portion(),
+            'expires_at': share.expires_at.isoformat() if share.expires_at else None
+        })
+
+    return jsonify(result)
+
+
+@api_bp.route('/shares/<int:share_id>/accept', methods=['POST'])
+@login_required
+def accept_share(share_id):
+    """Accept a pending share invitation."""
+    share = db.get_or_404(BillShare, share_id)
+    current_user_id = session.get('user_id')
+    current_user = db.session.get(User, current_user_id)
+
+    # Verify access
+    if share.identifier_type == 'email' and current_user.email:
+        if share.shared_with_identifier.lower() != current_user.email.lower():
+            return jsonify({'error': 'Access denied'}), 403
+
+    if share.status != 'pending':
+        return jsonify({'error': f'Share is already {share.status}'}), 400
+
+    if share.is_expired:
+        return jsonify({'error': 'Share invitation has expired'}), 400
+
+    share.status = 'accepted'
+    share.shared_with_user_id = current_user_id
+    share.accepted_at = datetime.datetime.now(datetime.timezone.utc)
+    db.session.commit()
+
+    return jsonify({'message': 'Share accepted'})
+
+
+@api_bp.route('/shares/<int:share_id>/decline', methods=['POST'])
+@login_required
+def decline_share(share_id):
+    """Decline a pending share invitation."""
+    share = db.get_or_404(BillShare, share_id)
+    current_user_id = session.get('user_id')
+    current_user = db.session.get(User, current_user_id)
+
+    if share.identifier_type == 'email' and current_user.email:
+        if share.shared_with_identifier.lower() != current_user.email.lower():
+            return jsonify({'error': 'Access denied'}), 403
+
+    if share.status != 'pending':
+        return jsonify({'error': f'Share is already {share.status}'}), 400
+
+    share.status = 'declined'
+    db.session.commit()
+
+    return jsonify({'message': 'Share declined'})
+
+
+@api_bp.route('/shares/<int:share_id>/leave', methods=['POST'])
+@login_required
+def leave_share(share_id):
+    """Leave a shared bill."""
+    share = db.get_or_404(BillShare, share_id)
+    current_user_id = session.get('user_id')
+
+    if share.shared_with_user_id != current_user_id:
+        return jsonify({'error': 'Access denied'}), 403
+
+    if share.status != 'accepted':
+        return jsonify({'error': 'Share is not active'}), 400
+
+    share.status = 'revoked'
+    db.session.commit()
+
+    return jsonify({'message': 'Left shared bill'})
+
+
+@api_bp.route('/users/search', methods=['GET'])
+@login_required
+def search_users():
+    """Search for users by username (for sharing)."""
+    query = request.args.get('q', '').strip().lower()
+    current_user_id = session.get('user_id')
+
+    if len(query) < 2:
+        return jsonify([])
+
+    users = User.query.filter(
+        User.username.ilike(f'%{query}%'),
+        User.id != current_user_id
+    ).limit(10).all()
+
+    return jsonify([{'id': u.id, 'username': u.username} for u in users])
+
 
 @api_bp.route('/api/payments/all', methods=['GET'])
 @login_required
@@ -2241,6 +2573,442 @@ def jwt_delete_payment(payment_id):
     db.session.delete(payment)
     db.session.commit()
     return jsonify({'success': True, 'data': {'message': 'Payment deleted'}})
+
+
+# =============================================================================
+# BILL SHARING ENDPOINTS (api_v2)
+# =============================================================================
+
+@api_v2_bp.route('/bills/<int:bill_id>/share', methods=['POST'])
+@jwt_required
+def jwt_share_bill(bill_id):
+    """
+    Share a bill with another user.
+
+    Self-hosted mode: Share by username (instant, no invite required)
+    SaaS mode: Share by email (sends invitation email)
+    """
+    if not g.jwt_db_name:
+        return jsonify({'success': False, 'error': 'X-Database header required'}), 400
+
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({'success': False, 'error': 'Invalid JSON body'}), 400
+
+    # Validate bill ownership
+    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+    bill = db.get_or_404(Bill, bill_id)
+
+    if bill.database_id != target_db.id:
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    # Get share parameters
+    identifier = data.get('identifier', '').strip().lower()  # username or email
+    split_type = data.get('split_type')  # None, 'percentage', 'fixed', 'equal'
+    split_value = data.get('split_value')
+
+    if not identifier:
+        return jsonify({'success': False, 'error': 'Username or email is required'}), 400
+
+    # Validate split configuration
+    if split_type:
+        if split_type not in ('percentage', 'fixed', 'equal'):
+            return jsonify({'success': False, 'error': 'Invalid split type'}), 400
+        if split_type in ('percentage', 'fixed') and split_value is None:
+            return jsonify({'success': False, 'error': f'Split value required for {split_type} split'}), 400
+        if split_type == 'percentage' and (split_value < 0 or split_value > 100):
+            return jsonify({'success': False, 'error': 'Percentage must be between 0 and 100'}), 400
+        if split_type == 'fixed' and split_value < 0:
+            return jsonify({'success': False, 'error': 'Fixed amount cannot be negative'}), 400
+
+    # Check for existing active share
+    existing = BillShare.query.filter_by(
+        bill_id=bill_id,
+        shared_with_identifier=identifier
+    ).filter(BillShare.status.in_(['pending', 'accepted'])).first()
+
+    if existing:
+        return jsonify({'success': False, 'error': 'Bill already shared with this user'}), 400
+
+    # Determine identifier type and handle accordingly
+    if is_saas() and '@' in identifier:
+        # SaaS mode: email-based invitation
+        identifier_type = 'email'
+        invite_token = secrets.token_urlsafe(32)
+        expires_at = datetime.datetime.now(datetime.timezone.utc) + timedelta(days=7)
+
+        # Check if user already exists with this email
+        target_user = User.query.filter_by(email=identifier).first()
+        shared_with_user_id = target_user.id if target_user else None
+        status = 'accepted' if target_user else 'pending'
+        accepted_at = datetime.datetime.now(datetime.timezone.utc) if target_user else None
+    else:
+        # Self-hosted mode: username-based (instant)
+        identifier_type = 'username'
+        target_user = User.query.filter_by(username=identifier).first()
+
+        if not target_user:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+
+        if target_user.id == g.jwt_user_id:
+            return jsonify({'success': False, 'error': 'Cannot share with yourself'}), 400
+
+        shared_with_user_id = target_user.id
+        invite_token = None
+        expires_at = None
+        status = 'accepted'
+        accepted_at = datetime.datetime.now(datetime.timezone.utc)
+
+    # Create the share
+    share = BillShare(
+        bill_id=bill_id,
+        owner_user_id=g.jwt_user_id,
+        shared_with_user_id=shared_with_user_id,
+        shared_with_identifier=identifier,
+        identifier_type=identifier_type,
+        invite_token=invite_token,
+        status=status,
+        split_type=split_type,
+        split_value=split_value,
+        accepted_at=accepted_at,
+        expires_at=expires_at
+    )
+
+    try:
+        db.session.add(share)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to create bill share: {e}")
+        return jsonify({'success': False, 'error': 'Failed to create share'}), 500
+
+    # Send email invitation if SaaS and pending
+    if is_saas() and status == 'pending' and EMAIL_ENABLED:
+        try:
+            from services.email import send_bill_share_email
+            current_user = db.session.get(User, g.jwt_user_id)
+            send_bill_share_email(identifier, invite_token, bill.name, current_user.username)
+        except Exception as e:
+            logger.warning(f"Failed to send share invitation email: {e}")
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'share_id': share.id,
+            'status': status,
+            'message': 'Share created' if status == 'accepted' else 'Invitation sent'
+        }
+    }), 201
+
+
+@api_v2_bp.route('/bills/<int:bill_id>/shares', methods=['GET'])
+@jwt_required
+def jwt_get_bill_shares(bill_id):
+    """Get all shares for a bill (owner view)."""
+    if not g.jwt_db_name:
+        return jsonify({'success': False, 'error': 'X-Database header required'}), 400
+
+    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+    bill = db.get_or_404(Bill, bill_id)
+
+    if bill.database_id != target_db.id:
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    shares = BillShare.query.filter_by(bill_id=bill_id).all()
+    result = [{
+        'id': s.id,
+        'shared_with': s.shared_with_identifier,
+        'identifier_type': s.identifier_type,
+        'status': s.status,
+        'split_type': s.split_type,
+        'split_value': s.split_value,
+        'created_at': s.created_at.isoformat() if s.created_at else None,
+        'accepted_at': s.accepted_at.isoformat() if s.accepted_at else None
+    } for s in shares]
+
+    return jsonify({'success': True, 'data': result})
+
+
+@api_v2_bp.route('/shares/<int:share_id>', methods=['DELETE'])
+@jwt_required
+def jwt_revoke_share(share_id):
+    """Revoke a bill share (owner only)."""
+    share = db.get_or_404(BillShare, share_id)
+
+    if share.owner_user_id != g.jwt_user_id:
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    share.status = 'revoked'
+    db.session.commit()
+
+    return jsonify({'success': True, 'data': {'message': 'Share revoked'}})
+
+
+@api_v2_bp.route('/shared-bills', methods=['GET'])
+@jwt_required
+def jwt_get_shared_bills():
+    """Get bills shared with the current user."""
+    # Find shares where current user is the recipient
+    shares = BillShare.query.filter_by(
+        shared_with_user_id=g.jwt_user_id,
+        status='accepted'
+    ).all()
+
+    result = []
+    for share in shares:
+        bill = share.bill
+        # Get latest payment for this bill
+        latest_payment = Payment.query.filter_by(bill_id=bill.id).order_by(
+            desc(Payment.payment_date)
+        ).first()
+
+        result.append({
+            'share_id': share.id,
+            'bill': {
+                'id': bill.id,
+                'name': bill.name,
+                'amount': bill.amount,
+                'next_due': bill.due_date,
+                'icon': bill.icon,
+                'type': bill.type,
+                'frequency': bill.frequency,
+                'is_variable': bill.is_variable,
+                'auto_pay': bill.auto_pay
+            },
+            'owner': share.owner.username,
+            'owner_id': share.owner_user_id,
+            'split_type': share.split_type,
+            'split_value': share.split_value,
+            'my_portion': share.calculate_portion(),
+            'last_payment': {
+                'id': latest_payment.id,
+                'amount': latest_payment.amount,
+                'date': latest_payment.payment_date,
+                'notes': latest_payment.notes
+            } if latest_payment else None,
+            'created_at': share.created_at.isoformat() if share.created_at else None
+        })
+
+    return jsonify({'success': True, 'data': result})
+
+
+@api_v2_bp.route('/shared-bills/pending', methods=['GET'])
+@jwt_required
+def jwt_get_pending_shares():
+    """Get pending share invitations for the current user (SaaS only)."""
+    current_user = db.session.get(User, g.jwt_user_id)
+    if not current_user or not current_user.email:
+        return jsonify({'success': True, 'data': []})
+
+    # Find pending shares by email
+    shares = BillShare.query.filter_by(
+        shared_with_identifier=current_user.email.lower(),
+        identifier_type='email',
+        status='pending'
+    ).all()
+
+    result = []
+    for share in shares:
+        if share.is_expired:
+            continue
+        bill = share.bill
+        result.append({
+            'share_id': share.id,
+            'bill_name': bill.name,
+            'bill_amount': bill.amount,
+            'owner': share.owner.username,
+            'split_type': share.split_type,
+            'split_value': share.split_value,
+            'my_portion': share.calculate_portion(),
+            'expires_at': share.expires_at.isoformat() if share.expires_at else None
+        })
+
+    return jsonify({'success': True, 'data': result})
+
+
+@api_v2_bp.route('/shares/<int:share_id>/accept', methods=['POST'])
+@jwt_required
+def jwt_accept_share(share_id):
+    """Accept a pending share invitation."""
+    share = db.get_or_404(BillShare, share_id)
+
+    # Verify the current user can accept this share
+    current_user = db.session.get(User, g.jwt_user_id)
+
+    # Check by user_id (for username-based shares that are already linked)
+    if share.shared_with_user_id and share.shared_with_user_id != g.jwt_user_id:
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    # Check by email (for email-based shares)
+    if share.identifier_type == 'email' and current_user.email:
+        if share.shared_with_identifier.lower() != current_user.email.lower():
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    if share.status != 'pending':
+        return jsonify({'success': False, 'error': f'Share is already {share.status}'}), 400
+
+    if share.is_expired:
+        return jsonify({'success': False, 'error': 'Share invitation has expired'}), 400
+
+    # Accept the share
+    share.status = 'accepted'
+    share.shared_with_user_id = g.jwt_user_id
+    share.accepted_at = datetime.datetime.now(datetime.timezone.utc)
+    db.session.commit()
+
+    return jsonify({'success': True, 'data': {'message': 'Share accepted'}})
+
+
+@api_v2_bp.route('/shares/<int:share_id>/decline', methods=['POST'])
+@jwt_required
+def jwt_decline_share(share_id):
+    """Decline a pending share invitation."""
+    share = db.get_or_404(BillShare, share_id)
+
+    # Verify the current user can decline this share
+    current_user = db.session.get(User, g.jwt_user_id)
+
+    # Check by email
+    if share.identifier_type == 'email' and current_user.email:
+        if share.shared_with_identifier.lower() != current_user.email.lower():
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    if share.status != 'pending':
+        return jsonify({'success': False, 'error': f'Share is already {share.status}'}), 400
+
+    share.status = 'declined'
+    db.session.commit()
+
+    return jsonify({'success': True, 'data': {'message': 'Share declined'}})
+
+
+@api_v2_bp.route('/share-info', methods=['GET'])
+def jwt_get_share_info():
+    """Get share invitation info by token (public endpoint for SaaS)."""
+    token = request.args.get('token')
+    if not token:
+        return jsonify({'success': False, 'error': 'Token required'}), 400
+
+    share = BillShare.query.filter_by(invite_token=token).first()
+    if not share:
+        return jsonify({'success': False, 'error': 'Invalid invitation'}), 404
+
+    if share.status != 'pending':
+        return jsonify({'success': False, 'error': f'Invitation already {share.status}'}), 400
+
+    if share.is_expired:
+        return jsonify({'success': False, 'error': 'Invitation has expired'}), 400
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'bill_name': share.bill.name,
+            'bill_amount': share.bill.amount,
+            'owner': share.owner.username,
+            'split_type': share.split_type,
+            'split_value': share.split_value,
+            'my_portion': share.calculate_portion(),
+            'expires_at': share.expires_at.isoformat() if share.expires_at else None
+        }
+    })
+
+
+@api_v2_bp.route('/share/accept-by-token', methods=['POST'])
+@jwt_required
+def jwt_accept_share_by_token():
+    """Accept a share invitation by token (for email-based invites)."""
+    data = request.get_json(force=True, silent=True)
+    if not data or not data.get('token'):
+        return jsonify({'success': False, 'error': 'Token required'}), 400
+
+    share = BillShare.query.filter_by(invite_token=data['token']).first()
+    if not share:
+        return jsonify({'success': False, 'error': 'Invalid invitation'}), 404
+
+    if share.status != 'pending':
+        return jsonify({'success': False, 'error': f'Invitation already {share.status}'}), 400
+
+    if share.is_expired:
+        return jsonify({'success': False, 'error': 'Invitation has expired'}), 400
+
+    # Accept the share
+    share.status = 'accepted'
+    share.shared_with_user_id = g.jwt_user_id
+    share.accepted_at = datetime.datetime.now(datetime.timezone.utc)
+    db.session.commit()
+
+    return jsonify({'success': True, 'data': {'message': 'Share accepted', 'share_id': share.id}})
+
+
+@api_v2_bp.route('/shares/<int:share_id>', methods=['PUT'])
+@jwt_required
+def jwt_update_share(share_id):
+    """Update share split configuration (owner only)."""
+    share = db.get_or_404(BillShare, share_id)
+
+    if share.owner_user_id != g.jwt_user_id:
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({'success': False, 'error': 'Invalid JSON body'}), 400
+
+    # Update split configuration
+    if 'split_type' in data:
+        split_type = data['split_type']
+        if split_type and split_type not in ('percentage', 'fixed', 'equal'):
+            return jsonify({'success': False, 'error': 'Invalid split type'}), 400
+        share.split_type = split_type
+
+    if 'split_value' in data:
+        split_value = data['split_value']
+        if share.split_type == 'percentage' and split_value is not None:
+            if split_value < 0 or split_value > 100:
+                return jsonify({'success': False, 'error': 'Percentage must be between 0 and 100'}), 400
+        if share.split_type == 'fixed' and split_value is not None:
+            if split_value < 0:
+                return jsonify({'success': False, 'error': 'Fixed amount cannot be negative'}), 400
+        share.split_value = split_value
+
+    db.session.commit()
+    return jsonify({'success': True, 'data': {'message': 'Share updated'}})
+
+
+@api_v2_bp.route('/shares/<int:share_id>/leave', methods=['POST'])
+@jwt_required
+def jwt_leave_share(share_id):
+    """Leave a shared bill (recipient only)."""
+    share = db.get_or_404(BillShare, share_id)
+
+    if share.shared_with_user_id != g.jwt_user_id:
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    if share.status != 'accepted':
+        return jsonify({'success': False, 'error': 'Share is not active'}), 400
+
+    share.status = 'revoked'
+    db.session.commit()
+
+    return jsonify({'success': True, 'data': {'message': 'Left shared bill'}})
+
+
+@api_v2_bp.route('/users/search', methods=['GET'])
+@jwt_required
+def jwt_search_users():
+    """Search for users by username (for sharing)."""
+    query = request.args.get('q', '').strip().lower()
+    if len(query) < 2:
+        return jsonify({'success': True, 'data': []})
+
+    # Search users by username (exclude current user)
+    users = User.query.filter(
+        User.username.ilike(f'%{query}%'),
+        User.id != g.jwt_user_id
+    ).limit(10).all()
+
+    result = [{'id': u.id, 'username': u.username} for u in users]
+    return jsonify({'success': True, 'data': result})
+
 
 @api_v2_bp.route('/accounts', methods=['GET'])
 @jwt_required

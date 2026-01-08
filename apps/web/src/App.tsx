@@ -14,6 +14,7 @@ import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { AdminModal } from './components/AdminPanel/AdminModal';
 import { MonthlyTotalsChart } from './components/MonthlyTotalsChart';
 import { TelemetryNoticeModal } from './components/TelemetryNoticeModal';
+import { SharedBillsSection } from './components/SharedBillsSection';
 import { AllPayments } from './pages/AllPayments';
 import { Login } from './pages/Login';
 import { VerifyEmail } from './pages/VerifyEmail';
@@ -409,21 +410,26 @@ function App() {
                   <Loader />
                 </Center>
               ) : (
-                <BillList
-                  bills={filteredBills}
-                  onEdit={handleEditBill}
-                  onPay={handlePayBill}
-                  onAdd={handleAddBill}
-                  onViewPayments={handleViewPayments}
-                  isLoggedIn={isLoggedIn}
-                  hasDatabase={!!currentDb}
-                  hasActiveFilter={filter.searchQuery !== '' || filter.dateRange !== 'all' || filter.selectedDate !== null}
-                  onClearFilter={() => setFilter({ searchQuery: '', dateRange: 'all', selectedDate: null, type: 'all', account: null })}
-                  searchQuery={filter.searchQuery}
-                  onSearchChange={(query) => setFilter((prev) => ({ ...prev, searchQuery: query }))}
-                  filter={filter}
-                  onFilterChange={setFilter}
-                />
+                <Stack gap="md">
+                  {isLoggedIn && currentDb && (
+                    <SharedBillsSection onRefresh={fetchBills} />
+                  )}
+                  <BillList
+                    bills={filteredBills}
+                    onEdit={handleEditBill}
+                    onPay={handlePayBill}
+                    onAdd={handleAddBill}
+                    onViewPayments={handleViewPayments}
+                    isLoggedIn={isLoggedIn}
+                    hasDatabase={!!currentDb}
+                    hasActiveFilter={filter.searchQuery !== '' || filter.dateRange !== 'all' || filter.selectedDate !== null}
+                    onClearFilter={() => setFilter({ searchQuery: '', dateRange: 'all', selectedDate: null, type: 'all', account: null })}
+                    searchQuery={filter.searchQuery}
+                    onSearchChange={(query) => setFilter((prev) => ({ ...prev, searchQuery: query }))}
+                    filter={filter}
+                    onFilterChange={setFilter}
+                  />
+                </Stack>
               )
             }
           />

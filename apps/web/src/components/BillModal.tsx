@@ -16,13 +16,14 @@ import {
   Divider,
   Autocomplete,
 } from '@mantine/core';
-import { IconArchive, IconArchiveOff, IconTrash } from '@tabler/icons-react';
+import { IconArchive, IconArchiveOff, IconTrash, IconShare } from '@tabler/icons-react';
 import { DatePickerInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import type { Bill } from '../api/client';
 import * as api from '../api/client';
 import { IconPicker } from './IconPicker';
 import { BillIcon } from './BillIcon';
+import { ShareBillModal } from './ShareBillModal';
 import { formatDateForAPI, parseLocalDate } from '../utils/date';
 
 interface BillFormValues {
@@ -71,6 +72,7 @@ const dayOptions = [
 
 export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onDelete, bill }: BillModalProps) {
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState<string[]>([]);
 
@@ -419,6 +421,23 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
               }
             />
 
+            {/* Share button for existing bills */}
+            {bill && !bill.archived && (
+              <>
+                <Divider label="Sharing" labelPosition="center" />
+                <Group justify="center">
+                  <Button
+                    variant="light"
+                    color="blue"
+                    leftSection={<IconShare size={16} />}
+                    onClick={() => setShareModalOpen(true)}
+                  >
+                    Share Bill
+                  </Button>
+                </Group>
+              </>
+            )}
+
             {/* Archive/Delete actions for existing bills */}
             {bill && (onArchive || onUnarchive || onDelete) && (
               <>
@@ -509,6 +528,12 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
         onClose={() => setIconPickerOpen(false)}
         onSelect={(icon) => form.setFieldValue('icon', icon)}
         currentIcon={form.values.icon}
+      />
+
+      <ShareBillModal
+        opened={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        bill={bill}
       />
     </>
   );

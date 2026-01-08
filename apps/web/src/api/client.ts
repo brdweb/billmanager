@@ -457,4 +457,105 @@ export const acceptTelemetry = () =>
 export const optOutTelemetry = () =>
   unwrap(api.post<AuthResponse>('/telemetry/opt-out'));
 
+// Bill Sharing API
+export interface BillShare {
+  id: number;
+  shared_with: string;
+  identifier_type: 'username' | 'email';
+  status: 'pending' | 'accepted' | 'declined' | 'revoked';
+  split_type: 'percentage' | 'fixed' | 'equal' | null;
+  split_value: number | null;
+  created_at: string | null;
+  accepted_at: string | null;
+}
+
+export interface SharedBill {
+  share_id: number;
+  bill: {
+    id: number;
+    name: string;
+    amount: number | null;
+    next_due: string;
+    icon: string;
+    type: 'expense' | 'deposit';
+    frequency: string;
+    is_variable: boolean;
+    auto_pay: boolean;
+  };
+  owner: string;
+  owner_id: number;
+  split_type: 'percentage' | 'fixed' | 'equal' | null;
+  split_value: number | null;
+  my_portion: number | null;
+  last_payment: {
+    id: number;
+    amount: number;
+    date: string;
+    notes: string | null;
+  } | null;
+  created_at: string | null;
+}
+
+export interface PendingShare {
+  share_id: number;
+  bill_name: string;
+  bill_amount: number | null;
+  owner: string;
+  split_type: 'percentage' | 'fixed' | 'equal' | null;
+  split_value: number | null;
+  my_portion: number | null;
+  expires_at: string | null;
+}
+
+export interface ShareBillRequest {
+  identifier: string;
+  split_type?: 'percentage' | 'fixed' | 'equal' | null;
+  split_value?: number | null;
+}
+
+export interface UserSearchResult {
+  id: number;
+  username: string;
+}
+
+// Share a bill with another user
+export const shareBill = (billId: number, data: ShareBillRequest) =>
+  unwrap(api.post<{ share_id: number; status: string; message: string }>(`/bills/${billId}/share`, data));
+
+// Get all shares for a bill (owner view)
+export const getBillShares = (billId: number) =>
+  unwrap(api.get<BillShare[]>(`/bills/${billId}/shares`));
+
+// Revoke a share
+export const revokeShare = (shareId: number) =>
+  unwrap(api.delete<{ message: string }>(`/shares/${shareId}`));
+
+// Update share split configuration
+export const updateShare = (shareId: number, data: { split_type?: string | null; split_value?: number | null }) =>
+  unwrap(api.put<{ message: string }>(`/shares/${shareId}`, data));
+
+// Get bills shared with current user
+export const getSharedBills = () =>
+  unwrap(api.get<SharedBill[]>('/shared-bills'));
+
+// Get pending share invitations
+export const getPendingShares = () =>
+  unwrap(api.get<PendingShare[]>('/shared-bills/pending'));
+
+// Accept a share invitation
+export const acceptShare = (shareId: number) =>
+  unwrap(api.post<{ message: string }>(`/shares/${shareId}/accept`));
+
+// Decline a share invitation
+export const declineShare = (shareId: number) =>
+  unwrap(api.post<{ message: string }>(`/shares/${shareId}/decline`));
+
+// Leave a shared bill
+export const leaveShare = (shareId: number) =>
+  unwrap(api.post<{ message: string }>(`/shares/${shareId}/leave`));
+
+// Search users for sharing
+export const searchUsers = (query: string) =>
+  unwrap(api.get<UserSearchResult[]>(`/users/search?q=${encodeURIComponent(query)}`));
+
 export default api;

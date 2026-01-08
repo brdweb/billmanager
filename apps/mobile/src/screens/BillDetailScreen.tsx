@@ -17,6 +17,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 import { Bill, Payment } from '../types';
+import ShareBillModal from '../components/ShareBillModal';
 
 type BillsStackParamList = {
   BillsList: undefined;
@@ -65,6 +66,9 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   const [deletePayment, setDeletePayment] = useState<Payment | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const swipeableRefs = useRef<Map<number, Swipeable>>(new Map());
+
+  // Share modal state
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const styles = createStyles(colors);
 
@@ -345,6 +349,16 @@ export default function BillDetailScreen({ route, navigation }: Props) {
           </TouchableOpacity>
         </View>
 
+        {/* Share Button */}
+        {!bill.archived && (
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={() => setShowShareModal(true)}
+          >
+            <Text style={styles.shareButtonText}>Share Bill</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Delete Button */}
         <TouchableOpacity
           style={styles.deleteBillButton}
@@ -550,6 +564,16 @@ export default function BillDetailScreen({ route, navigation }: Props) {
           </View>
         </View>
       </Modal>
+
+      {/* Share Bill Modal */}
+      {bill && (
+        <ShareBillModal
+          visible={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          bill={bill}
+          onShareCreated={fetchBillData}
+        />
+      )}
     </View>
   );
 }
@@ -660,6 +684,20 @@ const createStyles = (colors: any) => StyleSheet.create({
   secondaryButtonText: {
     color: colors.text,
     fontSize: 16,
+    fontWeight: '600',
+  },
+  shareButton: {
+    paddingVertical: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: colors.success + '15',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  shareButtonText: {
+    color: colors.success,
+    fontSize: 15,
     fontWeight: '600',
   },
   deleteBillButton: {

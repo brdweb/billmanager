@@ -370,6 +370,79 @@ class TelemetryLog(db.Model):
         return delta.days
 
 
+class BillShare(db.Model):
+    """Tracks bill sharing between different users/accounts"""
+    __tablename__ = 'bill_shares'
+    id = db.Column(db.Integer, primary_key=True)
+    bill_id = db.Column(db.Integer, db.ForeignKey('bills.id'), nullable=False)
+
+    # Who owns the bill (the user who created the share)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+
+    # Who the bill is shared with - supports both username (self-hosted) and email (SaaS)
+    shared_with_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Set when accepted
+    shared_with_identifier = db.Column(db.String(255), nullable=False)  # username or email
+    identifier_type = db.Column(db.String(20), default='username')  # 'username' or 'email'
+
+    # Invitation handling (only needed for email-based SaaS invites)
+    invite_token = db.Column(db.String(64), unique=True, nullable=True)
+    status = db.Column(db.String(20), default='pending')  # pending, accepted, declined, revoked
+
+    # Split configuration (optional)
+    split_type = db.Column(db.String(20), nullable=True)  # NULL, 'percentage', 'fixed', 'equal'
+    split_value = db.Column(db.Float, nullable=True)  # percentage (0-100) or fixed amount
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    accepted_at = db.Column(db.DateTime, nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=True)  # Only for email invites
+
+    # Relationships
+    bill = db.relationship('Bill', backref=db.backref('shares', lazy=True, cascade="all, delete-orphan"))
+    owner = db.relationship('User', foreign_keys=[owner_user_id], backref=db.backref('owned_shares', lazy=True))
+    shared_with = db.relationship('User', foreign_keys=[shared_with_user_id], backref=db.backref('received_shares', lazy=True))
+
+    # Prevent duplicate active shares for same bill+user combination
+    __table_args__ = (
+        db.UniqueConstraint('bill_id', 'shared_with_identifier', name='uq_bill_share_identifier'),
+    )
+
+    @property
+    def is_active(self):
+        """Check if share is currently active"""
+        return self.status == 'accepted'
+
+    @property
+    def is_pending(self):
+        """Check if share invitation is pending and not expired"""
+        if self.status != 'pending':
+            return False
+        if self.expires_at and datetime.now(timezone.utc) > self.expires_at:
+            return False
+        return True
+
+    @property
+    def is_expired(self):
+        """Check if share invitation has expired"""
+        if not self.expires_at:
+            return False
+        return datetime.now(timezone.utc) > self.expires_at
+
+    def calculate_portion(self):
+        """Calculate the recipient's portion of the bill amount"""
+        if not self.bill.amount:
+            return None
+        if not self.split_type:
+            return self.bill.amount  # Full amount if no split
+        if self.split_type == 'equal':
+            return self.bill.amount / 2
+        if self.split_type == 'percentage' and self.split_value:
+            return self.bill.amount * (self.split_value / 100)
+        if self.split_type == 'fixed' and self.split_value:
+            return min(self.split_value, self.bill.amount)
+        return self.bill.amount
+
+
 class TelemetrySubmission(db.Model):
     """Stores telemetry data received from BillManager installations (production server only)"""
     __tablename__ = 'telemetry_submissions'

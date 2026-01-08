@@ -13,16 +13,17 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { History, TrendingUp, TrendingDown, ChevronRight, BarChart3, LineChart, Wallet } from 'lucide-react-native';
+import { History, TrendingUp, TrendingDown, ChevronRight, BarChart3, LineChart, Wallet, Users } from 'lucide-react-native';
 import { BarChart, LineChart as RNLineChart } from 'react-native-chart-kit';
 import { api } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { MonthlyStats, Bill } from '../types';
 
-type SettingsStackParamList = {
-  Settings: undefined;
+type StatsStackParamList = {
+  Stats: undefined;
   PaymentHistory: undefined;
+  SharedBills: undefined;
 };
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -281,7 +282,7 @@ const createStyles = (colors: any, insets: any) => StyleSheet.create({
 });
 
 export default function StatsScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<SettingsStackParamList>>();
+  const navigation = useNavigation<NativeStackNavigationProp<StatsStackParamList>>();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { user, currentDatabase, databases } = useAuth();
@@ -491,7 +492,7 @@ export default function StatsScreen() {
           <View style={styles.sectionContainer}>
             <TouchableOpacity
               style={styles.paymentHistoryButton}
-              onPress={() => navigation.navigate('PaymentHistory' as never)}
+              onPress={() => navigation.navigate('PaymentHistory')}
             >
               <View style={styles.paymentHistoryIconContainer}>
                 <History size={20} color={colors.primary} />
@@ -499,6 +500,20 @@ export default function StatsScreen() {
               <View style={styles.paymentHistoryContent}>
                 <Text style={styles.paymentHistoryTitle}>Payment History</Text>
                 <Text style={styles.paymentHistorySubtitle}>All recorded payments</Text>
+              </View>
+              <ChevronRight size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.paymentHistoryButton, { marginTop: 12 }]}
+              onPress={() => navigation.navigate('SharedBills')}
+            >
+              <View style={[styles.paymentHistoryIconContainer, { backgroundColor: colors.success + '15' }]}>
+                <Users size={20} color={colors.success} />
+              </View>
+              <View style={styles.paymentHistoryContent}>
+                <Text style={styles.paymentHistoryTitle}>Shared Bills</Text>
+                <Text style={styles.paymentHistorySubtitle}>Bills shared with you</Text>
               </View>
               <ChevronRight size={20} color={colors.textMuted} />
             </TouchableOpacity>
