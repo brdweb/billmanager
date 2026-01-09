@@ -354,6 +354,17 @@ class BillManagerApi {
     }
   }
 
+  // ============ Bill Sharing ============
+
+  async markSharePaid(shareId: number): Promise<ApiResponse<{ recipient_paid_date: string | null }>> {
+    try {
+      const response = await this.client.post<ApiResponse<{ recipient_paid_date: string | null }>>(`/shares/${shareId}/mark-paid`);
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
   // ============ Sync ============
 
   async syncFull(): Promise<ApiResponse<SyncResponse>> {

@@ -129,6 +129,22 @@ export default function BillDetailScreen({ route, navigation }: Props) {
     setIsSubmitting(false);
   };
 
+  const handleMarkPortionPaid = async () => {
+    if (!bill?.share_info) return;
+
+    setIsSubmitting(true);
+    const result = await api.markSharePaid(bill.share_info.share_id);
+
+    if (result.success) {
+      fetchBillData();
+      const wasPaid = bill.share_info.my_portion_paid;
+      Alert.alert('Success', wasPaid ? 'Portion marked as unpaid' : 'Portion marked as paid');
+    } else {
+      Alert.alert('Error', result.error || 'Failed to update payment status');
+    }
+    setIsSubmitting(false);
+  };
+
   const handleEditBill = () => {
     if (bill) {
       navigation.navigate('AddBill', { bill });
@@ -278,6 +294,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   }
 
   const isDeposit = bill.type === 'deposit';
+  const isShared = bill.is_shared;
 
   return (
     <View style={styles.container}>
@@ -286,12 +303,17 @@ export default function BillDetailScreen({ route, navigation }: Props) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
           <Text style={styles.headerButtonText}>← Back</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleEditBill} style={styles.headerButton}>
-          <Text style={styles.headerButtonTextPrimary}>Edit</Text>
-        </TouchableOpacity>
+        {!isShared && (
+          <TouchableOpacity onPress={handleEditBill} style={styles.headerButton}>
+            <Text style={styles.headerButtonTextPrimary}>Edit</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <View style={styles.titleContainer}>
         <Text style={styles.title}>{bill.name}</Text>
+        {isShared && bill.share_info && (
+          <Text style={styles.subtitle}>Shared by {bill.share_info.owner_name}</Text>
+        )}
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -333,39 +355,89 @@ export default function BillDetailScreen({ route, navigation }: Props) {
           )}
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => setShowPayModal(true)}
-          >
-            <Text style={styles.primaryButtonText}>Record Payment</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={handleArchive}
-          >
-            <Text style={styles.secondaryButtonText}>Archive</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Shared Bill Info */}
+        {isShared && bill.share_info && (
+          <View style={[styles.card, styles.sharedCard]}>
+            <Text style={styles.sharedCardTitle}>Sharing Details</Text>
 
-        {/* Share Button */}
-        {!bill.archived && (
-          <TouchableOpacity
-            style={styles.shareButton}
-            onPress={() => setShowShareModal(true)}
-          >
-            <Text style={styles.shareButtonText}>Share Bill</Text>
-          </TouchableOpacity>
+            {bill.share_info.my_portion !== null && bill.share_info.my_portion !== undefined && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>My Portion</Text>
+                <Text style={[styles.infoValue, { fontWeight: '700', color: colors.primary }]}>
+                  ${bill.share_info.my_portion.toFixed(2)}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Payment Status</Text>
+              {bill.share_info.my_portion_paid ? (
+                <View>
+                  <Text style={[styles.infoValue, { color: colors.success }]}>✓ Paid</Text>
+                  {bill.share_info.my_portion_paid_date && (
+                    <Text style={styles.paidDate}>
+                      {formatDate(bill.share_info.my_portion_paid_date)}
+                    </Text>
+                  )}
+                </View>
+              ) : (
+                <Text style={[styles.infoValue, { color: colors.textMuted }]}>Not Paid</Text>
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.markPaidButton, bill.share_info.my_portion_paid && styles.markUnpaidButton]}
+              onPress={handleMarkPortionPaid}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.markPaidButtonText}>
+                  {bill.share_info.my_portion_paid ? 'Mark as Unpaid' : 'Mark as Paid'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
 
-        {/* Delete Button */}
-        <TouchableOpacity
-          style={styles.deleteBillButton}
-          onPress={handleDeleteBill}
-        >
-          <Text style={styles.deleteBillButtonText}>Delete Bill</Text>
-        </TouchableOpacity>
+        {/* Action Buttons - Only for owned bills */}
+        {!isShared && (
+          <>
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={() => setShowPayModal(true)}
+              >
+                <Text style={styles.primaryButtonText}>Record Payment</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleArchive}
+              >
+                <Text style={styles.secondaryButtonText}>Archive</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Share Button */}
+            {!bill.archived && (
+              <TouchableOpacity
+                style={styles.shareButton}
+                onPress={() => setShowShareModal(true)}
+              >
+                <Text style={styles.shareButtonText}>Share Bill</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Delete Button */}
+            <TouchableOpacity
+              style={styles.deleteBillButton}
+              onPress={handleDeleteBill}
+            >
+              <Text style={styles.deleteBillButtonText}>Delete Bill</Text>
+            </TouchableOpacity>
+          </>
+        )}
 
         {/* Payment History */}
         <View style={styles.sectionHeader}>
@@ -879,6 +951,49 @@ const createStyles = (colors: any) => StyleSheet.create({
   modalConfirmText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  // Shared bill styles
+  subtitle: {
+    fontSize: 14,
+    color: colors.textMuted,
+    marginTop: 4,
+  },
+  sharedCard: {
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: colors.primary + '40',
+    backgroundColor: colors.primary + '08',
+  },
+  sharedCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  paidDate: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  markPaidButton: {
+    backgroundColor: colors.success,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 16,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markUnpaidButton: {
+    backgroundColor: colors.textMuted,
+  },
+  markPaidButtonText: {
+    color: '#fff',
+    fontSize: 15,
     fontWeight: '600',
   },
 });

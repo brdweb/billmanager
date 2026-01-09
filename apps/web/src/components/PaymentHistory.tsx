@@ -12,11 +12,12 @@ import {
   Loader,
   Center,
   Pagination,
+  Badge,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
 import { IconEdit, IconTrash, IconCheck, IconX } from '@tabler/icons-react';
-import type { Payment } from '../api/client';
+import type { Payment, Bill } from '../api/client';
 import { getPayments, updatePayment, deletePayment, ApiError } from '../api/client';
 import { PaymentHistoryChart } from './PaymentHistoryChart';
 import { parseLocalDate, formatDateString, formatDateForAPI } from '../utils/date';
@@ -26,6 +27,8 @@ interface PaymentHistoryProps {
   onClose: () => void;
   billId: number | null;
   billName: string | null;
+  isShared?: boolean;
+  shareInfo?: Bill['share_info'] | null;
   onPaymentsChanged: () => void;
 }
 
@@ -34,6 +37,8 @@ export function PaymentHistory({
   onClose,
   billId,
   billName,
+  isShared = false,
+  shareInfo = null,
   onPaymentsChanged,
 }: PaymentHistoryProps) {
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -51,7 +56,7 @@ export function PaymentHistory({
     setLoading(true);
     try {
       const response = await getPayments(billId);
-      setPayments(response);
+      setPayments(Array.isArray(response) ? response : []);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : 'Failed to load payment history';
       notifications.show({
@@ -143,11 +148,50 @@ export function PaymentHistory({
     <Modal
       opened={opened}
       onClose={onClose}
-      title={`Payment History: ${billName || ''}`}
+      title={
+        <Group gap="sm">
+          <Text>Payment History: {billName || ''}</Text>
+          {isShared && shareInfo && (
+            <Badge color="violet" variant="filled">
+              Shared by {shareInfo.owner_name}
+            </Badge>
+          )}
+        </Group>
+      }
       size="lg"
       centered
     >
       <Stack gap="md">
+        {/* Shared bill info */}
+        {isShared && shareInfo && (
+          <Paper p="sm" withBorder bg="blue.0">
+            <Stack gap="xs">
+              <Group justify="space-between">
+                <Text size="sm" fw={500}>
+                  Your Portion:{' '}
+                  {shareInfo.my_portion !== null ? `$${shareInfo.my_portion.toFixed(2)}` : 'N/A'}
+                </Text>
+                {shareInfo.my_portion_paid ? (
+                  <Badge size="sm" color="green" variant="filled">
+                    Paid on {shareInfo.my_portion_paid_date ? new Date(shareInfo.my_portion_paid_date).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric'
+                    }) : 'unknown'}
+                  </Badge>
+                ) : (
+                  <Badge size="sm" color="gray" variant="light">
+                    Not marked as paid
+                  </Badge>
+                )}
+              </Group>
+              <Text size="xs" c="dimmed">
+                This bill is shared with you. Only the owner can edit payment history.
+              </Text>
+            </Stack>
+          </Paper>
+        )}
+
         {/* Payment History Chart */}
         <PaymentHistoryChart billName={billName} />
 
@@ -202,7 +246,9 @@ export function PaymentHistory({
                     )}
                   </Table.Td>
                   <Table.Td>
-                    {editingId === payment.id ? (
+                    {isShared ? (
+                      <Text size="xs" c="dimmed">Read-only</Text>
+                    ) : editingId === payment.id ? (
                       <Group gap="xs">
                         <ActionIcon
                           color="green"

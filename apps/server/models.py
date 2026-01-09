@@ -396,6 +396,7 @@ class BillShare(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     accepted_at = db.Column(db.DateTime, nullable=True)
     expires_at = db.Column(db.DateTime, nullable=True)  # Only for email invites
+    recipient_paid_date = db.Column(db.DateTime, nullable=True)  # When recipient marks their portion as paid
 
     # Relationships
     bill = db.relationship('Bill', backref=db.backref('shares', lazy=True, cascade="all, delete-orphan"))
@@ -427,6 +428,11 @@ class BillShare(db.Model):
         if not self.expires_at:
             return False
         return datetime.now(timezone.utc) > self.expires_at
+
+    @property
+    def is_recipient_paid(self):
+        """Check if recipient has marked their portion as paid"""
+        return self.recipient_paid_date is not None
 
     def calculate_portion(self):
         """Calculate the recipient's portion of the bill amount"""

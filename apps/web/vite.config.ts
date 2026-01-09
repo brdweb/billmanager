@@ -74,6 +74,8 @@ export default defineConfig({
       '/api': 'http://localhost:5001',
       '/debug-db': 'http://localhost:5001',
       '/telemetry': 'http://localhost:5001',
+      '/shares': 'http://localhost:5001',
+      '/shared-bills': 'http://localhost:5001',
     },
   },
   build: {

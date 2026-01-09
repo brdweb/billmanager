@@ -307,6 +307,32 @@ def migrate_20260107_01_create_bill_shares_table(db):
     logger.info("Created bill_shares table")
 
 
+def migrate_20260108_01_add_recipient_paid_date(db):
+    """Add recipient_paid_date column to bill_shares table for tracking when share recipients mark their portion as paid"""
+    logger.info("Running migration: 20260108_01_add_recipient_paid_date")
+
+    # Check if column already exists
+    result = db.session.execute(text("""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name='bill_shares'
+        AND column_name='recipient_paid_date'
+    """))
+
+    if result.fetchone():
+        logger.info("recipient_paid_date column already exists")
+        return
+
+    # Add the recipient_paid_date column
+    db.session.execute(text('''
+        ALTER TABLE bill_shares
+        ADD COLUMN recipient_paid_date TIMESTAMP
+    '''))
+
+    db.session.commit()
+    logger.info("Added recipient_paid_date column to bill_shares table")
+
+
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -320,6 +346,7 @@ MIGRATIONS = [
     ('20241224_02', 'Create user_devices table for push notifications', migrate_20241224_02_create_user_devices_table),
     ('20260106_01', 'Add telemetry tracking columns to users table', migrate_20260106_01_add_telemetry_columns),
     ('20260107_01', 'Create bill_shares table for cross-account bill sharing', migrate_20260107_01_create_bill_shares_table),
+    ('20260108_01', 'Add recipient_paid_date column to bill_shares', migrate_20260108_01_add_recipient_paid_date),
 ]
 
 

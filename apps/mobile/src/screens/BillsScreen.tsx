@@ -164,6 +164,7 @@ export default function BillsScreen() {
     const daysUntil = getDaysUntil(bill.next_due);
     const isOverdue = daysUntil < 0;
     const isDeposit = bill.type === 'deposit';
+    const isShared = bill.is_shared;
     const badgeColor = getDueBadgeColor(daysUntil);
 
     const dueText = isOverdue
@@ -174,21 +175,36 @@ export default function BillsScreen() {
 
     return (
       <TouchableOpacity
-        style={styles.billCard}
+        style={[
+          styles.billCard,
+          isShared && { backgroundColor: colors.primary + '08', borderLeftWidth: 3, borderLeftColor: colors.primary }
+        ]}
         onPress={() => handleBillPress(bill)}
         activeOpacity={0.7}
       >
         <View style={styles.cardContent}>
-          <BillIcon 
-            icon={bill.icon} 
-            size={24} 
-            containerSize={48} 
+          <BillIcon
+            icon={bill.icon}
+            size={24}
+            containerSize={48}
             color={isDeposit ? colors.success : colors.primary}
             backgroundColor={isDeposit ? colors.success + '15' : colors.primary + '15'}
           />
 
           <View style={styles.cardMiddle}>
-            <Text style={styles.billName} numberOfLines={1}>{bill.name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.billName} numberOfLines={1}>{bill.name}</Text>
+              {isShared && (
+                <View style={[styles.sharedBadge, { backgroundColor: colors.primary }]}>
+                  <Text style={styles.sharedBadgeText}>Shared</Text>
+                </View>
+              )}
+            </View>
+            {isShared && bill.share_info && (
+              <Text style={styles.sharedOwner} numberOfLines={1}>
+                Shared by {bill.share_info.owner_name}
+              </Text>
+            )}
             <View style={styles.dueRow}>
               <View style={[styles.dueDot, { backgroundColor: badgeColor }]} />
               <Text style={[styles.dueText, { color: badgeColor }]}>
@@ -201,7 +217,12 @@ export default function BillsScreen() {
             <Text style={[styles.billAmount, { color: isDeposit ? colors.success : colors.text }]}>
               {isDeposit ? '+' : ''}{formatCurrency(bill.amount, bill.avg_amount)}
             </Text>
-            {bill.account && (
+            {isShared && bill.share_info?.my_portion !== null && bill.share_info?.my_portion !== undefined && (
+              <Text style={styles.myPortion}>
+                My portion: ${bill.share_info.my_portion.toFixed(2)}
+              </Text>
+            )}
+            {bill.account && !isShared && (
               <Text style={styles.billAccount} numberOfLines={1}>{bill.account}</Text>
             )}
           </View>
@@ -600,6 +621,26 @@ const createStyles = (colors: any, insets: any) => StyleSheet.create({
   billAccount: {
     fontSize: 12,
     color: colors.textMuted,
+  },
+  sharedBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  sharedBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  sharedOwner: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  myPortion: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
   },
   emptyContainer: {
     alignItems: 'center',

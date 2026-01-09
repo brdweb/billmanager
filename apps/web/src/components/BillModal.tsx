@@ -15,11 +15,13 @@ import {
   SimpleGrid,
   Divider,
   Autocomplete,
+  Badge,
+  Box,
 } from '@mantine/core';
 import { IconArchive, IconArchiveOff, IconTrash, IconShare } from '@tabler/icons-react';
 import { DatePickerInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
-import type { Bill } from '../api/client';
+import type { Bill, BillShare } from '../api/client';
 import * as api from '../api/client';
 import { IconPicker } from './IconPicker';
 import { BillIcon } from './BillIcon';
@@ -75,6 +77,7 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState<string[]>([]);
+  const [billShares, setBillShares] = useState<BillShare[]>([]);
 
   const form = useForm<BillFormValues>({
     initialValues: {
@@ -130,6 +133,21 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
     }
   }, [opened]);
 
+  // Fetch bill shares when modal opens with an existing bill
+  useEffect(() => {
+    if (opened && bill?.id) {
+      api.getBillShares(bill.id)
+        .then(shares => {
+          setBillShares(shares.filter(s => s.status === 'accepted'));
+        })
+        .catch(() => {
+          setBillShares([]); // Fallback to empty list
+        });
+    } else {
+      setBillShares([]);
+    }
+  }, [opened, bill?.id]);
+
   useEffect(() => {
     if (opened) {
       try {
@@ -162,7 +180,7 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
         // Form initialization error - silent fail, form will be in default state
       }
     }
-  }, [bill, opened, form]);
+  }, [bill, opened]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calculate next due date for specific monthly dates
   const calculateNextDueForSpecificDates = (dates: number[]): string => {
@@ -435,6 +453,37 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
                     Share Bill
                   </Button>
                 </Group>
+
+                {/* Display recipient payment status */}
+                {billShares.length > 0 && (
+                  <Paper p="md" withBorder>
+                    <Stack gap="xs">
+                      <Text size="sm" fw={500}>
+                        Shared With ({billShares.length})
+                      </Text>
+                      {billShares.map((share) => (
+                        <Box key={share.id}>
+                          <Group justify="space-between">
+                            <Text size="sm">{share.shared_with}</Text>
+                            {share.recipient_paid_date ? (
+                              <Badge size="sm" color="green" variant="filled">
+                                Paid on {new Date(share.recipient_paid_date).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                              </Badge>
+                            ) : (
+                              <Badge size="sm" color="gray" variant="light">
+                                Not paid
+                              </Badge>
+                            )}
+                          </Group>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Paper>
+                )}
               </>
             )}
 

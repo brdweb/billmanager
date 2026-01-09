@@ -31,6 +31,8 @@ tags:
     description: Login, logout, and token management
   - name: Bills
     description: Bill management operations
+  - name: Bill Shares
+    description: Share bills with other users and manage shared bill payments
   - name: Payments
     description: Payment recording and history
   - name: Statistics
@@ -379,6 +381,226 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+
+  /bills/{bill_id}/shares:
+    get:
+      tags: [Bill Shares]
+      summary: Get list of shares for a bill (owner only)
+      description: Returns all shares for a bill. Only the bill owner can view shares.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XDatabase'
+        - $ref: '#/components/parameters/BillId'
+      responses:
+        '200':
+          description: List of bill shares
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BillShare'
+        '403':
+          description: Only bill owner can view shares
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [Bill Shares]
+      summary: Create a new bill share
+      description: Share a bill with another user by username or email
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XDatabase'
+        - $ref: '#/components/parameters/BillId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shared_with, split_type]
+              properties:
+                shared_with:
+                  type: string
+                  description: Username or email of user to share with
+                  example: "john@example.com"
+                split_type:
+                  type: string
+                  enum: [percentage, fixed, equal]
+                  description: How to split the bill
+                split_value:
+                  type: number
+                  description: Split amount (required for percentage and fixed types)
+                  example: 50
+      responses:
+        '201':
+          description: Share created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/BillShare'
+        '400':
+          description: Invalid request or duplicate share
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /shares/pending:
+    get:
+      tags: [Bill Shares]
+      summary: Get pending shares for current user
+      description: Returns all shares pending acceptance by the current user
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XDatabase'
+      responses:
+        '200':
+          description: List of pending shares
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BillShareWithBillInfo'
+
+  /shares/{share_id}/accept:
+    post:
+      tags: [Bill Shares]
+      summary: Accept a pending share
+      description: Accept a bill share invitation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: share_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Share accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '403':
+          description: Not authorized to accept this share
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /shares/{share_id}/decline:
+    post:
+      tags: [Bill Shares]
+      summary: Decline a pending share
+      description: Decline a bill share invitation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: share_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Share declined
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /shares/{share_id}/revoke:
+    post:
+      tags: [Bill Shares]
+      summary: Revoke a share (owner only)
+      description: Revoke a bill share. Only the bill owner can revoke shares.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: share_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Share revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '403':
+          description: Only bill owner can revoke shares
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /shares/{share_id}/mark-paid:
+    post:
+      tags: [Bill Shares]
+      summary: Mark recipient portion as paid
+      description: Allows share recipient to mark their portion of the bill as paid
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: share_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Portion marked as paid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "Your portion has been marked as paid"
+                      paid_date:
+                        type: string
+                        format: date-time
+        '403':
+          description: Only share recipient can mark their portion as paid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /bills/{bill_id}/pay:
     post:
@@ -778,6 +1000,32 @@ components:
           nullable: true
         archived:
           type: boolean
+        is_shared:
+          type: boolean
+          description: True if this bill is shared with the current user (recipient view)
+        share_info:
+          type: object
+          nullable: true
+          description: Share information (only present when is_shared is true)
+          properties:
+            share_id:
+              type: integer
+              description: ID of the share record
+            owner_name:
+              type: string
+              description: Username of the bill owner
+            my_portion:
+              type: number
+              nullable: true
+              description: Amount the recipient owes
+            my_portion_paid:
+              type: boolean
+              description: Whether recipient has marked their portion as paid
+            my_portion_paid_date:
+              type: string
+              format: date-time
+              nullable: true
+              description: When recipient marked their portion as paid
 
     BillInput:
       type: object
@@ -845,3 +1093,73 @@ components:
             bill_type:
               type: string
               enum: [expense, deposit]
+
+    BillShare:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique share ID
+        bill_id:
+          type: integer
+          description: ID of the shared bill
+        owner_user_id:
+          type: integer
+          description: User ID of the bill owner
+        owner_username:
+          type: string
+          description: Username of the bill owner
+        shared_with_user_id:
+          type: integer
+          nullable: true
+          description: User ID of the recipient (null if email-based)
+        shared_with_identifier:
+          type: string
+          description: Username or email of recipient
+        identifier_type:
+          type: string
+          enum: [username, email]
+          description: Type of identifier used
+        status:
+          type: string
+          enum: [pending, accepted, declined, revoked]
+          description: Current status of the share
+        split_type:
+          type: string
+          enum: [percentage, fixed, equal]
+          nullable: true
+          description: How the bill is split
+        split_value:
+          type: number
+          nullable: true
+          description: Split amount (percentage or fixed dollar amount)
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+        recipient_paid_date:
+          type: string
+          format: date-time
+          nullable: true
+          description: When recipient marked their portion as paid
+
+    BillShareWithBillInfo:
+      allOf:
+        - $ref: '#/components/schemas/BillShare'
+        - type: object
+          properties:
+            bill_name:
+              type: string
+              description: Name of the shared bill
+            bill_amount:
+              type: number
+              nullable: true
+              description: Total bill amount
+            my_portion:
+              type: number
+              nullable: true
+              description: Calculated amount the recipient owes

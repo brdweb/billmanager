@@ -45,6 +45,14 @@ export interface Bill {
   archived: boolean;
   last_updated?: string;
   avg_amount?: number;
+  is_shared: boolean;
+  share_info?: {
+    share_id: number;
+    owner_name: string;
+    my_portion: number | null;
+    my_portion_paid: boolean;
+    my_portion_paid_date: string | null;
+  };
 }
 
 export interface Payment {

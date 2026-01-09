@@ -67,7 +67,7 @@ export function AllPayments() {
     setLoading(true);
     try {
       const response = await getAllPayments();
-      setPayments(response);
+      setPayments(Array.isArray(response) ? response : []);
     } catch (error) {
       console.error('Failed to fetch payments:', error);
     } finally {
@@ -87,12 +87,18 @@ export function AllPayments() {
 
     // Filter by date range
     if (dateFrom) {
-      result = result.filter((p) => parseLocalDate(p.payment_date) >= dateFrom);
+      result = result.filter((p) => {
+        const date = parseLocalDate(p.payment_date);
+        return date && date >= dateFrom;
+      });
     }
     if (dateTo) {
       const endDate = new Date(dateTo);
       endDate.setHours(23, 59, 59, 999);
-      result = result.filter((p) => parseLocalDate(p.payment_date) <= endDate);
+      result = result.filter((p) => {
+        const date = parseLocalDate(p.payment_date);
+        return date && date <= endDate;
+      });
     }
 
     // Filter by amount range
@@ -106,10 +112,20 @@ export function AllPayments() {
     // Sort
     switch (sortBy) {
       case 'date_desc':
-        result.sort((a, b) => parseLocalDate(b.payment_date).getTime() - parseLocalDate(a.payment_date).getTime());
+        result.sort((a, b) => {
+          const dateA = parseLocalDate(a.payment_date);
+          const dateB = parseLocalDate(b.payment_date);
+          if (!dateA || !dateB) return 0;
+          return dateB.getTime() - dateA.getTime();
+        });
         break;
       case 'date_asc':
-        result.sort((a, b) => parseLocalDate(a.payment_date).getTime() - parseLocalDate(b.payment_date).getTime());
+        result.sort((a, b) => {
+          const dateA = parseLocalDate(a.payment_date);
+          const dateB = parseLocalDate(b.payment_date);
+          if (!dateA || !dateB) return 0;
+          return dateA.getTime() - dateB.getTime();
+        });
         break;
       case 'amount_desc':
         result.sort((a, b) => b.amount - a.amount);
@@ -198,6 +214,7 @@ export function AllPayments() {
 
     filteredPayments.forEach((p) => {
       const date = parseLocalDate(p.payment_date);
+      if (!date) return; // Skip invalid dates
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       monthlyTotals[key] = (monthlyTotals[key] || 0) + p.amount;
     });

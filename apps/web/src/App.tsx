@@ -14,7 +14,6 @@ import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { AdminModal } from './components/AdminPanel/AdminModal';
 import { MonthlyTotalsChart } from './components/MonthlyTotalsChart';
 import { TelemetryNoticeModal } from './components/TelemetryNoticeModal';
-import { SharedBillsSection } from './components/SharedBillsSection';
 import { AllPayments } from './pages/AllPayments';
 import { Login } from './pages/Login';
 import { VerifyEmail } from './pages/VerifyEmail';
@@ -22,6 +21,7 @@ import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { ResendVerification } from './pages/ResendVerification';
 import { AcceptInvite } from './pages/AcceptInvite';
+import { AcceptShareInvite } from './pages/AcceptShareInvite';
 import { Billing } from './pages/Billing';
 import { useAuth } from './context/AuthContext';
 import { useConfig } from './context/ConfigContext';
@@ -94,6 +94,8 @@ function App() {
   const [currentBill, setCurrentBill] = useState<Bill | null>(null);
   const [historyBillId, setHistoryBillId] = useState<number | null>(null);
   const [historyBillName, setHistoryBillName] = useState<string | null>(null);
+  const [historyBillIsShared, setHistoryBillIsShared] = useState<boolean>(false);
+  const [historyBillShareInfo, setHistoryBillShareInfo] = useState<Bill['share_info'] | null>(null);
 
   // Filtered bills based on current filter
   const filteredBills = useMemo(() => {
@@ -187,11 +189,16 @@ function App() {
 
     setBillsLoading(true);
     try {
-      // Process auto-payments first
-      await api.processAutoPayments();
-      // Then fetch bills (include archived so they can be searched)
+      // Process auto-payments first (ignore errors - admin only feature)
+      try {
+        await api.processAutoPayments();
+      } catch (autoPayError) {
+        // Silently ignore auto-payment errors (403 for non-admins is expected)
+      }
+
+      // Fetch bills (include archived so they can be searched)
       const response = await api.getBills(true);
-      setBills(response);
+      setBills(Array.isArray(response) ? response : []);
     } catch (error) {
       console.error('Failed to fetch bills:', error);
       setBills([]);
@@ -253,6 +260,8 @@ function App() {
   const handleViewPayments = (bill: Bill) => {
     setHistoryBillId(bill.id);
     setHistoryBillName(bill.name);
+    setHistoryBillIsShared(bill.is_shared || false);
+    setHistoryBillShareInfo(bill.share_info || null);
     openHistory();
   };
 
@@ -326,7 +335,7 @@ function App() {
   }
 
   // Public routes - no authentication required
-  const publicRoutes = ['/login', '/register', '/verify-email', '/forgot-password', '/reset-password', '/resend-verification', '/accept-invite'];
+  const publicRoutes = ['/login', '/register', '/verify-email', '/forgot-password', '/reset-password', '/resend-verification', '/accept-invite', '/accept-share-invite'];
   const isPublicRoute = publicRoutes.includes(location.pathname);
 
   // If not logged in and not on a public route, render just the routes (no Layout)
@@ -351,6 +360,7 @@ function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/resend-verification" element={<ResendVerification />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
+          <Route path="/accept-share-invite" element={<AcceptShareInvite />} />
         </Routes>
         {/* Password change modal must be accessible from login page */}
         <PasswordChangeModal
@@ -411,9 +421,6 @@ function App() {
                 </Center>
               ) : (
                 <Stack gap="md">
-                  {isLoggedIn && currentDb && (
-                    <SharedBillsSection onRefresh={fetchBills} />
-                  )}
                   <BillList
                     bills={filteredBills}
                     onEdit={handleEditBill}
@@ -428,6 +435,7 @@ function App() {
                     onSearchChange={(query) => setFilter((prev) => ({ ...prev, searchQuery: query }))}
                     filter={filter}
                     onFilterChange={setFilter}
+                    onRefresh={fetchBills}
                   />
                 </Stack>
               )
@@ -474,6 +482,8 @@ function App() {
         onClose={closeHistory}
         billId={historyBillId}
         billName={historyBillName}
+        isShared={historyBillIsShared}
+        shareInfo={historyBillShareInfo}
         onPaymentsChanged={fetchBills}
       />
 

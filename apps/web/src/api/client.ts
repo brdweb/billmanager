@@ -51,6 +51,8 @@ function getErrorMessage(error: AxiosError): string {
       return 'You do not have permission to perform this action.';
     case 404:
       return 'The requested resource was not found.';
+    case 405:
+      return 'This operation is not allowed. Please contact support if this persists.';
     case 409:
       return 'This action conflicts with existing data.';
     case 422:
@@ -124,6 +126,14 @@ export interface Bill {
   account: string | null;
   created_at: string;
   avg_amount?: number;
+  is_shared: boolean;
+  share_info?: {
+    share_id: number;
+    owner_name: string;
+    my_portion: number | null;
+    my_portion_paid: boolean;
+    my_portion_paid_date: string | null;
+  };
 }
 
 export interface Payment {
@@ -467,6 +477,7 @@ export interface BillShare {
   split_value: number | null;
   created_at: string | null;
   accepted_at: string | null;
+  recipient_paid_date: string | null;
 }
 
 export interface SharedBill {
@@ -554,8 +565,28 @@ export const declineShare = (shareId: number) =>
 export const leaveShare = (shareId: number) =>
   unwrap(api.post<{ message: string }>(`/shares/${shareId}/leave`));
 
+// Mark recipient's portion of shared bill as paid (toggle)
+export const markSharePaid = (shareId: number) =>
+  unwrap(api.post<{ message: string; recipient_paid_date: string | null }>(`/shares/${shareId}/mark-paid`));
+
 // Search users for sharing
 export const searchUsers = (query: string) =>
   unwrap(api.get<UserSearchResult[]>(`/users/search?q=${encodeURIComponent(query)}`));
+
+// Get share invitation details by token (public)
+export const getShareInviteDetails = (token: string) =>
+  unwrap(api.get<{
+    bill_name: string;
+    bill_amount: number;
+    owner_username: string;
+    shared_with_email: string;
+    split_type: string | null;
+    split_value: number | null;
+    my_portion: number | null;
+  }>(`/share/invite/${token}`));
+
+// Accept share invitation by token (requires login)
+export const acceptShareByToken = (token: string) =>
+  unwrap(api.post<{ message: string; share_id: number }>('/share/accept-by-token', { token }));
 
 export default api;

@@ -83,13 +83,13 @@ export function UsersTab({ isActive }: UsersTabProps) {
         getUsers(),
         getDatabases(),
       ]);
-      setUsers(usersRes);
-      setDatabases(dbsRes);
+      setUsers(Array.isArray(usersRes) ? usersRes : []);
+      setDatabases(Array.isArray(dbsRes) ? dbsRes : []);
 
       // Fetch invites separately so it doesn't break if table doesn't exist yet
       try {
         const invitesRes = await getInvites();
-        setInvites(invitesRes);
+        setInvites(Array.isArray(invitesRes) ? invitesRes : []);
       } catch (inviteError) {
         console.error('Failed to fetch invites:', inviteError);
         setInvites([]);
@@ -221,8 +221,8 @@ export function UsersTab({ isActive }: UsersTabProps) {
         getDatabases(),
         getUserDatabases(user.id),
       ]);
-      setDatabases(dbsRes);
-      setUserDatabases(userDbsRes.map((db) => db.id!));
+      setDatabases(Array.isArray(dbsRes) ? dbsRes : []);
+      setUserDatabases(Array.isArray(userDbsRes) ? userDbsRes.map((db) => db.id!) : []);
     } catch (error) {
       console.error('Failed to fetch user databases:', error);
     } finally {
@@ -357,7 +357,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
               // Refresh databases before showing form
               try {
                 const dbsRes = await getDatabases();
-                setDatabases(dbsRes);
+                setDatabases(Array.isArray(dbsRes) ? dbsRes : []);
               } catch (error) {
                 console.error('Failed to refresh databases:', error);
               }
@@ -493,7 +493,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
                 // Refresh databases before showing form
                 try {
                   const dbsRes = await getDatabases();
-                  setDatabases(dbsRes);
+                  setDatabases(Array.isArray(dbsRes) ? dbsRes : []);
                 } catch (error) {
                   console.error('Failed to refresh databases:', error);
                 }

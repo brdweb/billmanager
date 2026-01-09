@@ -32,13 +32,27 @@ interface SharedBillsSectionProps {
 }
 
 // Parse date string directly to avoid timezone issues
-function parseDate(dateStr: string): Date {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  return new Date(year, month - 1, day);
+function parseDate(dateStr: string): Date | null {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return null;
+
+  const [year, month, day] = parts.map(Number);
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return null;
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+
+  const date = new Date(year, month - 1, day);
+  if (isNaN(date.getTime())) return null;
+
+  return date;
 }
 
 function formatDate(dateStr: string): string {
   const date = parseDate(dateStr);
+  if (!date) return dateStr; // Return original if parsing fails
+
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -64,8 +78,16 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
         api.getSharedBills(),
         api.getPendingShares(),
       ]);
-      setSharedBills(shared);
-      setPendingShares(pending);
+      console.log('SharedBillsSection - API response types:', {
+        sharedType: typeof shared,
+        sharedIsArray: Array.isArray(shared),
+        sharedValue: shared,
+        pendingType: typeof pending,
+        pendingIsArray: Array.isArray(pending),
+        pendingValue: pending,
+      });
+      setSharedBills(Array.isArray(shared) ? shared : []);
+      setPendingShares(Array.isArray(pending) ? pending : []);
     } catch (err) {
       console.error('Failed to load shared bills:', err);
     } finally {
