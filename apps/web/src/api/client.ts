@@ -1,14 +1,32 @@
 import axios, { AxiosError } from 'axios';
+import { TokenStorage } from '../utils/tokenStorage';
 
 const api = axios.create({
+  baseURL: '/api/v2',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-cache, no-store, must-revalidate',
     'Pragma': 'no-cache',
   },
-  withCredentials: true,
 });
+
+// Request interceptor - add JWT token and database header
+api.interceptors.request.use(
+  (config) => {
+    const accessToken = TokenStorage.getAccessToken();
+    const currentDb = TokenStorage.getCurrentDatabase();
+
+    if (accessToken) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
+    }
+    if (currentDb) {
+      config.headers['X-Database'] = currentDb;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 // Custom error class for API errors with user-friendly messages
 export class ApiError extends Error {
@@ -70,23 +88,69 @@ function getErrorMessage(error: AxiosError): string {
   }
 }
 
-// Only log errors in development, never log request data (may contain passwords)
+// Response interceptor - handle errors and automatic token refresh
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
+    const originalRequest = error.config as any;
+
+    // Log errors in development
     if (import.meta.env.DEV) {
       console.error('API Error:', error.config?.method?.toUpperCase(), error.config?.url, error.response?.status);
     }
+
+    // Automatic token refresh on 401
+    if (error.response?.status === 401 && !originalRequest?._retry) {
+      originalRequest._retry = true;
+
+      const refreshToken = TokenStorage.getRefreshToken();
+      if (refreshToken) {
+        try {
+          const response = await axios.post('/api/v2/auth/refresh', {
+            refresh_token: refreshToken,
+          });
+
+          if (response.data.success && response.data.data?.access_token) {
+            // Update access token, keep same refresh token
+            TokenStorage.setTokens(response.data.data.access_token, refreshToken);
+
+            // Retry original request with new token
+            originalRequest.headers.Authorization = `Bearer ${response.data.data.access_token}`;
+            return api(originalRequest);
+          }
+        } catch (refreshError) {
+          // Token refresh failed - clear tokens and redirect to login
+          TokenStorage.clearTokens();
+          window.location.href = '/login';
+          return Promise.reject(refreshError);
+        }
+      }
+    }
+
+    // Return user-friendly error
     const message = getErrorMessage(error);
     const statusCode = error.response?.status || 0;
     return Promise.reject(new ApiError(message, statusCode, error));
   }
 );
 
-// Helper to unwrap axios responses for consistency with mobile client
-const unwrap = async <T>(promise: Promise<{ data: T }>) => {
+// Generic API response wrapper for v2 endpoints
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+// Helper to unwrap v2 API responses
+const unwrap = async <T>(promise: Promise<{ data: ApiResponse<T> }>) => {
   const response = await promise;
-  return response.data;
+  const apiResponse = response.data;
+
+  if (!apiResponse.success) {
+    throw new Error(apiResponse.error || 'API request failed');
+  }
+
+  return apiResponse.data as T;
 };
 
 // Types
@@ -95,6 +159,7 @@ export interface User {
   username: string;
   role: 'admin' | 'user';
   email?: string | null;
+  is_account_owner?: boolean;
 }
 
 export interface Database {
@@ -154,32 +219,52 @@ export interface MonthlyBillPayment {
 }
 
 export interface LoginResponse {
-  message: string;
-  role: 'admin' | 'user';
+  access_token: string;
+  refresh_token: string;
+  user: User;
+  databases: Database[];
   password_change_required?: boolean;
   user_id?: number;
   change_token?: string;
-  databases?: Database[];
   is_account_owner?: boolean;
   warning?: string;
 }
 
 export interface MeResponse {
-  role: 'admin' | 'user';
-  current_db: string | null;
+  user: User;
   databases: Database[];
-  is_account_owner?: boolean;
 }
 
 // Auth API
-export const login = (username: string, password: string) =>
-  unwrap(api.post<LoginResponse>('/login', { username, password }));
+export const login = async (username: string, password: string): Promise<LoginResponse> => {
+  const response = await unwrap(api.post<ApiResponse<LoginResponse>>('/auth/login', { username, password }));
 
-export const logout = () =>
-  unwrap(api.post('/logout'));
+  // Store JWT tokens in localStorage
+  if (response.access_token && response.refresh_token) {
+    TokenStorage.setTokens(response.access_token, response.refresh_token);
+
+    // Set first database as default
+    if (response.databases && response.databases.length > 0) {
+      TokenStorage.setCurrentDatabase(response.databases[0].name);
+    }
+  }
+
+  return response;
+};
+
+export const logout = async (): Promise<void> => {
+  try {
+    const refreshToken = TokenStorage.getRefreshToken();
+    if (refreshToken) {
+      await api.post('/auth/logout', { refresh_token: refreshToken });
+    }
+  } finally {
+    TokenStorage.clearTokens();
+  }
+};
 
 export const getMe = () =>
-  unwrap(api.get<MeResponse>('/me'));
+  unwrap(api.get<ApiResponse<MeResponse>>('/me'));
 
 export const changePassword = (
   user_id: number,
@@ -187,41 +272,39 @@ export const changePassword = (
   current_password: string,
   new_password: string
 ) =>
-  unwrap(api.post<{ message: string; role: string; databases: Database[] }>('/change-password', {
+  unwrap(api.post<ApiResponse<{ message: string; role: string; databases: Database[] }>>('/auth/change-password', {
     user_id,
     change_token,
     current_password,
     new_password,
   }));
 
-// Database API
-export const selectDatabase = (dbName: string) =>
-  unwrap(api.post(`/select-db/${dbName}`));
+// Database API - selectDatabase removed, database selection is now client-side only via TokenStorage
 
 export const getDatabases = () =>
-  unwrap(api.get<Database[]>('/databases'));
+  unwrap(api.get<ApiResponse<Database[]>>('/databases'));
 
 export const createDatabase = (name: string, display_name: string, description: string) =>
-  unwrap(api.post('/databases', { name, display_name, description }));
+  unwrap(api.post<ApiResponse<void>>('/databases', { name, display_name, description }));
 
 export const deleteDatabase = (dbId: number) =>
-  unwrap(api.delete(`/databases/${dbId}`));
+  unwrap(api.delete<ApiResponse<void>>(`/databases/${dbId}`));
 
 export const updateDatabase = (dbId: number, display_name: string, description: string) =>
-  unwrap(api.put<Database>(`/databases/${dbId}`, { display_name, description }));
+  unwrap(api.put<ApiResponse<Database>>(`/databases/${dbId}`, { display_name, description }));
 
 export const getDatabaseAccess = (dbId: number) =>
-  unwrap(api.get<User[]>(`/databases/${dbId}/access`));
+  unwrap(api.get<ApiResponse<User[]>>(`/databases/${dbId}/access`));
 
 export const grantDatabaseAccess = (dbId: number, userId: number) =>
-  unwrap(api.post(`/databases/${dbId}/access`, { user_id: userId }));
+  unwrap(api.post<ApiResponse<void>>(`/databases/${dbId}/access`, { user_id: userId }));
 
 export const revokeDatabaseAccess = (dbId: number, userId: number) =>
-  unwrap(api.delete(`/databases/${dbId}/access/${userId}`));
+  unwrap(api.delete<ApiResponse<void>>(`/databases/${dbId}/access/${userId}`));
 
 // User API
 export const getUsers = () =>
-  unwrap(api.get<User[]>('/users'));
+  unwrap(api.get<ApiResponse<User[]>>('/users'));
 
 export const addUser = (
   username: string,
@@ -229,16 +312,16 @@ export const addUser = (
   role: string,
   database_ids: number[]
 ) =>
-  unwrap(api.post('/users', { username, password, role, database_ids }));
+  unwrap(api.post<ApiResponse<void>>('/users', { username, password, role, database_ids }));
 
 export const deleteUser = (userId: number) =>
-  unwrap(api.delete(`/users/${userId}`));
+  unwrap(api.delete<ApiResponse<void>>(`/users/${userId}`));
 
 export const updateUser = (userId: number, data: { email?: string | null; role?: 'admin' | 'user' }) =>
-  unwrap(api.put<User>(`/users/${userId}`, data));
+  unwrap(api.put<ApiResponse<User>>(`/users/${userId}`, data));
 
 export const getUserDatabases = (userId: number) =>
-  unwrap(api.get<Database[]>(`/users/${userId}/databases`));
+  unwrap(api.get<ApiResponse<Database[]>>(`/users/${userId}/databases`));
 
 // User Invitations API
 export interface UserInvite {
@@ -250,19 +333,36 @@ export interface UserInvite {
 }
 
 export const inviteUser = (email: string, role: string, database_ids: number[]) =>
-  unwrap(api.post<{ message: string; id: number }>('/users/invite', { email, role, database_ids }));
+  unwrap(api.post<ApiResponse<{ message: string; id: number }>>('/invitations', { email, role, database_ids }));
 
 export const getInvites = () =>
-  unwrap(api.get<UserInvite[]>('/users/invites'));
+  unwrap(api.get<ApiResponse<UserInvite[]>>('/invitations'));
 
 export const cancelInvite = (inviteId: number) =>
-  unwrap(api.delete(`/users/invites/${inviteId}`));
+  unwrap(api.delete<ApiResponse<void>>(`/invitations/${inviteId}`));
 
-export const getInviteInfo = (token: string) =>
-  unwrap(api.get<{ email: string; invited_by: string; expires_at: string }>(`/invite-info?token=${token}`));
+// Public invitation endpoints (v1 only - no auth required)
+// These use axios directly since they're not in v2 API yet
+export const getInviteInfo = async (token: string) => {
+  const response = await axios.get<ApiResponse<{ email: string; invited_by: string; expires_at: string }>>(
+    `/invite-info?token=${encodeURIComponent(token)}`
+  );
+  if (!response.data.success) {
+    throw new Error(response.data.error || 'Failed to get invitation info');
+  }
+  return response.data.data!;
+};
 
-export const acceptInvite = (token: string, username: string, password: string) =>
-  unwrap(api.post<{ message: string; username: string }>('/accept-invite', { token, username, password }));
+export const acceptInvite = async (token: string, username: string, password: string) => {
+  const response = await axios.post<ApiResponse<{ message: string; username: string }>>(
+    '/accept-invite',
+    { token, username, password }
+  );
+  if (!response.data.success) {
+    throw new Error(response.data.error || 'Failed to accept invitation');
+  }
+  return response.data.data!;
+};
 
 // Bills API
 export const getBills = (includeArchived = false, type?: 'expense' | 'deposit') => {
@@ -270,56 +370,57 @@ export const getBills = (includeArchived = false, type?: 'expense' | 'deposit') 
   if (type) {
     url += includeArchived ? `&type=${type}` : `?type=${type}`;
   }
-  return unwrap(api.get<Bill[]>(url));
+  return unwrap(api.get<ApiResponse<Bill[]>>(url));
 };
 
 export const addBill = (bill: Partial<Bill>) =>
-  unwrap(api.post('/bills', bill));
+  unwrap(api.post<ApiResponse<void>>('/bills', bill));
 
 export const getAccounts = () =>
-  unwrap(api.get<string[]>('/api/accounts'));
+  unwrap(api.get<ApiResponse<string[]>>('/accounts'));
 
 export const updateBill = (id: number, bill: Partial<Bill>) =>
-  unwrap(api.put(`/bills/${id}`, bill));
+  unwrap(api.put<ApiResponse<void>>(`/bills/${id}`, bill));
 
 export const archiveBill = (id: number) =>
-  unwrap(api.delete(`/bills/${id}`));
+  unwrap(api.delete<ApiResponse<void>>(`/bills/${id}`));
 
 export const unarchiveBill = (id: number) =>
-  unwrap(api.post(`/bills/${id}/unarchive`));
+  unwrap(api.post<ApiResponse<void>>(`/bills/${id}/unarchive`));
 
 export const deleteBillPermanent = (id: number) =>
-  unwrap(api.delete(`/bills/${id}/permanent`));
+  unwrap(api.delete<ApiResponse<void>>(`/bills/${id}/permanent`));
 
 export const payBill = (id: number, amount: number, advance_due: boolean) =>
-  unwrap(api.post(`/bills/${id}/pay`, { amount, advance_due }));
+  unwrap(api.post<ApiResponse<void>>(`/bills/${id}/pay`, { amount, advance_due }));
 
 // Payments API
 export const getPayments = (billId: number) =>
-  unwrap(api.get<Payment[]>(`/bills/${billId}/payments`));
+  unwrap(api.get<ApiResponse<Payment[]>>(`/bills/${billId}/payments`));
 
 export const updatePayment = (id: number, amount: number, payment_date: string) =>
-  unwrap(api.put(`/payments/${id}`, { amount, payment_date }));
+  unwrap(api.put<ApiResponse<void>>(`/payments/${id}`, { amount, payment_date }));
 
 export const deletePayment = (id: number) =>
-  unwrap(api.delete(`/payments/${id}`));
+  unwrap(api.delete<ApiResponse<void>>(`/payments/${id}`));
 
 export const getMonthlyPayments = () =>
-  unwrap(api.get<Record<string, number>>('/api/payments/monthly'));
+  unwrap(api.get<ApiResponse<Record<string, {deposits: number, expenses: number}>>>('/stats/monthly'));
 
 export const getAllPayments = () =>
-  unwrap(api.get<PaymentWithBill[]>('/api/payments/all'));
+  unwrap(api.get<ApiResponse<PaymentWithBill[]>>('/payments'));
 
+// Note: This endpoint has no v2 equivalent - may need to filter client-side or add v2 endpoint
 export const getBillMonthlyPayments = (billName: string) =>
-  unwrap(api.get<MonthlyBillPayment[]>(`/api/payments/bill/${encodeURIComponent(billName)}/monthly`));
+  unwrap(api.get<ApiResponse<MonthlyBillPayment[]>>(`/payments/bill/${encodeURIComponent(billName)}/monthly`));
 
 // Auto-payment API
 export const processAutoPayments = () =>
-  unwrap(api.post('/api/process-auto-payments'));
+  unwrap(api.post<ApiResponse<void>>('/process-auto-payments'));
 
 // Version API
 export const getVersion = () =>
-  unwrap(api.get<{ version: string; features: string[] }>('/api/version'));
+  unwrap(api.get<ApiResponse<{ version: string; features: string[] }>>('/version'));
 
 // App Config API (v2)
 export interface AppConfig {
@@ -336,8 +437,8 @@ export interface AppConfigResponse {
 }
 
 export const getAppConfig = async () => {
-  const response = await unwrap(api.get<AppConfigResponse>('/api/v2/config'));
-  return response.data;
+  const response = await unwrap(api.get<ApiResponse<AppConfig>>('/config'));
+  return response;
 };
 
 // Registration & Auth API (v2)
@@ -354,19 +455,19 @@ export interface AuthResponse {
 }
 
 export const register = (data: RegisterRequest) =>
-  unwrap(api.post<AuthResponse>('/api/v2/auth/register', data));
+  unwrap(api.post<ApiResponse<AuthResponse>>('/auth/register', data));
 
 export const verifyEmail = (token: string) =>
-  unwrap(api.post<AuthResponse>('/api/v2/auth/verify-email', { token }));
+  unwrap(api.post<ApiResponse<AuthResponse>>('/auth/verify-email', { token }));
 
 export const resendVerification = (email: string) =>
-  unwrap(api.post<AuthResponse>('/api/v2/auth/resend-verification', { email }));
+  unwrap(api.post<ApiResponse<AuthResponse>>('/auth/resend-verification', { email }));
 
 export const forgotPassword = (email: string) =>
-  unwrap(api.post<AuthResponse>('/api/v2/auth/forgot-password', { email }));
+  unwrap(api.post<ApiResponse<AuthResponse>>('/auth/forgot-password', { email }));
 
 export const resetPassword = (token: string, password: string) =>
-  unwrap(api.post<AuthResponse>('/api/v2/auth/reset-password', { token, password }));
+  unwrap(api.post<ApiResponse<AuthResponse>>('/auth/reset-password', { token, password }));
 
 // Billing API (v2)
 export interface BillingConfig {
@@ -425,23 +526,23 @@ export interface CheckoutResponse {
 }
 
 export const getBillingConfig = () =>
-  unwrap(api.get<BillingConfig>('/api/v2/billing/config'));
+  unwrap(api.get<ApiResponse<BillingConfig>>('/billing/config'));
 
 export const getSubscriptionStatus = async () => {
-  const response = await unwrap(api.get<{ success: boolean; data: SubscriptionStatus }>('/api/v2/billing/status'));
-  return response.data;
+  const response = await unwrap(api.get<ApiResponse<SubscriptionStatus>>('/billing/status'));
+  return response;
 };
 
 export const getBillingUsage = async () => {
-  const response = await unwrap(api.get<{ success: boolean; data: BillingUsage }>('/api/v2/billing/usage'));
-  return response.data;
+  const response = await unwrap(api.get<ApiResponse<BillingUsage>>('/billing/usage'));
+  return response;
 };
 
 export const createCheckoutSession = (tier: string = 'basic', interval: string = 'monthly') =>
-  unwrap(api.post<CheckoutResponse>('/api/v2/billing/create-checkout', { tier, interval }));
+  unwrap(api.post<ApiResponse<CheckoutResponse>>('/billing/create-checkout', { tier, interval }));
 
 export const createPortalSession = () =>
-  unwrap(api.post<CheckoutResponse>('/api/v2/billing/portal'));
+  unwrap(api.post<ApiResponse<CheckoutResponse>>('/billing/portal'));
 
 // Telemetry API (v1 - session auth)
 export interface TelemetryNoticeResponse {
@@ -457,15 +558,15 @@ export interface TelemetryNoticeResponse {
 }
 
 export const getTelemetryNotice = async () => {
-  const response = await unwrap(api.get<TelemetryNoticeResponse>('/telemetry/notice'));
-  return response;
+  // unwrap() already extracts the data field from ApiResponse
+  return await unwrap(api.get<ApiResponse<TelemetryNoticeResponse['data']>>('/telemetry/notice'));
 };
 
 export const acceptTelemetry = () =>
-  unwrap(api.post<AuthResponse>('/telemetry/accept'));
+  unwrap(api.post<ApiResponse<AuthResponse>>('/telemetry/accept'));
 
 export const optOutTelemetry = () =>
-  unwrap(api.post<AuthResponse>('/telemetry/opt-out'));
+  unwrap(api.post<ApiResponse<AuthResponse>>('/telemetry/opt-out'));
 
 // Bill Sharing API
 export interface BillShare {
@@ -531,51 +632,51 @@ export interface UserSearchResult {
 
 // Share a bill with another user
 export const shareBill = (billId: number, data: ShareBillRequest) =>
-  unwrap(api.post<{ share_id: number; status: string; message: string }>(`/bills/${billId}/share`, data));
+  unwrap(api.post<ApiResponse<{ share_id: number; status: string; message: string }>>(`/bills/${billId}/share`, data));
 
 // Get all shares for a bill (owner view)
 export const getBillShares = (billId: number) =>
-  unwrap(api.get<BillShare[]>(`/bills/${billId}/shares`));
+  unwrap(api.get<ApiResponse<BillShare[]>>(`/bills/${billId}/shares`));
 
 // Revoke a share
 export const revokeShare = (shareId: number) =>
-  unwrap(api.delete<{ message: string }>(`/shares/${shareId}`));
+  unwrap(api.delete<ApiResponse<{ message: string }>>(`/shares/${shareId}`));
 
 // Update share split configuration
 export const updateShare = (shareId: number, data: { split_type?: string | null; split_value?: number | null }) =>
-  unwrap(api.put<{ message: string }>(`/shares/${shareId}`, data));
+  unwrap(api.put<ApiResponse<{ message: string }>>(`/shares/${shareId}`, data));
 
 // Get bills shared with current user
 export const getSharedBills = () =>
-  unwrap(api.get<SharedBill[]>('/shared-bills'));
+  unwrap(api.get<ApiResponse<SharedBill[]>>('/shared-bills'));
 
 // Get pending share invitations
 export const getPendingShares = () =>
-  unwrap(api.get<PendingShare[]>('/shared-bills/pending'));
+  unwrap(api.get<ApiResponse<PendingShare[]>>('/shared-bills/pending'));
 
 // Accept a share invitation
 export const acceptShare = (shareId: number) =>
-  unwrap(api.post<{ message: string }>(`/shares/${shareId}/accept`));
+  unwrap(api.post<ApiResponse<{ message: string }>>(`/shares/${shareId}/accept`));
 
 // Decline a share invitation
 export const declineShare = (shareId: number) =>
-  unwrap(api.post<{ message: string }>(`/shares/${shareId}/decline`));
+  unwrap(api.post<ApiResponse<{ message: string }>>(`/shares/${shareId}/decline`));
 
 // Leave a shared bill
 export const leaveShare = (shareId: number) =>
-  unwrap(api.post<{ message: string }>(`/shares/${shareId}/leave`));
+  unwrap(api.post<ApiResponse<{ message: string }>>(`/shares/${shareId}/leave`));
 
 // Mark recipient's portion of shared bill as paid (toggle)
 export const markSharePaid = (shareId: number) =>
-  unwrap(api.post<{ message: string; recipient_paid_date: string | null }>(`/shares/${shareId}/mark-paid`));
+  unwrap(api.post<ApiResponse<{ message: string; recipient_paid_date: string | null }>>(`/shares/${shareId}/mark-paid`));
 
 // Search users for sharing
 export const searchUsers = (query: string) =>
-  unwrap(api.get<UserSearchResult[]>(`/users/search?q=${encodeURIComponent(query)}`));
+  unwrap(api.get<ApiResponse<UserSearchResult[]>>(`/users/search?q=${encodeURIComponent(query)}`));
 
 // Get share invitation details by token (public)
 export const getShareInviteDetails = (token: string) =>
-  unwrap(api.get<{
+  unwrap(api.get<ApiResponse<{
     bill_name: string;
     bill_amount: number;
     owner_username: string;
@@ -583,10 +684,10 @@ export const getShareInviteDetails = (token: string) =>
     split_type: string | null;
     split_value: number | null;
     my_portion: number | null;
-  }>(`/share/invite/${token}`));
+  }>>(`/share-info?token=${encodeURIComponent(token)}`));
 
 // Accept share invitation by token (requires login)
 export const acceptShareByToken = (token: string) =>
-  unwrap(api.post<{ message: string; share_id: number }>('/share/accept-by-token', { token }));
+  unwrap(api.post<ApiResponse<{ message: string; share_id: number }>>('/share/accept-by-token', { token }));
 
 export default api;
