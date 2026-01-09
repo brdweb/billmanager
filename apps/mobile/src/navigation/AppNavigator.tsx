@@ -21,6 +21,7 @@ import InvitationsScreen from '../screens/InvitationsScreen';
 import DatabaseManagementScreen from '../screens/DatabaseManagementScreen';
 import PaymentHistoryScreen from '../screens/PaymentHistoryScreen';
 import SubscriptionScreen from '../screens/SubscriptionScreen';
+import SharedBillsScreen from '../screens/SharedBillsScreen';
 import { Bill } from '../types';
 
 // Navigation types
@@ -43,6 +44,7 @@ export type MainTabParamList = {
 export type StatsStackParamList = {
   Stats: undefined;
   PaymentHistory: undefined;
+  SharedBills: undefined;
 };
 
 export type BillsStackParamList = {
@@ -93,6 +95,7 @@ function StatsStackNavigator() {
     <StatsStackNav.Navigator screenOptions={{ headerShown: false }}>
       <StatsStackNav.Screen name="Stats" component={StatsScreen} />
       <StatsStackNav.Screen name="PaymentHistory" component={PaymentHistoryScreen} />
+      <StatsStackNav.Screen name="SharedBills" component={SharedBillsScreen} />
     </StatsStackNav.Navigator>
   );
 }

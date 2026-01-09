@@ -45,6 +45,14 @@ export interface Bill {
   archived: boolean;
   last_updated?: string;
   avg_amount?: number;
+  is_shared: boolean;
+  share_info?: {
+    share_id: number;
+    owner_name: string;
+    my_portion: number | null;
+    my_portion_paid: boolean;
+    my_portion_paid_date: string | null;
+  };
 }
 
 export interface Payment {
@@ -156,4 +164,55 @@ export interface BillingUsage {
     bill_groups: UsageItem;
     family_members: UsageItem;
   };
+}
+
+// Bill Sharing types
+export interface BillShare {
+  id: number;
+  shared_with: string;
+  identifier_type: 'username' | 'email';
+  status: 'pending' | 'accepted' | 'declined' | 'revoked';
+  split_type: 'percentage' | 'fixed' | 'equal' | null;
+  split_value: number | null;
+  created_at: string;
+  accepted_at: string | null;
+}
+
+export interface SharedBill {
+  share_id: number;
+  bill: {
+    id: number;
+    name: string;
+    amount: number | null;
+    varies: boolean;
+    frequency: string;
+    next_due: string;
+    icon: string;
+    type: 'expense' | 'deposit';
+  };
+  owner: string;
+  split_type: 'percentage' | 'fixed' | 'equal' | null;
+  split_value: number | null;
+  my_portion: number | null;
+  last_payment: {
+    amount: number;
+    date: string;
+  } | null;
+  status: 'accepted';
+}
+
+export interface PendingShare {
+  share_id: number;
+  bill_name: string;
+  bill_amount: number | null;
+  bill_icon: string;
+  owner: string;
+  split_type: 'percentage' | 'fixed' | 'equal' | null;
+  split_value: number | null;
+  created_at: string;
+}
+
+export interface UserSearchResult {
+  id: number;
+  username: string;
 }

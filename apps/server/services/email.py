@@ -199,3 +199,36 @@ def send_welcome_email(email: str, username: str) -> bool:
 
     html = get_email_template(content, "You're All Set!")
     return send_email(email, "Welcome to BillManager!", html)
+
+
+def send_bill_share_email(email: str, token: str, bill_name: str, shared_by: str) -> bool:
+    """Send bill share invitation email"""
+    share_url = f"{APP_URL}/share/accept?token={token}"
+
+    content = f"""
+        <p>Hi there!</p>
+        <p><strong>{shared_by}</strong> wants to share a bill with you on BillManager.</p>
+
+        <div class="feature">
+            <strong>Bill: {bill_name}</strong><br>
+            You'll be able to see when this bill is paid and track it alongside your own bills.
+        </div>
+
+        <p>This feature helps roommates and partners keep track of shared expenses together.</p>
+
+        <p style="text-align: center;">
+            <a href="{share_url}" class="button">View Shared Bill</a>
+        </p>
+        <p>Or copy and paste this link into your browser:</p>
+        <p class="link">{share_url}</p>
+
+        <div class="warning">
+            <strong>⏰ This invitation will expire in 7 days.</strong>
+        </div>
+
+        <p style="color: #64748b;">If you don't have a BillManager account, you'll be able to create one when you accept this invitation.</p>
+        <p style="color: #64748b;">If you weren't expecting this invitation, you can safely ignore this email.</p>
+    """
+
+    html = get_email_template(content, "Shared Bill Invitation")
+    return send_email(email, f"{shared_by} shared a bill with you on BillManager", html)
