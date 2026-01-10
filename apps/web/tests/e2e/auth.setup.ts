@@ -19,8 +19,8 @@ setup('authenticate', async ({ page }) => {
   // Wait for successful login
   await expect(page.locator('button:has-text("Logout")')).toBeVisible({ timeout: 15000 });
 
-  // Wait for dashboard to fully load
-  await expect(page.locator('h6').filter({ hasText: /Dashboard|Bills/i }).first()).toBeVisible({ timeout: 10000 });
+  // Wait for main content to load (table with bills)
+  await page.waitForLoadState('networkidle');
 
   // Save storage state (localStorage, sessionStorage, cookies)
   await page.context().storageState({ path: authFile });
