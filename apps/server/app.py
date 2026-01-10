@@ -61,9 +61,13 @@ spa_bp = Blueprint('spa', __name__)
 
 # --- Rate Limiter (initialized in create_app) ---
 # No default limits - only apply rate limiting to sensitive endpoints (auth)
+# Set RATE_LIMIT_ENABLED=false to disable rate limiting (for testing)
+RATE_LIMIT_ENABLED = os.environ.get('RATE_LIMIT_ENABLED', 'true').lower() != 'false'
+
 limiter = Limiter(
     key_func=get_remote_address,
     storage_uri="memory://",
+    enabled=RATE_LIMIT_ENABLED,
 )
 
 # --- CSRF Protection ---
@@ -476,7 +480,7 @@ def calculate_next_due_date(current_due, frequency, frequency_type='simple', fre
 # --- API Routes ---
 
 @api_bp.route('/login', methods=['POST'])
-@limiter.limit("5 per minute")
+@limiter.limit("20 per minute")
 def login():
     data = request.get_json() or {}
     username = data.get('username')
@@ -497,7 +501,7 @@ def login():
     return jsonify({'error': 'Invalid username or password'}), 401
 
 @api_bp.route('/change-password', methods=['POST'])
-@limiter.limit("5 per minute")
+@limiter.limit("20 per minute")
 def change_password():
     """Change password for users with password_change_required flag (first login)."""
     data = request.get_json() or {}
@@ -1333,6 +1337,10 @@ def get_bill_shares(bill_id):
         return jsonify({'error': 'Access denied'}), 403
 
     shares = BillShare.query.filter_by(bill_id=bill_id).all()
+
+    # Security: Only return shares owned by the current user
+    filtered_shares = [s for s in shares if s.owner_user_id == current_user_id]
+
     return jsonify([{
         'id': s.id,
         'shared_with': s.shared_with_identifier,
@@ -1342,7 +1350,7 @@ def get_bill_shares(bill_id):
         'split_value': s.split_value,
         'created_at': s.created_at.isoformat() if s.created_at else None,
         'accepted_at': s.accepted_at.isoformat() if s.accepted_at else None
-    } for s in shares])
+    } for s in filtered_shares])
 
 
 @api_bp.route('/shares/<int:share_id>', methods=['DELETE'])
@@ -1445,16 +1453,21 @@ def get_pending_shares():
     if not current_user or not current_user.email:
         return jsonify([])
 
+    # Optimize: Filter out expired shares at database level instead of in Python loop
+    from sqlalchemy import or_
     shares = BillShare.query.filter_by(
         shared_with_identifier=current_user.email.lower(),
         identifier_type='email',
         status='pending'
+    ).filter(
+        or_(
+            BillShare.expires_at.is_(None),
+            BillShare.expires_at > datetime.datetime.now(datetime.timezone.utc)
+        )
     ).all()
 
     result = []
     for share in shares:
-        if share.is_expired:
-            continue
         bill = share.bill
         result.append({
             'share_id': share.id,
@@ -1575,10 +1588,15 @@ def accept_share_by_token():
     current_user_id = session.get('user_id')
     current_user = db.session.get(User, current_user_id)
 
-    # Verify the email matches (case-insensitive)
+    # Verify the current user matches the invitation
     if share.identifier_type == 'email' and current_user.email:
         if share.shared_with_identifier.lower() != current_user.email.lower():
             return jsonify({'error': 'This invitation was sent to a different email address'}), 403
+
+    # For username-based shares, verify username match
+    if share.identifier_type == 'username':
+        if not share.shared_with_user_id or share.shared_with_user_id != current_user_id:
+            return jsonify({'error': 'Access denied'}), 403
 
     # Accept the share
     share.status = 'accepted'
@@ -1707,7 +1725,7 @@ def ping(): return jsonify({'status': 'ok'})
 # --- API v2 Routes (JWT Auth for Mobile) ---
 
 @api_v2_bp.route('/auth/login', methods=['POST'])
-@limiter.limit("5 per minute")
+@limiter.limit("20 per minute")
 def jwt_login():
     """JWT login endpoint for mobile apps."""
     data = request.get_json(force=True, silent=True)
@@ -1827,7 +1845,7 @@ def jwt_logout_all():
 # --- Registration & Password Reset Endpoints ---
 
 @api_v2_bp.route('/auth/register', methods=['POST'])
-@limiter.limit("3 per minute;10 per hour")
+@limiter.limit("10 per minute;30 per hour")
 def register():
     """Register a new user account."""
     # Check if registration is enabled
@@ -2000,7 +2018,7 @@ def resend_verification():
 
 
 @api_v2_bp.route('/auth/forgot-password', methods=['POST'])
-@limiter.limit("3 per minute;10 per hour")
+@limiter.limit("10 per minute;30 per hour")
 def forgot_password():
     """Request password reset email."""
     data = request.get_json(force=True, silent=True)
@@ -2028,7 +2046,7 @@ def forgot_password():
 
 
 @api_v2_bp.route('/auth/reset-password', methods=['POST'])
-@limiter.limit("5 per minute;15 per hour")
+@limiter.limit("20 per minute;60 per hour")
 def reset_password():
     """Reset password with token."""
     data = request.get_json(force=True, silent=True)
@@ -2941,6 +2959,18 @@ def jwt_share_bill(bill_id):
     try:
         db.session.add(share)
         db.session.commit()
+
+        # Audit log: Share created
+        ShareAuditLog.log_action(
+            action='created',
+            bill_id=bill_id,
+            actor_user_id=g.jwt_user_id,
+            share_id=share.id,
+            affected_user_id=shared_with_user_id,
+            metadata={'identifier_type': identifier_type, 'split_type': split_type, 'split_value': split_value},
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent')
+        )
     except Exception as e:
         db.session.rollback()
         logger.error(f"Failed to create bill share: {e}")
@@ -2990,6 +3020,10 @@ def jwt_get_bill_shares(bill_id):
         return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     shares = BillShare.query.filter_by(bill_id=bill_id).all()
+
+    # Security: Only return shares owned by the current user
+    filtered_shares = [s for s in shares if s.owner_user_id == g.jwt_user_id]
+
     result = [{
         'id': s.id,
         'shared_with': s.shared_with_identifier,
@@ -2999,7 +3033,7 @@ def jwt_get_bill_shares(bill_id):
         'split_value': s.split_value,
         'created_at': s.created_at.isoformat() if s.created_at else None,
         'accepted_at': s.accepted_at.isoformat() if s.accepted_at else None
-    } for s in shares]
+    } for s in filtered_shares]
 
     return jsonify({'success': True, 'data': result})
 
@@ -3075,16 +3109,20 @@ def jwt_get_pending_shares():
     if not current_user:
         return jsonify({'success': True, 'data': []})
 
-    # Find pending shares by email or username
+    # Optimize: Filter out expired shares at database level instead of in Python loop
+    from sqlalchemy import or_
     shares = BillShare.query.filter(
         BillShare.shared_with_user_id == current_user.id,
         BillShare.status == 'pending'
+    ).filter(
+        or_(
+            BillShare.expires_at.is_(None),
+            BillShare.expires_at > datetime.datetime.now(datetime.timezone.utc)
+        )
     ).all()
 
     result = []
     for share in shares:
-        if share.is_expired:
-            continue
         bill = share.bill
         result.append({
             'share_id': share.id,
@@ -3131,6 +3169,17 @@ def jwt_accept_share(share_id):
     share.accepted_at = datetime.datetime.now(datetime.timezone.utc)
     db.session.commit()
 
+    # Audit log: Share accepted
+    ShareAuditLog.log_action(
+        action='accepted',
+        bill_id=share.bill_id,
+        actor_user_id=g.jwt_user_id,
+        share_id=share.id,
+        affected_user_id=share.owner_user_id,
+        ip_address=request.remote_addr,
+        user_agent=request.headers.get('User-Agent')
+    )
+
     return jsonify({'success': True, 'data': {'message': 'Share accepted'}})
 
 
@@ -3158,6 +3207,17 @@ def jwt_decline_share(share_id):
 
     share.status = 'declined'
     db.session.commit()
+
+    # Audit log: Share declined
+    ShareAuditLog.log_action(
+        action='declined',
+        bill_id=share.bill_id,
+        actor_user_id=g.jwt_user_id,
+        share_id=share.id,
+        affected_user_id=share.owner_user_id,
+        ip_address=request.remote_addr,
+        user_agent=request.headers.get('User-Agent')
+    )
 
     return jsonify({'success': True, 'data': {'message': 'Share declined'}})
 
@@ -3211,6 +3271,19 @@ def jwt_accept_share_by_token():
     if share.is_expired:
         return jsonify({'success': False, 'error': 'Invitation has expired'}), 400
 
+    # Verify the current user matches the invitation
+    current_user = db.session.get(User, g.jwt_user_id)
+
+    # For email-based shares, verify email match
+    if share.identifier_type == 'email':
+        if not current_user.email or share.shared_with_identifier.lower() != current_user.email.lower():
+            return jsonify({'success': False, 'error': 'This invitation was sent to a different email address'}), 403
+
+    # For username-based shares, verify username match
+    if share.identifier_type == 'username':
+        if not share.shared_with_user_id or share.shared_with_user_id != g.jwt_user_id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+
     # Accept the share
     share.status = 'accepted'
     share.shared_with_user_id = g.jwt_user_id
@@ -3251,6 +3324,19 @@ def jwt_update_share(share_id):
         share.split_value = split_value
 
     db.session.commit()
+
+    # Audit log: Share split configuration updated
+    ShareAuditLog.log_action(
+        action='updated',
+        bill_id=share.bill_id,
+        actor_user_id=g.jwt_user_id,
+        share_id=share.id,
+        affected_user_id=share.shared_with_user_id,
+        metadata={'split_type': share.split_type, 'split_value': share.split_value},
+        ip_address=request.remote_addr,
+        user_agent=request.headers.get('User-Agent')
+    )
+
     return jsonify({'success': True, 'data': {'message': 'Share updated'}})
 
 
@@ -3268,6 +3354,17 @@ def jwt_leave_share(share_id):
 
     share.status = 'revoked'
     db.session.commit()
+
+    # Audit log: Share revoked (recipient left)
+    ShareAuditLog.log_action(
+        action='revoked',
+        bill_id=share.bill_id,
+        actor_user_id=g.jwt_user_id,
+        share_id=share.id,
+        affected_user_id=share.owner_user_id,
+        ip_address=request.remote_addr,
+        user_agent=request.headers.get('User-Agent')
+    )
 
     return jsonify({'success': True, 'data': {'message': 'Left shared bill'}})
 
@@ -3392,7 +3489,7 @@ def jwt_process_auto_payments():
     return jsonify({'success': True, 'data': {'processed_count': len(processed), 'bills': processed}})
 
 @api_v2_bp.route('/auth/change-password', methods=['POST'])
-@limiter.limit("5 per minute;15 per hour")
+@limiter.limit("20 per minute;60 per hour")
 def jwt_change_password():
     """Change password (for users with password_change_required or via change_token)."""
     data = request.get_json(force=True, silent=True)
@@ -3937,6 +4034,50 @@ def trigger_bill_reminders():
         'success': True,
         'data': stats
     })
+
+
+@api_v2_bp.route('/shares/cleanup-expired', methods=['POST'])
+@jwt_admin_required
+def cleanup_expired_shares():
+    """
+    Clean up expired pending bill share invitations (admin only).
+
+    This endpoint is meant to be called by a cron job or scheduler to
+    automatically remove expired share invitations that were never accepted.
+    Only affects shares with status='pending' and expires_at in the past.
+
+    Returns:
+    {
+        "success": true,
+        "data": {
+            "deleted_count": 5,
+            "oldest_deleted": "2026-01-01T00:00:00Z"
+        }
+    }
+
+    Setup as cron job (run daily at 3 AM):
+    0 3 * * * curl -X POST https://your-domain.com/api/v2/shares/cleanup-expired \
+        -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+    """
+    try:
+        stats = BillShare.cleanup_expired_shares()
+
+        logger.info(
+            f"Expired shares cleanup: deleted {stats['deleted_count']} share(s), "
+            f"oldest from {stats['oldest_deleted'] or 'N/A'}"
+        )
+
+        return jsonify({
+            'success': True,
+            'data': stats
+        })
+    except Exception as e:
+        logger.error(f"Failed to cleanup expired shares: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 
 @api_v2_bp.route('/openapi.yaml', methods=['GET'])
 def get_openapi_spec():

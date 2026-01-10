@@ -16,6 +16,7 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 - **Mobile App**: Native iOS and Android apps with offline support and push notifications
 - **Email Invitations**: Invite users via email with configurable roles and access control
 - **Bill Groups**: Organize finances into separate groups (personal, business, family, etc.)
+- **Bill Sharing**: Share bills with other users and split costs by percentage, fixed amount, or equally
 
 ## License
 
@@ -171,6 +172,59 @@ INITIAL ADMIN CREDENTIALS (save these now!)
 **Save this password immediately!** It is only shown once during initial startup.
 
 For detailed setup and usage instructions, see the [documentation](https://docs.billmanager.app).
+
+## Sharing Bills
+
+BillManager allows you to share bills with other users and split costs in flexible ways:
+
+### Creating a Share
+
+1. Open any bill in your database
+2. Click the "Share" button
+3. Enter the recipient's username or email address
+4. Choose how to split the bill:
+   - **Percentage**: Split by percentage (e.g., 50% each)
+   - **Fixed Amount**: Assign a fixed dollar amount to the recipient
+   - **Equal**: Split equally among all recipients
+   - **Full Amount**: Share the full bill amount (no split)
+
+### Accepting Shares
+
+**Username-based shares** (self-hosted):
+- Recipients receive a notification and can accept/decline in the "Shared Bills" section
+
+**Email-based shares** (SaaS):
+- Recipients receive an email invitation with a secure link
+- Click the link and log in (or create an account) to accept the share
+
+### Managing Shared Bills
+
+**As the Bill Owner:**
+- View all shares for your bills
+- Update split configurations
+- Revoke shares at any time
+- See recipient payment status
+
+**As a Share Recipient:**
+- View bills shared with you in-line with your own bills
+- Mark your portion as paid to track your contributions
+- Leave a shared bill if you no longer need access
+
+### Payment Tracking
+
+When a bill is shared:
+- Recipients can mark their portion as paid independently
+- Owners can see who has paid their share
+- Payment dates are tracked separately for each recipient
+
+### Security
+
+- Only bill owners can create, update, or revoke shares
+- Only the intended recipient can accept a share
+- Email shares require token-based verification
+- All share operations are logged for audit purposes
+
+For more details, see the [Sharing Bills Guide](https://docs.billmanager.app/features/sharing-bills) in the documentation.
 
 ## Documentation
 

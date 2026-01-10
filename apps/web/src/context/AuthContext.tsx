@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import type { ReactNode } from 'react';
 import * as api from '../api/client';
 import type { Database } from '../api/client';
+import { TokenStorage } from '../utils/tokenStorage';
 
 interface AuthState {
   isLoggedIn: boolean;
@@ -49,18 +50,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshAuth = useCallback(async () => {
     try {
+      // Check if we have a valid access token
+      const accessToken = TokenStorage.getAccessToken();
+      if (!accessToken) {
+        setState({
+          isLoggedIn: false,
+          isAdmin: false,
+          role: null,
+          databases: [],
+          currentDb: null,
+          isLoading: false,
+          pendingPasswordChange: null,
+        });
+        return;
+      }
+
       const response = await api.getMe();
+      const currentDb = TokenStorage.getCurrentDatabase();
+
       setState({
         isLoggedIn: true,
         // Use is_account_owner from API (true for account owners who can access admin/billing)
-        isAdmin: response.is_account_owner ?? response.role === 'admin',
-        role: response.role,
+        isAdmin: response.user.is_account_owner ?? response.user.role === 'admin',
+        role: response.user.role,
         databases: response.databases,
-        currentDb: response.current_db,
+        currentDb: currentDb || response.databases[0]?.name || null,
         isLoading: false,
         pendingPasswordChange: null,
       });
     } catch {
+      TokenStorage.clearTokens();
       setState({
         isLoggedIn: false,
         isAdmin: false,
@@ -92,13 +111,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: true, requirePasswordChange: true };
       }
 
+      // api.login already stored the tokens and set the first database
+      const currentDb = TokenStorage.getCurrentDatabase();
+
       setState({
         isLoggedIn: true,
         // Use is_account_owner from API (true for account owners who can access admin/billing)
-        isAdmin: response.is_account_owner ?? response.role === 'admin',
-        role: response.role,
+        isAdmin: response.user.is_account_owner ?? response.user.role === 'admin',
+        role: response.user.role,
         databases: response.databases || [],
-        currentDb: response.databases?.[0]?.name || null,
+        currentDb: currentDb || response.databases?.[0]?.name || null,
         isLoading: false,
         pendingPasswordChange: null,
       });
@@ -156,7 +178,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const selectDatabase = async (dbName: string) => {
     try {
-      await api.selectDatabase(dbName);
+      // Database selection is now client-side only via TokenStorage
+      // No API call needed - just update localStorage and state
+      TokenStorage.setCurrentDatabase(dbName);
       setState((prev) => ({ ...prev, currentDb: dbName }));
     } catch (error) {
       console.error('Failed to select database:', error);

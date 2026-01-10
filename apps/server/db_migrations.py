@@ -333,6 +333,87 @@ def migrate_20260108_01_add_recipient_paid_date(db):
     logger.info("Added recipient_paid_date column to bill_shares table")
 
 
+def migrate_20260109_01_fix_email_case_sensitivity(db):
+    """Fix email case sensitivity by creating case-insensitive unique constraint on bill_shares"""
+    logger.info("Running migration: 20260109_01_fix_email_case_sensitivity")
+
+    # Check if new index already exists
+    result = db.session.execute(text("""
+        SELECT indexname
+        FROM pg_indexes
+        WHERE tablename='bill_shares'
+        AND indexname='bill_shares_bill_id_identifier_lower_unique'
+    """))
+
+    if result.fetchone():
+        logger.info("Case-insensitive unique index already exists")
+        return
+
+    # Drop the old unique constraint
+    try:
+        db.session.execute(text('''
+            ALTER TABLE bill_shares
+            DROP CONSTRAINT bill_shares_bill_id_shared_with_identifier_key
+        '''))
+        logger.info("Dropped old unique constraint")
+    except Exception as e:
+        # Constraint might not exist or have different name
+        logger.warning(f"Could not drop old constraint: {e}")
+        db.session.rollback()
+
+    # Create new case-insensitive unique index
+    db.session.execute(text('''
+        CREATE UNIQUE INDEX bill_shares_bill_id_identifier_lower_unique
+        ON bill_shares (bill_id, LOWER(shared_with_identifier))
+    '''))
+
+    db.session.commit()
+    logger.info("Created case-insensitive unique index on bill_shares")
+
+
+def migrate_20260109_02_create_share_audit_log(db):
+    """Create share_audit_log table for tracking all share operations"""
+    logger.info("Running migration: 20260109_02_create_share_audit_log")
+
+    # Check if table already exists
+    inspector = inspect(db.engine)
+    if 'share_audit_log' in inspector.get_table_names():
+        logger.info("share_audit_log table already exists")
+        return
+
+    db.session.execute(text('''
+        CREATE TABLE share_audit_log (
+            id SERIAL PRIMARY KEY,
+            share_id INTEGER REFERENCES bill_shares(id) ON DELETE SET NULL,
+            bill_id INTEGER NOT NULL REFERENCES bills(id),
+            action VARCHAR(50) NOT NULL,
+            actor_user_id INTEGER NOT NULL REFERENCES users(id),
+            affected_user_id INTEGER REFERENCES users(id),
+            extra_data TEXT,
+            ip_address VARCHAR(50),
+            user_agent VARCHAR(255),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    '''))
+
+    # Add indexes for common queries
+    db.session.execute(text('''
+        CREATE INDEX idx_share_audit_log_share_id ON share_audit_log(share_id)
+    '''))
+    db.session.execute(text('''
+        CREATE INDEX idx_share_audit_log_bill_id ON share_audit_log(bill_id)
+    '''))
+    db.session.execute(text('''
+        CREATE INDEX idx_share_audit_log_actor ON share_audit_log(actor_user_id)
+    '''))
+    db.session.execute(text('''
+        CREATE INDEX idx_share_audit_log_created_at ON share_audit_log(created_at DESC)
+    '''))
+
+    db.session.commit()
+    logger.info("Created share_audit_log table with indexes")
+
+
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -347,6 +428,8 @@ MIGRATIONS = [
     ('20260106_01', 'Add telemetry tracking columns to users table', migrate_20260106_01_add_telemetry_columns),
     ('20260107_01', 'Create bill_shares table for cross-account bill sharing', migrate_20260107_01_create_bill_shares_table),
     ('20260108_01', 'Add recipient_paid_date column to bill_shares', migrate_20260108_01_add_recipient_paid_date),
+    ('20260109_01', 'Fix email case sensitivity in bill_shares unique constraint', migrate_20260109_01_fix_email_case_sensitivity),
+    ('20260109_02', 'Create share_audit_log table for audit trail', migrate_20260109_02_create_share_audit_log),
 ]
 
 

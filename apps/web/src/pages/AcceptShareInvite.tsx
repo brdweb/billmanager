@@ -22,7 +22,7 @@ export function AcceptShareInvite() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
-  const { user } = useAuth();
+  const { isLoggedIn } = useAuth();
 
   // Invite info
   const [inviteData, setInviteData] = useState<{
@@ -142,7 +142,7 @@ export function AcceptShareInvite() {
   }
 
   // Not logged in - show invitation details and prompt to login
-  if (!user) {
+  if (!isLoggedIn) {
     return (
       <Container size={500} my={40}>
         <Title ta="center">Bill Share Invitation</Title>
@@ -165,7 +165,7 @@ export function AcceptShareInvite() {
               </Group>
             </div>
 
-            {inviteData?.my_portion !== null && (
+            {inviteData && inviteData.my_portion !== null && (
               <div>
                 <Text size="sm" c="dimmed" mb={5}>Your Portion</Text>
                 <Group gap="xs">
@@ -239,7 +239,7 @@ export function AcceptShareInvite() {
             </Group>
           </div>
 
-          {inviteData?.my_portion !== null && (
+          {inviteData && inviteData.my_portion !== null && (
             <div>
               <Text size="sm" c="dimmed" mb={5}>Your Portion</Text>
               <Group gap="xs">

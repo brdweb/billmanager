@@ -1,0 +1,73 @@
+╔══════════════════════════════════════════════════════════════════════════╗
+║                  BillManager Test Suite - Quick Reference                ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║                                                                          ║
+║  BEFORE EVERY GIT PUSH TO PRODUCTION:                                   ║
+║                                                                          ║
+║    ./test-e2e.sh                                                         ║
+║                                                                          ║
+║  Exit code 0 = PASS ✅ (safe to push)                                    ║
+║  Exit code 1 = FAIL ❌ (do NOT push)                                     ║
+║                                                                          ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  TEST PHASES                                                             ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║                                                                          ║
+║  Phase 1: Backend API Tests                                             ║
+║    • API endpoints responding                                            ║
+║    • Authentication working                                              ║
+║    • Database migrations applied                                         ║
+║    • Shared bills infrastructure                                         ║
+║                                                                          ║
+║  Phase 2: Frontend Build Test                                           ║
+║    • TypeScript compiles without errors                                  ║
+║    • Vite production build succeeds                                      ║
+║    • Build artifacts generated                                           ║
+║                                                                          ║
+║  Phase 3: E2E Tests (Playwright)                                        ║
+║    • Login page loads                                                    ║
+║    • Navigation works                                                    ║
+║    • No console errors                                                   ║
+║    • Responsive design                                                   ║
+║    • Accessibility checks                                                ║
+║                                                                          ║
+║  Phase 4: Feature Tests                                                 ║
+║    • Audit logging schema                                                ║
+║    • Performance indexes                                                 ║
+║    • Security isolation                                                  ║
+║                                                                          ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  TEST RESULTS LOCATION                                                   ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║                                                                          ║
+║  /tmp/billmanager-test-results/                                          ║
+║    ├── test-report-YYYYMMDD-HHMMSS.md  (Main report)                    ║
+║    ├── playwright-report/index.html     (Interactive report)            ║
+║    └── *.log                            (Debug logs)                    ║
+║                                                                          ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  TROUBLESHOOTING                                                         ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║                                                                          ║
+║  Port already in use:                                                    ║
+║    lsof -ti:5001 | xargs kill -9  # Kill Flask                           ║
+║    lsof -ti:5173 | xargs kill -9  # Kill Vite                            ║
+║                                                                          ║
+║  Database connection failed:                                             ║
+║    psql postgresql://billsuser:billspass@192.168.40.240:5432/bills_test ║
+║                                                                          ║
+║  Review logs:                                                            ║
+║    cat /tmp/billmanager-test-results/flask.log                           ║
+║    cat /tmp/billmanager-test-results/playwright.log                      ║
+║                                                                          ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  WORKFLOW                                                                ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║                                                                          ║
+║  1. Make code changes                                                    ║
+║  2. Run ./test-e2e.sh                                                    ║
+║  3. Review test report                                                   ║
+║  4. If tests PASS → git commit && git push                               ║
+║  5. If tests FAIL → fix issues, go to step 2                            ║
+║                                                                          ║
+╚══════════════════════════════════════════════════════════════════════════╝

@@ -1,0 +1,56 @@
+#!/bin/bash
+# BillManager Pre-Push Hook
+# Automatically runs test suite before pushing to remote repository
+#
+# To install this hook:
+#   cp hooks/pre-push .git/hooks/pre-push
+#   chmod +x .git/hooks/pre-push
+#
+# To bypass (emergency only):
+#   git push --no-verify
+
+set -e
+
+echo "════════════════════════════════════════════════════════════════"
+echo "Pre-Push Hook: Running BillManager Test Suite"
+echo "════════════════════════════════════════════════════════════════"
+echo ""
+echo "This ensures code quality before pushing to production."
+echo "To bypass this check (not recommended): git push --no-verify"
+echo ""
+
+# Get the root directory of the repo
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+# Check if test script exists
+if [ ! -f "./test-e2e.sh" ]; then
+    echo "❌ ERROR: test-e2e.sh not found in repository root"
+    echo "Cannot verify code quality. Push aborted."
+    exit 1
+fi
+
+# Run the test suite
+echo "Running test suite..."
+echo ""
+
+if ./test-e2e.sh; then
+    echo ""
+    echo "════════════════════════════════════════════════════════════════"
+    echo "✅ All tests passed! Proceeding with push."
+    echo "════════════════════════════════════════════════════════════════"
+    exit 0
+else
+    echo ""
+    echo "════════════════════════════════════════════════════════════════"
+    echo "❌ TESTS FAILED! Push aborted."
+    echo "════════════════════════════════════════════════════════════════"
+    echo ""
+    echo "Please fix the failing tests before pushing."
+    echo "Review the test report at: /tmp/billmanager-test-results/"
+    echo ""
+    echo "To bypass this check (NOT recommended):"
+    echo "  git push --no-verify"
+    echo ""
+    exit 1
+fi

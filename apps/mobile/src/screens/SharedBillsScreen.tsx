@@ -290,11 +290,26 @@ export default function SharedBillsScreen() {
               ? `pending-${item.data.share_id}`
               : `shared-${item.data.share_id}`
           }
-          renderItem={({ item }) =>
-            item.type === 'pending'
-              ? renderPendingItem({ item: item.data as PendingShare })
-              : renderSharedBillItem({ item: item.data as SharedBill })
-          }
+          renderItem={({ item, index }) => {
+            // Show section header before first shared bill
+            const showActiveSectionHeader =
+              item.type === 'shared' &&
+              index === pendingShares.length &&
+              sharedBills.length > 0;
+
+            return (
+              <>
+                {showActiveSectionHeader && (
+                  <Text style={[styles.sectionTitle, styles.activeSectionTitle]}>
+                    Active Shared Bills
+                  </Text>
+                )}
+                {item.type === 'pending'
+                  ? renderPendingItem({ item: item.data as PendingShare })
+                  : renderSharedBillItem({ item: item.data as SharedBill })}
+              </>
+            );
+          }}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -441,6 +456,10 @@ const createStyles = (colors: any, insets: any) => StyleSheet.create({
     marginBottom: 12,
     backgroundColor: colors.background,
     paddingVertical: 8,
+  },
+  activeSectionTitle: {
+    color: colors.primary,
+    marginTop: 16,
   },
   pendingCard: {
     backgroundColor: colors.surface,

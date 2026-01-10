@@ -15,7 +15,7 @@ import {
   Loader,
   Autocomplete,
 } from '@mantine/core';
-import { IconShare, IconTrash, IconAlertCircle, IconCheck, IconEdit, IconX } from '@tabler/icons-react';
+import { IconShare, IconTrash, IconAlertCircle, IconCheck, IconEdit } from '@tabler/icons-react';
 import * as api from '../api/client';
 import type { Bill, BillShare, UserSearchResult } from '../api/client';
 import { useConfig } from '../context/ConfigContext';

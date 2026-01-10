@@ -225,7 +225,7 @@ function App() {
       try {
         const noticeData = await api.getTelemetryNotice();
         console.log('📊 Telemetry response:', noticeData);
-        if (noticeData.data.show_notice) {
+        if (noticeData.show_notice) {
           console.log('🎯 Opening telemetry modal');
           openTelemetryModal();
         }

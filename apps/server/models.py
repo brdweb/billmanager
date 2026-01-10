@@ -390,7 +390,7 @@ class BillShare(db.Model):
 
     # Split configuration (optional)
     split_type = db.Column(db.String(20), nullable=True)  # NULL, 'percentage', 'fixed', 'equal'
-    split_value = db.Column(db.Float, nullable=True)  # percentage (0-100) or fixed amount
+    split_value = db.Column(db.Numeric(10, 2), nullable=True)  # percentage (0-100) or fixed amount
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -436,7 +436,9 @@ class BillShare(db.Model):
 
     def calculate_portion(self):
         """Calculate the recipient's portion of the bill amount"""
-        if not self.bill.amount:
+        # Explicitly check for None to handle variable bills properly
+        # (bills with amount=0 should proceed with calculation)
+        if self.bill.amount is None:
             return None
         if not self.split_type:
             return self.bill.amount  # Full amount if no split
@@ -447,6 +449,107 @@ class BillShare(db.Model):
         if self.split_type == 'fixed' and self.split_value:
             return min(self.split_value, self.bill.amount)
         return self.bill.amount
+
+    @classmethod
+    def cleanup_expired_shares(cls):
+        """
+        Delete expired pending share invitations.
+
+        Returns dict with cleanup statistics:
+        {
+            'deleted_count': int,
+            'oldest_deleted': datetime or None
+        }
+        """
+        now = datetime.now(timezone.utc)
+
+        # Find all expired pending shares
+        expired_shares = cls.query.filter(
+            cls.status == 'pending',
+            cls.expires_at.isnot(None),
+            cls.expires_at < now
+        ).all()
+
+        deleted_count = len(expired_shares)
+        oldest_deleted = None
+
+        if expired_shares:
+            # Track the oldest share being deleted for logging
+            oldest_deleted = min(share.created_at for share in expired_shares if share.created_at)
+
+            # Create audit log entries and delete expired shares
+            for share in expired_shares:
+                # Create audit log before deleting (share_id will be NULL after deletion)
+                ShareAuditLog.log_action(
+                    action='expired_cleanup',
+                    bill_id=share.bill_id,
+                    actor_user_id=share.owner_user_id,  # System action, attribute to owner
+                    share_id=None,  # Will be NULL since share is being deleted
+                    affected_user_id=share.shared_with_user_id,
+                    metadata={'expired_at': share.expires_at.isoformat() if share.expires_at else None, 'shared_with': share.shared_with_identifier}
+                )
+                db.session.delete(share)
+
+            db.session.commit()
+
+        return {
+            'deleted_count': deleted_count,
+            'oldest_deleted': oldest_deleted.isoformat() if oldest_deleted else None
+        }
+
+
+class ShareAuditLog(db.Model):
+    """Audit log for bill share operations"""
+    __tablename__ = 'share_audit_log'
+
+    id = db.Column(db.Integer, primary_key=True)
+    share_id = db.Column(db.Integer, db.ForeignKey('bill_shares.id', ondelete='SET NULL'), nullable=True)
+    bill_id = db.Column(db.Integer, db.ForeignKey('bills.id'), nullable=False)
+    action = db.Column(db.String(50), nullable=False)  # 'created', 'accepted', 'declined', 'revoked', 'updated', 'expired_cleanup'
+    actor_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    affected_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    extra_data = db.Column(db.Text, nullable=True)  # JSON string for additional context
+    ip_address = db.Column(db.String(50), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    share = db.relationship('BillShare', backref='audit_logs', foreign_keys=[share_id])
+    bill = db.relationship('Bill', backref='share_audit_logs', foreign_keys=[bill_id])
+    actor = db.relationship('User', foreign_keys=[actor_user_id])
+    affected_user = db.relationship('User', foreign_keys=[affected_user_id])
+
+    @classmethod
+    def log_action(cls, action, bill_id, actor_user_id, share_id=None, affected_user_id=None,
+                   metadata=None, ip_address=None, user_agent=None):
+        """
+        Create an audit log entry for a share operation.
+
+        Args:
+            action: Action type (e.g., 'created', 'accepted', 'declined')
+            bill_id: ID of the bill being shared
+            actor_user_id: ID of user performing the action
+            share_id: ID of the share (optional, e.g., for creation before ID exists)
+            affected_user_id: ID of user affected by action (optional)
+            metadata: Dict with additional context (will be JSON-encoded)
+            ip_address: IP address of actor
+            user_agent: User agent string
+        """
+        import json
+
+        log_entry = cls(
+            share_id=share_id,
+            bill_id=bill_id,
+            action=action,
+            actor_user_id=actor_user_id,
+            affected_user_id=affected_user_id,
+            extra_data=json.dumps(metadata) if metadata else None,
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        return log_entry
 
 
 class TelemetrySubmission(db.Model):

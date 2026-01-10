@@ -462,15 +462,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /shares/pending:
+  /shared-bills/pending:
     get:
       tags: [Bill Shares]
       summary: Get pending shares for current user
-      description: Returns all shares pending acceptance by the current user
+      description: Returns all bill shares pending acceptance by the current user across all databases
       security:
         - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/XDatabase'
       responses:
         '200':
           description: List of pending shares
@@ -535,33 +533,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
 
-  /shares/{share_id}/revoke:
-    post:
-      tags: [Bill Shares]
-      summary: Revoke a share (owner only)
-      description: Revoke a bill share. Only the bill owner can revoke shares.
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: share_id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: Share revoked
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-        '403':
-          description: Only bill owner can revoke shares
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
   /shares/{share_id}/mark-paid:
     post:
       tags: [Bill Shares]
@@ -597,6 +568,235 @@ paths:
                         format: date-time
         '403':
           description: Only share recipient can mark their portion as paid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /shares/{share_id}:
+    put:
+      tags: [Bill Shares]
+      summary: Update share split configuration (owner only)
+      description: Update the split type and value for an existing share. Only the bill owner can update shares.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: share_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                split_type:
+                  type: string
+                  enum: [percentage, fixed, equal, null]
+                  description: How to split the bill (null for full amount)
+                split_value:
+                  type: number
+                  nullable: true
+                  description: Split amount (required for percentage and fixed types)
+      responses:
+        '200':
+          description: Share updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "Share updated"
+        '403':
+          description: Only bill owner can update shares
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Bill Shares]
+      summary: Revoke/delete a share (owner only)
+      description: Revoke or permanently delete a bill share. Only the bill owner can delete shares.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: share_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Share revoked/deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "Share revoked"
+        '403':
+          description: Only bill owner can delete shares
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /shares/{share_id}/leave:
+    post:
+      tags: [Bill Shares]
+      summary: Leave a shared bill (recipient only)
+      description: Allows a share recipient to leave a shared bill
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: share_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Successfully left the share
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "You have left the shared bill"
+        '403':
+          description: Only share recipient can leave
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /share-info:
+    get:
+      tags: [Bill Shares]
+      summary: Get share invitation details by token (public)
+      description: Retrieve information about a share invitation using the invite token. No authentication required.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The invitation token
+      responses:
+        '200':
+          description: Share invitation details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      bill_name:
+                        type: string
+                      bill_amount:
+                        type: number
+                      owner:
+                        type: string
+                        description: Username of bill owner
+                      split_type:
+                        type: string
+                        enum: [percentage, fixed, equal]
+                        nullable: true
+                      split_value:
+                        type: number
+                        nullable: true
+                      my_portion:
+                        type: number
+                        nullable: true
+                        description: Calculated portion amount
+                      expires_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+        '404':
+          description: Invalid or expired invitation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /share/accept-by-token:
+    post:
+      tags: [Bill Shares]
+      summary: Accept share invitation by token
+      description: Accept a bill share invitation using the invite token. Requires authentication.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: The invitation token
+      responses:
+        '200':
+          description: Share accepted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "Share accepted"
+                      share_id:
+                        type: integer
+        '404':
+          description: Invalid invitation token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Invitation already accepted or expired
           content:
             application/json:
               schema:
