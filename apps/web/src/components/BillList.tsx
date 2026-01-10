@@ -14,10 +14,11 @@ import {
   Menu,
   Pagination,
 } from '@mantine/core';
-import { IconEdit, IconCash, IconPlus, IconFilterOff, IconSearch, IconX, IconDownload, IconFileTypeCsv, IconFileTypePdf } from '@tabler/icons-react';
-import { exportBillsToCSV, exportBillsToPDF } from '../utils/export';
+import { IconEdit, IconCash, IconPlus, IconFilterOff, IconSearch, IconX, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter, IconCheck } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
+import { exportBillsToCSV, exportBillsToPDF, printBills } from '../utils/export';
 import type { Bill } from '../api/client';
-import { getAccounts } from '../api/client';
+import { getAccounts, markSharePaid } from '../api/client';
 import { BillIcon } from './BillIcon';
 import type { BillFilter } from '../App';
 
@@ -35,6 +36,7 @@ interface BillListProps {
   onSearchChange?: (query: string) => void;
   filter: BillFilter;
   onFilterChange: (filter: BillFilter) => void;
+  onRefresh?: () => void;
 }
 
 function getFrequencyText(bill: Bill): string {
@@ -113,6 +115,7 @@ export function BillList({
   onSearchChange,
   filter,
   onFilterChange,
+  onRefresh,
 }: BillListProps) {
   // Accounts list for filtering
   const [accounts, setAccounts] = useState<string[]>([]);
@@ -120,6 +123,27 @@ export function BillList({
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 15;
+
+  // Handler for marking shared bill portion as paid
+  const handleMarkPaid = async (bill: Bill) => {
+    if (!bill.is_shared || !bill.share_info) return;
+
+    try {
+      await markSharePaid(bill.share_info.share_id);
+      notifications.show({
+        title: 'Success',
+        message: bill.share_info.my_portion_paid ? 'Marked as unpaid' : 'Marked as paid',
+        color: 'green',
+      });
+      onRefresh?.();
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: 'Failed to update payment status',
+        color: 'red',
+      });
+    }
+  };
 
   // Fetch accounts list when logged in
   useEffect(() => {
@@ -205,7 +229,7 @@ export function BillList({
 
   return (
     <Stack gap="md">
-      <Group justify="space-between">
+      <Group justify="space-between" className="no-print">
         <Group gap="sm">
           <Select
             placeholder="All types"
@@ -279,6 +303,15 @@ export function BillList({
               >
                 Export as PDF
               </Menu.Item>
+              <Menu.Item
+                leftSection={<IconPrinter size={16} />}
+                onClick={() => {
+                  printBills(bills);
+                  window.umami?.track('print_bills');
+                }}
+              >
+                Print
+              </Menu.Item>
             </Menu.Dropdown>
           </Menu>
           <Button leftSection={<IconPlus size={16} />} onClick={onAdd} size="sm">
@@ -295,7 +328,7 @@ export function BillList({
               <Table.Th>Amount</Table.Th>
               <Table.Th>Due Date</Table.Th>
               <Table.Th>Frequency</Table.Th>
-              <Table.Th>Actions</Table.Th>
+              <Table.Th className="no-print">Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -305,7 +338,12 @@ export function BillList({
                 style={{
                   cursor: 'pointer',
                   opacity: bill.archived ? 0.6 : 1,
-                  backgroundColor: bill.archived ? 'var(--mantine-color-gray-light)' : undefined,
+                  backgroundColor: bill.archived
+                    ? 'var(--mantine-color-gray-light)'
+                    : bill.is_shared
+                    ? 'var(--mantine-color-blue-0)'
+                    : undefined,
+                  borderLeft: bill.is_shared ? '3px solid var(--mantine-color-blue-6)' : undefined,
                 }}
                 onClick={() => onViewPayments(bill)}
               >
@@ -322,6 +360,11 @@ export function BillList({
                         >
                           {bill.type === 'deposit' ? 'Deposit' : 'Expense'}
                         </Badge>
+                        {bill.is_shared && bill.share_info && (
+                          <Badge size="xs" color="violet" variant="filled">
+                            Shared by {bill.share_info.owner_name}
+                          </Badge>
+                        )}
                         {bill.account && (
                           <Badge size="xs" variant="dot" color="cyan">
                             {bill.account}
@@ -337,6 +380,11 @@ export function BillList({
                             Auto-pay
                           </Badge>
                         )}
+                        {bill.is_shared && bill.share_info?.my_portion_paid && (
+                          <Badge size="xs" color="green" variant="filled">
+                            My portion paid
+                          </Badge>
+                        )}
                       </Group>
                     </div>
                   </Group>
@@ -350,9 +398,16 @@ export function BillList({
                       </Text>
                     </Text>
                   ) : (
-                    <Text fw={500} c={bill.type === 'deposit' ? 'green' : 'red'}>
-                      ${(bill.amount || 0).toFixed(2)}
-                    </Text>
+                    <>
+                      <Text fw={500} c={bill.type === 'deposit' ? 'green' : 'red'}>
+                        ${(bill.amount || 0).toFixed(2)}
+                      </Text>
+                      {bill.is_shared && bill.share_info?.my_portion !== null && bill.share_info?.my_portion !== undefined && (
+                        <Text size="xs" c="dimmed">
+                          My portion: ${bill.share_info.my_portion.toFixed(2)}
+                        </Text>
+                      )}
+                    </>
                   )}
                 </Table.Td>
                 <Table.Td>
@@ -365,24 +420,38 @@ export function BillList({
                     {getFrequencyText(bill)}
                   </Text>
                 </Table.Td>
-                <Table.Td>
+                <Table.Td className="no-print">
                   <Group gap="xs" onClick={(e) => e.stopPropagation()}>
-                    <ActionIcon
-                      variant="subtle"
-                      color="blue"
-                      onClick={() => onEdit(bill)}
-                      title="Edit"
-                    >
-                      <IconEdit size={18} />
-                    </ActionIcon>
-                    <ActionIcon
-                      variant="filled"
-                      color="green"
-                      onClick={() => onPay(bill)}
-                      title="Pay"
-                    >
-                      <IconCash size={18} />
-                    </ActionIcon>
+                    {!bill.is_shared && (
+                      <>
+                        <ActionIcon
+                          variant="subtle"
+                          color="blue"
+                          onClick={() => onEdit(bill)}
+                          title="Edit"
+                        >
+                          <IconEdit size={18} />
+                        </ActionIcon>
+                        <ActionIcon
+                          variant="filled"
+                          color="green"
+                          onClick={() => onPay(bill)}
+                          title="Pay"
+                        >
+                          <IconCash size={18} />
+                        </ActionIcon>
+                      </>
+                    )}
+                    {bill.is_shared && bill.share_info && (
+                      <ActionIcon
+                        variant={bill.share_info.my_portion_paid ? 'filled' : 'outline'}
+                        color="green"
+                        onClick={() => handleMarkPaid(bill)}
+                        title={bill.share_info.my_portion_paid ? 'Mark as unpaid' : 'Mark my portion as paid'}
+                      >
+                        <IconCheck size={18} />
+                      </ActionIcon>
+                    )}
                   </Group>
                 </Table.Td>
               </Table.Tr>

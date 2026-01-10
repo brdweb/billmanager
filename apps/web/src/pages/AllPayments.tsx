@@ -21,13 +21,13 @@ import {
 import { DatePickerInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
 import { BarChart } from '@mantine/charts';
-import { IconSearch, IconX, IconArrowLeft, IconChartBar, IconChevronDown, IconChevronUp, IconDownload, IconFileTypeCsv, IconFileTypePdf } from '@tabler/icons-react';
+import { IconSearch, IconX, IconArrowLeft, IconChartBar, IconChevronDown, IconChevronUp, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { getAllPayments, updatePayment, deletePayment } from '../api/client';
 import type { PaymentWithBill } from '../api/client';
 import { BillIcon } from '../components/BillIcon';
 import { IconEdit, IconTrash, IconCheck } from '@tabler/icons-react';
-import { exportPaymentsToCSV, exportPaymentsToPDF } from '../utils/export';
+import { exportPaymentsToCSV, exportPaymentsToPDF, printPayments } from '../utils/export';
 import { parseLocalDate, formatDateString, formatDateForAPI } from '../utils/date';
 
 interface MonthlyChartData {
@@ -67,7 +67,7 @@ export function AllPayments() {
     setLoading(true);
     try {
       const response = await getAllPayments();
-      setPayments(response);
+      setPayments(Array.isArray(response) ? response : []);
     } catch (error) {
       console.error('Failed to fetch payments:', error);
     } finally {
@@ -87,12 +87,18 @@ export function AllPayments() {
 
     // Filter by date range
     if (dateFrom) {
-      result = result.filter((p) => parseLocalDate(p.payment_date) >= dateFrom);
+      result = result.filter((p) => {
+        const date = parseLocalDate(p.payment_date);
+        return date && date >= dateFrom;
+      });
     }
     if (dateTo) {
       const endDate = new Date(dateTo);
       endDate.setHours(23, 59, 59, 999);
-      result = result.filter((p) => parseLocalDate(p.payment_date) <= endDate);
+      result = result.filter((p) => {
+        const date = parseLocalDate(p.payment_date);
+        return date && date <= endDate;
+      });
     }
 
     // Filter by amount range
@@ -106,10 +112,20 @@ export function AllPayments() {
     // Sort
     switch (sortBy) {
       case 'date_desc':
-        result.sort((a, b) => parseLocalDate(b.payment_date).getTime() - parseLocalDate(a.payment_date).getTime());
+        result.sort((a, b) => {
+          const dateA = parseLocalDate(a.payment_date);
+          const dateB = parseLocalDate(b.payment_date);
+          if (!dateA || !dateB) return 0;
+          return dateB.getTime() - dateA.getTime();
+        });
         break;
       case 'date_asc':
-        result.sort((a, b) => parseLocalDate(a.payment_date).getTime() - parseLocalDate(b.payment_date).getTime());
+        result.sort((a, b) => {
+          const dateA = parseLocalDate(a.payment_date);
+          const dateB = parseLocalDate(b.payment_date);
+          if (!dateA || !dateB) return 0;
+          return dateA.getTime() - dateB.getTime();
+        });
         break;
       case 'amount_desc':
         result.sort((a, b) => b.amount - a.amount);
@@ -198,6 +214,7 @@ export function AllPayments() {
 
     filteredPayments.forEach((p) => {
       const date = parseLocalDate(p.payment_date);
+      if (!date) return; // Skip invalid dates
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       monthlyTotals[key] = (monthlyTotals[key] || 0) + p.amount;
     });
@@ -250,13 +267,22 @@ export function AllPayments() {
               >
                 Export as PDF
               </Menu.Item>
+              <Menu.Item
+                leftSection={<IconPrinter size={16} />}
+                onClick={() => {
+                  printPayments(filteredPayments, { from: dateFrom || undefined, to: dateTo || undefined });
+                  window.umami?.track('print_payments');
+                }}
+              >
+                Print
+              </Menu.Item>
             </Menu.Dropdown>
           </Menu>
         </Group>
       </Group>
 
       {/* Filters */}
-      <Paper p="md" withBorder>
+      <Paper p="md" withBorder className="no-print">
         <Stack gap="sm">
           <Group grow>
             <TextInput
@@ -395,7 +421,7 @@ export function AllPayments() {
                 <Table.Th>Bill</Table.Th>
                 <Table.Th>Date</Table.Th>
                 <Table.Th>Amount</Table.Th>
-                <Table.Th>Actions</Table.Th>
+                <Table.Th className="no-print">Actions</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -434,7 +460,7 @@ export function AllPayments() {
                       <Text fw={500}>${payment.amount.toFixed(2)}</Text>
                     )}
                   </Table.Td>
-                  <Table.Td>
+                  <Table.Td className="no-print">
                     {editingId === payment.id ? (
                       <Group gap="xs">
                         <ActionIcon color="green" variant="subtle" onClick={handleSaveEdit} title="Save">

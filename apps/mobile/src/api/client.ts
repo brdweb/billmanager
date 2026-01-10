@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { ApiResponse, LoginResponse, Bill, Payment, SyncResponse, SyncPushRequest, SyncPushResponse, DeviceInfo, MonthlyStats, DatabaseInfo, AdminUser, Invitation, DatabaseWithAccess, User, SubscriptionStatus, BillingUsage } from '../types';
+import { ApiResponse, LoginResponse, Bill, Payment, SyncResponse, SyncPushRequest, SyncPushResponse, DeviceInfo, MonthlyStats, DatabaseInfo, AdminUser, Invitation, DatabaseWithAccess, User, SubscriptionStatus, BillingUsage, BillShare, SharedBill, PendingShare, UserSearchResult } from '../types';
 
 // Storage keys
 const ACCESS_TOKEN_KEY = 'billmanager_access_token';
@@ -354,6 +354,17 @@ class BillManagerApi {
     }
   }
 
+  // ============ Bill Sharing ============
+
+  async markSharePaid(shareId: number): Promise<ApiResponse<{ recipient_paid_date: string | null }>> {
+    try {
+      const response = await this.client.post<ApiResponse<{ recipient_paid_date: string | null }>>(`/shares/${shareId}/mark-paid`);
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
   // ============ Sync ============
 
   async syncFull(): Promise<ApiResponse<SyncResponse>> {
@@ -681,6 +692,110 @@ class BillManagerApi {
   async optOutTelemetry(): Promise<ApiResponse<void>> {
     try {
       const response = await this.client.post<ApiResponse<void>>('/telemetry/opt-out');
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // ============ Bill Sharing ============
+
+  async shareBill(billId: number, data: {
+    identifier: string;
+    split_type?: 'percentage' | 'fixed' | 'equal' | null;
+    split_value?: number | null;
+  }): Promise<ApiResponse<{ share_id: number; status: string; message: string }>> {
+    try {
+      const response = await this.client.post<ApiResponse<{ share_id: number; status: string; message: string }>>(
+        `/bills/${billId}/share`,
+        data
+      );
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async getBillShares(billId: number): Promise<ApiResponse<BillShare[]>> {
+    try {
+      const response = await this.client.get<ApiResponse<BillShare[]>>(`/bills/${billId}/shares`);
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async revokeShare(shareId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await this.client.delete<ApiResponse<void>>(`/shares/${shareId}`);
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async updateShare(shareId: number, data: {
+    split_type?: string | null;
+    split_value?: number | null;
+  }): Promise<ApiResponse<void>> {
+    try {
+      const response = await this.client.put<ApiResponse<void>>(`/shares/${shareId}`, data);
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async getSharedBills(): Promise<ApiResponse<SharedBill[]>> {
+    try {
+      const response = await this.client.get<ApiResponse<SharedBill[]>>('/shared-bills');
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async getPendingShares(): Promise<ApiResponse<PendingShare[]>> {
+    try {
+      const response = await this.client.get<ApiResponse<PendingShare[]>>('/shared-bills/pending');
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async acceptShare(shareId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await this.client.post<ApiResponse<void>>(`/shares/${shareId}/accept`);
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async declineShare(shareId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await this.client.post<ApiResponse<void>>(`/shares/${shareId}/decline`);
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async leaveShare(shareId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await this.client.post<ApiResponse<void>>(`/shares/${shareId}/leave`);
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async searchUsers(query: string): Promise<ApiResponse<UserSearchResult[]>> {
+    try {
+      const response = await this.client.get<ApiResponse<UserSearchResult[]>>(
+        `/users/search?q=${encodeURIComponent(query)}`
+      );
       return response.data;
     } catch (error) {
       return this.handleError(error);

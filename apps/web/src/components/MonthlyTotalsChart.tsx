@@ -47,10 +47,14 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
         const key = `${year}-${month}`;
         const label = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
 
+        // API returns {deposits, expenses} per month - use expenses for spending trends
+        const monthData = monthlyData[key];
+        const total = monthData ? monthData.expenses : 0;
+
         months.push({
           month: key,
           label,
-          total: monthlyData[key] || 0,
+          total,
         });
       }
 

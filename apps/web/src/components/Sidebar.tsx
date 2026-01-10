@@ -18,7 +18,7 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange, onShowChart
   // Month offset: 0 = current month, -1 = last month, etc.
   const [monthOffset, setMonthOffset] = useState(0);
   // Monthly payment totals from API (keyed by "YYYY-MM")
-  const [monthlyPayments, setMonthlyPayments] = useState<Record<string, number>>({});
+  const [monthlyPayments, setMonthlyPayments] = useState<Record<string, {deposits: number, expenses: number}>>({});
   const [paymentsLoading, setPaymentsLoading] = useState(false);
 
   // Fetch monthly payment totals when logged in
@@ -86,7 +86,7 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange, onShowChart
     // If 'amount' in payments table includes deposits, we have a problem.
     // Let's assume for this step we use the API value, but strictly we might need a backend change to separate income/expense in monthly totals.
     // For now, let's use the provided monthlyPayments.
-    const paid = monthlyPayments[monthKey] || 0;
+    const paid = monthlyPayments[monthKey]?.expenses || 0;
 
     // 2. Remaining: Bills due in this month that haven't been paid yet
     // Filter for expenses only

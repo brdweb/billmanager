@@ -49,7 +49,7 @@ export function DatabasesTab() {
     setLoading(true);
     try {
       const response = await getDatabases();
-      setDatabases(response ?? []);
+      setDatabases(Array.isArray(response) ? response : []);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : 'Failed to load bill groups';
       notifications.show({

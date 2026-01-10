@@ -9,6 +9,7 @@ import {
   TextInput,
   Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, X } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { BillIcon, availableIcons } from './BillIcon';
@@ -27,9 +28,10 @@ const COLS = Math.floor((width - 32) / (ICON_SIZE + GAP));
 
 export default function IconPicker({ visible, onClose, onSelect, currentIcon }: IconPickerProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
 
-  const styles = createStyles(colors);
+  const styles = createStyles(colors, insets.top);
 
   const filteredIcons = availableIcons.filter((icon) =>
     icon.toLowerCase().includes(searchQuery.toLowerCase())
@@ -101,10 +103,11 @@ export default function IconPicker({ visible, onClose, onSelect, currentIcon }: 
   );
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
+const createStyles = (colors: any, topInset: number) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+    paddingTop: topInset,
   },
   header: {
     flexDirection: 'row',
