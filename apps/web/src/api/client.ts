@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios';
+import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import { TokenStorage } from '../utils/tokenStorage';
 
 const api = axios.create({
@@ -92,7 +92,7 @@ function getErrorMessage(error: AxiosError): string {
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as any;
+    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
 
     // Log errors in development
     if (import.meta.env.DEV) {

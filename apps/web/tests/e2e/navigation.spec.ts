@@ -59,9 +59,6 @@ test.describe('Navigation and Database Selection', () => {
       const dbOptions = await dbSelector.locator('option').count();
 
       if (dbOptions > 1) {
-        // Get current value
-        const currentValue = await dbSelector.inputValue();
-
         // Switch to different database
         await dbSelector.selectOption({ index: 1 });
         await page.waitForTimeout(1000);

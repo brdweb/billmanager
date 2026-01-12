@@ -192,7 +192,7 @@ function App() {
       // Process auto-payments first (ignore errors - admin only feature)
       try {
         await api.processAutoPayments();
-      } catch (autoPayError) {
+      } catch {
         // Silently ignore auto-payment errors (403 for non-admins is expected)
       }
 

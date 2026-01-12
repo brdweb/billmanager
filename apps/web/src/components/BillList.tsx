@@ -145,7 +145,7 @@ export function BillList({
       });
       onRefresh?.();
       setConfirmPayBill(null);
-    } catch (error) {
+    } catch {
       notifications.show({
         title: 'Error',
         message: 'Failed to update payment status',
