@@ -4284,7 +4284,7 @@ def cleanup_expired_shares():
         logger.error(f"Failed to cleanup expired shares: {e}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to cleanup expired shares'
         }), 500
 
 
