@@ -14,8 +14,9 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Use PostgreSQL test database (same as local dev)
-os.environ['DATABASE_URL'] = 'postgresql://billsuser:billspass@192.168.40.240:5432/bills_test'
+# Use PostgreSQL test database - CI sets DATABASE_URL, local dev uses default
+if 'DATABASE_URL' not in os.environ:
+    os.environ['DATABASE_URL'] = 'postgresql://billsuser:billspass@192.168.40.240:5432/bills_test'
 os.environ['FLASK_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 os.environ['FLASK_ENV'] = 'testing'
 
