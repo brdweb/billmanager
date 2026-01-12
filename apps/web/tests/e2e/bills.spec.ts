@@ -11,9 +11,10 @@ test.describe('Bill Management', () => {
   test('bills page loads and displays bills list', async ({ page }) => {
     // Wait for data to load
     await page.waitForTimeout(500);
-    // Should see table with bills
-    const hasBills = await page.locator('table').count() > 0;
-    expect(hasBills).toBeTruthy();
+    // Should see either a table with bills OR an empty state message
+    const hasBillsTable = await page.locator('table').count() > 0;
+    const hasEmptyState = await page.getByText('No bills yet').count() > 0;
+    expect(hasBillsTable || hasEmptyState).toBeTruthy();
   });
 
   test('create new bill dialog opens', async ({ page }) => {

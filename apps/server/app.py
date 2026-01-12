@@ -18,7 +18,7 @@ from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from sqlalchemy import func, extract, desc
 
-from models import db, User, Database, Bill, Payment, RefreshToken, Subscription, UserInvite, UserDevice, BillShare
+from models import db, User, Database, Bill, Payment, RefreshToken, Subscription, UserInvite, UserDevice, BillShare, ShareAuditLog
 from migration import migrate_sqlite_to_pg
 from db_migrations import run_pending_migrations
 from services.email import send_verification_email, send_password_reset_email, send_welcome_email, send_invite_email
@@ -4308,8 +4308,10 @@ def jwt_sync_push():
                 continue
 
             # Conflict check: compare timestamps
+            # Normalize to naive UTC for comparison (PostgreSQL returns naive datetimes)
             server_time = bill.last_updated
-            if client_time and server_time and client_time < server_time:
+            client_time_naive = client_time.replace(tzinfo=None) if client_time and client_time.tzinfo else client_time
+            if client_time_naive and server_time and client_time_naive < server_time:
                 # Server wins - client data is stale
                 rejected_bills.append({
                     'id': bill_id,

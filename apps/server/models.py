@@ -100,7 +100,10 @@ class User(db.Model):
             return False
         if self.email_verification_token != token:
             return False
-        if datetime.now(timezone.utc) > self.email_verification_expires:
+        # Normalize comparison (database may return naive datetimes)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        expires = self.email_verification_expires.replace(tzinfo=None) if self.email_verification_expires.tzinfo else self.email_verification_expires
+        if now > expires:
             return False
         return True
 
@@ -110,7 +113,10 @@ class User(db.Model):
             return False
         if self.password_reset_token != token:
             return False
-        if datetime.now(timezone.utc) > self.password_reset_expires:
+        # Normalize comparison (database may return naive datetimes)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        expires = self.password_reset_expires.replace(tzinfo=None) if self.password_reset_expires.tzinfo else self.password_reset_expires
+        if now > expires:
             return False
         return True
 
@@ -122,7 +128,10 @@ class User(db.Model):
     def is_trial_active(self):
         if not self.trial_ends_at:
             return False
-        return datetime.now(timezone.utc) < self.trial_ends_at
+        # Normalize comparison (database may return naive datetimes)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        trial_end = self.trial_ends_at.replace(tzinfo=None) if self.trial_ends_at.tzinfo else self.trial_ends_at
+        return now < trial_end
 
     @property
     def has_active_subscription(self):
@@ -251,7 +260,10 @@ class UserInvite(db.Model):
 
     @property
     def is_expired(self):
-        return datetime.now(timezone.utc) > self.expires_at
+        # Normalize comparison (database may return naive datetimes)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        expires = self.expires_at.replace(tzinfo=None) if self.expires_at.tzinfo else self.expires_at
+        return now > expires
 
     @property
     def is_accepted(self):
@@ -306,7 +318,10 @@ class Subscription(db.Model):
             return False
         if not self.trial_ends_at:
             return False
-        return datetime.now(timezone.utc) > self.trial_ends_at
+        # Normalize comparison (database may return naive datetimes)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        trial_end = self.trial_ends_at.replace(tzinfo=None) if self.trial_ends_at.tzinfo else self.trial_ends_at
+        return now > trial_end
 
     @property
     def effective_tier(self):
@@ -324,7 +339,10 @@ class Subscription(db.Model):
     def days_until_renewal(self):
         if not self.current_period_end:
             return None
-        delta = self.current_period_end - datetime.now(timezone.utc)
+        # Normalize comparison (database may return naive datetimes)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        period_end = self.current_period_end.replace(tzinfo=None) if self.current_period_end.tzinfo else self.current_period_end
+        delta = period_end - now
         return max(0, delta.days)
 
     @property
@@ -334,7 +352,10 @@ class Subscription(db.Model):
             return None
         if not self.is_trialing:
             return None
-        delta = self.trial_ends_at - datetime.now(timezone.utc)
+        # Normalize comparison (database may return naive datetimes)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        trial_end = self.trial_ends_at.replace(tzinfo=None) if self.trial_ends_at.tzinfo else self.trial_ends_at
+        delta = trial_end - now
         return max(0, delta.days)
 
     @property
@@ -345,7 +366,10 @@ class Subscription(db.Model):
         if not self.current_period_end:
             return False
         # If canceled but current period hasn't ended yet
-        return datetime.now(timezone.utc) < self.current_period_end
+        # Normalize comparison (database may return naive datetimes)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        period_end = self.current_period_end.replace(tzinfo=None) if self.current_period_end.tzinfo else self.current_period_end
+        return now < period_end
 
 
 class TelemetryLog(db.Model):
@@ -418,8 +442,12 @@ class BillShare(db.Model):
         """Check if share invitation is pending and not expired"""
         if self.status != 'pending':
             return False
-        if self.expires_at and datetime.now(timezone.utc) > self.expires_at:
-            return False
+        if self.expires_at:
+            # Normalize comparison (database may return naive datetimes)
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            expires = self.expires_at.replace(tzinfo=None) if self.expires_at.tzinfo else self.expires_at
+            if now > expires:
+                return False
         return True
 
     @property
@@ -427,7 +455,10 @@ class BillShare(db.Model):
         """Check if share invitation has expired"""
         if not self.expires_at:
             return False
-        return datetime.now(timezone.utc) > self.expires_at
+        # Normalize comparison (database may return naive datetimes)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        expires = self.expires_at.replace(tzinfo=None) if self.expires_at.tzinfo else self.expires_at
+        return now > expires
 
     @property
     def is_recipient_paid(self):
@@ -445,9 +476,11 @@ class BillShare(db.Model):
         if self.split_type == 'equal':
             return self.bill.amount / 2
         if self.split_type == 'percentage' and self.split_value:
-            return self.bill.amount * (self.split_value / 100)
+            # Convert Decimal to float for arithmetic (split_value is Numeric)
+            return self.bill.amount * (float(self.split_value) / 100)
         if self.split_type == 'fixed' and self.split_value:
-            return min(self.split_value, self.bill.amount)
+            # Convert Decimal to float for comparison
+            return min(float(self.split_value), self.bill.amount)
         return self.bill.amount
 
     @classmethod
@@ -536,6 +569,13 @@ class ShareAuditLog(db.Model):
             user_agent: User agent string
         """
         import json
+        from decimal import Decimal
+
+        def json_serializer(obj):
+            """Custom JSON serializer for types not handled by default."""
+            if isinstance(obj, Decimal):
+                return float(obj)
+            raise TypeError(f'Object of type {type(obj)} is not JSON serializable')
 
         log_entry = cls(
             share_id=share_id,
@@ -543,7 +583,7 @@ class ShareAuditLog(db.Model):
             action=action,
             actor_user_id=actor_user_id,
             affected_user_id=affected_user_id,
-            extra_data=json.dumps(metadata) if metadata else None,
+            extra_data=json.dumps(metadata, default=json_serializer) if metadata else None,
             ip_address=ip_address,
             user_agent=user_agent
         )

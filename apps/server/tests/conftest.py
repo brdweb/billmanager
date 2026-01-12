@@ -2,7 +2,7 @@
 Pytest fixtures for BillManager tests.
 
 Provides:
-- Test Flask app with SQLite in-memory database
+- Test Flask app with PostgreSQL test database
 - Test client for making requests
 - Pre-created admin user and database
 - JWT auth headers for authenticated requests
@@ -10,14 +10,12 @@ Provides:
 import os
 import sys
 import pytest
-from sqlalchemy import event
-from sqlalchemy.pool import StaticPool
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Override DATABASE_URL before importing app
-os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
+# Use PostgreSQL test database (same as local dev)
+os.environ['DATABASE_URL'] = 'postgresql://billsuser:billspass@192.168.40.240:5432/bills_test'
 os.environ['FLASK_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 os.environ['FLASK_ENV'] = 'testing'
 
@@ -32,17 +30,12 @@ def app():
     application.config.update({
         'TESTING': True,
         'WTF_CSRF_ENABLED': False,
-        # Use StaticPool for SQLite in-memory to share connection across threads
-        'SQLALCHEMY_ENGINE_OPTIONS': {
-            'poolclass': StaticPool,
-            'connect_args': {'check_same_thread': False},
-        },
     })
 
     with application.app_context():
         db.create_all()
         yield application
-        db.drop_all()
+        # Don't drop tables - keep test database intact
 
 
 @pytest.fixture(scope='function')

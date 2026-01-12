@@ -18,9 +18,19 @@ export async function login(page: Page, username: string = 'admin', password: st
     signInButton.waitFor({ timeout: 5000 }).catch(() => {}),
   ]);
 
-  // If already logged in, just verify and return
+  // If already logged in, just verify and dismiss telemetry dialog if present
   if (await logoutButton.isVisible().catch(() => false)) {
     await expect(logoutButton).toBeVisible({ timeout: 5000 });
+
+    // Dismiss telemetry dialog if it appears
+    const telemetryDialog = page.locator('[role="dialog"]:has-text("Usage Statistics")');
+    if (await telemetryDialog.isVisible().catch(() => false)) {
+      const optOutButton = telemetryDialog.locator('button:has-text("Opt Out")');
+      if (await optOutButton.isVisible().catch(() => false)) {
+        await optOutButton.click();
+      }
+      await expect(telemetryDialog).not.toBeVisible({ timeout: 5000 });
+    }
     return;
   }
 
@@ -30,6 +40,18 @@ export async function login(page: Page, username: string = 'admin', password: st
   await page.fill('input[placeholder*="password" i]', password);
   await page.click('button[type="submit"]:has-text("Sign In")');
   await expect(logoutButton).toBeVisible({ timeout: 15000 });
+
+  // Dismiss telemetry dialog if it appears
+  const telemetryDialog = page.locator('[role="dialog"]:has-text("Usage Statistics")');
+  if (await telemetryDialog.isVisible().catch(() => false)) {
+    // Click "Opt Out" or "Accept & Continue" button to dismiss
+    const optOutButton = telemetryDialog.locator('button:has-text("Opt Out")');
+    if (await optOutButton.isVisible().catch(() => false)) {
+      await optOutButton.click();
+    }
+    // Wait for dialog to close
+    await expect(telemetryDialog).not.toBeVisible({ timeout: 5000 });
+  }
 }
 
 /**

@@ -70,6 +70,95 @@ cat > "$REPORT_FILE" << EOF
 EOF
 
 # ============================================================================
+# PHASE 0: TEST DATA SETUP
+# ============================================================================
+
+echo -e "${BLUE}Phase 0: Test Data Setup${NC}"
+echo -e "${BLUE}========================${NC}\n"
+
+echo -e "${YELLOW}Ensuring test user 'admin' exists...${NC}"
+cd "$SERVER_DIR"
+python << 'SETUP_SCRIPT'
+import psycopg
+from werkzeug.security import generate_password_hash
+
+DATABASE_URL = "postgresql://billsuser:billspass@192.168.40.240:5432/bills_test"
+
+conn = psycopg.connect(DATABASE_URL)
+cur = conn.cursor()
+
+# Check if admin user exists
+cur.execute("SELECT id FROM users WHERE username = 'admin'")
+admin_user = cur.fetchone()
+
+if admin_user:
+    print("✓ Admin user already exists")
+    admin_id = admin_user[0]
+else:
+    # Create admin user with password 'admin'
+    password_hash = generate_password_hash('admin')
+    cur.execute("""
+        INSERT INTO users (username, password_hash, role, email, created_at)
+        VALUES ('admin', %s, 'admin', 'admin@test.local', NOW())
+        RETURNING id
+    """, (password_hash,))
+    admin_id = cur.fetchone()[0]
+    conn.commit()
+    print(f"✓ Created admin user (id={admin_id})")
+
+# Check if test database exists for admin
+cur.execute("SELECT id FROM databases WHERE owner_id = %s AND name = 'test_bills'", (admin_id,))
+test_db = cur.fetchone()
+
+if test_db:
+    db_id = test_db[0]
+    print("✓ Test database already exists")
+else:
+    # Create a test database
+    cur.execute("""
+        INSERT INTO databases (name, display_name, owner_id, created_at)
+        VALUES ('test_bills', 'Test Bills', %s, NOW())
+        RETURNING id
+    """, (admin_id,))
+    db_id = cur.fetchone()[0]
+
+    # Grant access to admin user
+    cur.execute("""
+        INSERT INTO user_database_access (user_id, database_id)
+        VALUES (%s, %s)
+    """, (admin_id, db_id))
+    conn.commit()
+    print(f"✓ Created test database (id={db_id})")
+
+# Check if test bills exist
+cur.execute("SELECT COUNT(*) FROM bills WHERE database_id = %s", (db_id,))
+bill_count = cur.fetchone()[0]
+
+if bill_count > 0:
+    print(f"✓ Test bills already exist ({bill_count} bills)")
+else:
+    # Create some test bills
+    import datetime
+    today = datetime.date.today()
+    next_month = (today.replace(day=1) + datetime.timedelta(days=32)).replace(day=15)
+    due_date_1 = next_month.strftime('%Y-%m-%d')
+    due_date_2 = today.replace(day=20).strftime('%Y-%m-%d')
+
+    cur.execute("""
+        INSERT INTO bills (database_id, name, amount, frequency, due_date, type, account, auto_pay, archived)
+        VALUES (%s, 'Test Electric Bill', 150.00, 'monthly', %s, 'bill', 'Checking', false, false),
+               (%s, 'Test Internet', 79.99, 'monthly', %s, 'bill', 'Credit Card', true, false),
+               (%s, 'Test Salary', 3500.00, 'monthly', '2026-01-01', 'deposit', 'Checking', false, false)
+    """, (db_id, due_date_1, db_id, due_date_2, db_id))
+    conn.commit()
+    print("✓ Created 3 test bills")
+
+conn.close()
+SETUP_SCRIPT
+
+echo -e "${GREEN}✓ Test data setup complete${NC}\n"
+
+# ============================================================================
 # PHASE 1: BACKEND TESTS
 # ============================================================================
 
@@ -289,17 +378,23 @@ cd "$WEB_DIR"
 if npx playwright test --reporter=list 2>&1 | tee "$TEST_OUTPUT_DIR/playwright.log"; then
     echo -e "${GREEN}✓ Playwright tests completed${NC}"
 
-    # Parse test results
-    PASSED=$(grep -c "✓" "$TEST_OUTPUT_DIR/playwright.log" || echo "0")
-    FAILED=$(grep -c "✘" "$TEST_OUTPUT_DIR/playwright.log" || echo "0")
-    SKIPPED=$(grep -c "test.skip\|○" "$TEST_OUTPUT_DIR/playwright.log" || echo "0")
+    # Parse test results from Playwright summary line (e.g., "5 skipped\n42 passed")
+    # Use the summary line at end of output which is more reliable
+    PASSED=$(grep -oP '\d+(?= passed)' "$TEST_OUTPUT_DIR/playwright.log" | tail -1)
+    FAILED=$(grep -oP '\d+(?= failed)' "$TEST_OUTPUT_DIR/playwright.log" | tail -1)
+    SKIPPED=$(grep -oP '\d+(?= skipped)' "$TEST_OUTPUT_DIR/playwright.log" | tail -1)
+
+    # Default to 0 if not found
+    PASSED=${PASSED:-0}
+    FAILED=${FAILED:-0}
+    SKIPPED=${SKIPPED:-0}
 
     echo "- ✅ Playwright tests passed: $PASSED" >> "$REPORT_FILE"
-    if [ "$FAILED" != "0" ]; then
+    if [ "$FAILED" -gt 0 ] 2>/dev/null; then
         echo "- ❌ Playwright tests failed: $FAILED" >> "$REPORT_FILE"
     fi
-    if [ "$SKIPPED" != "0" ]; then
-        echo "- ⚠️ Playwright tests skipped: $SKIPPED (features not present)" >> "$REPORT_FILE"
+    if [ "$SKIPPED" -gt 0 ] 2>/dev/null; then
+        echo "- ⚠️ Playwright tests skipped: $SKIPPED (expected - conditional tests)" >> "$REPORT_FILE"
     fi
 
     echo "" >> "$REPORT_FILE"
