@@ -192,6 +192,7 @@ export interface Bill {
   created_at: string;
   avg_amount?: number;
   is_shared: boolean;
+  share_count?: number;  // Number of people this bill is shared with (for owned bills)
   share_info?: {
     share_id: number;
     owner_name: string;
@@ -210,6 +211,11 @@ export interface Payment {
 export interface PaymentWithBill extends Payment {
   bill_name: string;
   bill_icon: string;
+  bill_type?: 'expense' | 'deposit' | 'bill';  // Effective type for categorization
+  original_bill_type?: string;  // Original bill type
+  is_share_payment?: boolean;  // True if this is a shared bill payment
+  is_received_payment?: boolean;  // True if this is money received from a sharee (owner view)
+  notes?: string;
 }
 
 export interface MonthlyBillPayment {

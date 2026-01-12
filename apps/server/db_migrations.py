@@ -371,6 +371,37 @@ def migrate_20260109_01_fix_email_case_sensitivity(db):
     logger.info("Created case-insensitive unique index on bill_shares")
 
 
+def migrate_20260112_01_add_share_id_to_payments(db):
+    """Add share_id column to payments table for tracking shared bill payments."""
+    logger.info("Running migration: 20260112_01_add_share_id_to_payments")
+
+    # Check if column already exists
+    result = db.session.execute(text("""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name='payments'
+        AND column_name='share_id'
+    """))
+
+    if result.fetchone():
+        logger.info("share_id column already exists in payments table")
+        return
+
+    # Add the share_id column with foreign key reference
+    db.session.execute(text('''
+        ALTER TABLE payments
+        ADD COLUMN share_id INTEGER REFERENCES bill_shares(id) ON DELETE SET NULL
+    '''))
+
+    # Add index for faster lookups
+    db.session.execute(text('''
+        CREATE INDEX idx_payments_share_id ON payments(share_id)
+    '''))
+
+    db.session.commit()
+    logger.info("Added share_id column to payments table")
+
+
 def migrate_20260109_02_create_share_audit_log(db):
     """Create share_audit_log table for tracking all share operations"""
     logger.info("Running migration: 20260109_02_create_share_audit_log")
@@ -430,6 +461,7 @@ MIGRATIONS = [
     ('20260108_01', 'Add recipient_paid_date column to bill_shares', migrate_20260108_01_add_recipient_paid_date),
     ('20260109_01', 'Fix email case sensitivity in bill_shares unique constraint', migrate_20260109_01_fix_email_case_sensitivity),
     ('20260109_02', 'Create share_audit_log table for audit trail', migrate_20260109_02_create_share_audit_log),
+    ('20260112_01', 'Add share_id to payments for shared bill payment tracking', migrate_20260112_01_add_share_id_to_payments),
 ]
 
 

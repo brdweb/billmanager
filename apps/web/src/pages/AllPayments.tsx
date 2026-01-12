@@ -17,11 +17,12 @@ import {
   Collapse,
   Menu,
   Pagination,
+  Tooltip,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
 import { BarChart } from '@mantine/charts';
-import { IconSearch, IconX, IconArrowLeft, IconChartBar, IconChevronDown, IconChevronUp, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter } from '@tabler/icons-react';
+import { IconSearch, IconX, IconArrowLeft, IconChartBar, IconChevronDown, IconChevronUp, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter, IconArrowUpRight, IconArrowDownRight } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { getAllPayments, updatePayment, deletePayment } from '../api/client';
 import type { PaymentWithBill } from '../api/client';
@@ -419,80 +420,106 @@ export function AllPayments() {
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Bill</Table.Th>
+                <Table.Th>Type</Table.Th>
                 <Table.Th>Date</Table.Th>
                 <Table.Th>Amount</Table.Th>
                 <Table.Th className="no-print">Actions</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {paginatedPayments.map((payment) => (
-                <Table.Tr key={payment.id}>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <BillIcon icon={payment.bill_icon} size={20} />
-                      <Text>{payment.bill_name}</Text>
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>
-                    {editingId === payment.id ? (
-                      <DatePickerInput
-                        value={editDate}
-                        onChange={(value) => setEditDate(value ? parseLocalDate(value) : null)}
-                        size="xs"
-                        w={140}
-                      />
-                    ) : (
-                      formatDateString(payment.payment_date)
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    {editingId === payment.id ? (
-                      <NumberInput
-                        value={editAmount}
-                        onChange={(val) => setEditAmount(val === '' ? '' : Number(val))}
-                        prefix="$"
-                        decimalScale={2}
-                        fixedDecimalScale
-                        size="xs"
-                        w={100}
-                      />
-                    ) : (
-                      <Text fw={500}>${payment.amount.toFixed(2)}</Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td className="no-print">
-                    {editingId === payment.id ? (
+              {paginatedPayments.map((payment) => {
+                const isDeposit = payment.bill_type === 'deposit';
+                const isReceivedPayment = payment.is_received_payment === true;
+                const canEdit = !isReceivedPayment;
+
+                return (
+                  <Table.Tr key={payment.id}>
+                    <Table.Td>
                       <Group gap="xs">
-                        <ActionIcon color="green" variant="subtle" onClick={handleSaveEdit} title="Save">
-                          <IconCheck size={18} />
-                        </ActionIcon>
-                        <ActionIcon color="gray" variant="subtle" onClick={handleCancelEdit} title="Cancel">
-                          <IconX size={18} />
-                        </ActionIcon>
+                        <BillIcon icon={payment.bill_icon} size={20} />
+                        <Stack gap={0}>
+                          <Text>{payment.bill_name}</Text>
+                          {payment.notes && (
+                            <Text size="xs" c="dimmed">{payment.notes}</Text>
+                          )}
+                        </Stack>
                       </Group>
-                    ) : (
-                      <Group gap="xs">
-                        <ActionIcon
-                          color="blue"
-                          variant="subtle"
-                          onClick={() => handleEdit(payment)}
-                          title="Edit"
-                        >
-                          <IconEdit size={18} />
-                        </ActionIcon>
-                        <ActionIcon
-                          color="red"
-                          variant="subtle"
-                          onClick={() => handleDelete(payment.id)}
-                          title="Delete"
-                        >
-                          <IconTrash size={18} />
-                        </ActionIcon>
-                      </Group>
-                    )}
-                  </Table.Td>
-                </Table.Tr>
-              ))}
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge
+                        size="sm"
+                        variant="light"
+                        color={isDeposit ? 'green' : 'red'}
+                        leftSection={isDeposit ? <IconArrowDownRight size={12} /> : <IconArrowUpRight size={12} />}
+                      >
+                        {isDeposit ? 'Income' : 'Expense'}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      {editingId === payment.id ? (
+                        <DatePickerInput
+                          value={editDate}
+                          onChange={(value) => setEditDate(value ? parseLocalDate(value) : null)}
+                          size="xs"
+                          w={140}
+                        />
+                      ) : (
+                        formatDateString(payment.payment_date)
+                      )}
+                    </Table.Td>
+                    <Table.Td>
+                      {editingId === payment.id ? (
+                        <NumberInput
+                          value={editAmount}
+                          onChange={(val) => setEditAmount(val === '' ? '' : Number(val))}
+                          prefix="$"
+                          decimalScale={2}
+                          fixedDecimalScale
+                          size="xs"
+                          w={100}
+                        />
+                      ) : (
+                        <Text fw={500} c={isDeposit ? 'green' : undefined}>
+                          {isDeposit ? '+' : ''}${payment.amount.toFixed(2)}
+                        </Text>
+                      )}
+                    </Table.Td>
+                    <Table.Td className="no-print">
+                      {editingId === payment.id ? (
+                        <Group gap="xs">
+                          <ActionIcon color="green" variant="subtle" onClick={handleSaveEdit} title="Save">
+                            <IconCheck size={18} />
+                          </ActionIcon>
+                          <ActionIcon color="gray" variant="subtle" onClick={handleCancelEdit} title="Cancel">
+                            <IconX size={18} />
+                          </ActionIcon>
+                        </Group>
+                      ) : canEdit ? (
+                        <Group gap="xs">
+                          <ActionIcon
+                            color="blue"
+                            variant="subtle"
+                            onClick={() => handleEdit(payment)}
+                            title="Edit"
+                          >
+                            <IconEdit size={18} />
+                          </ActionIcon>
+                          <ActionIcon
+                            color="red"
+                            variant="subtle"
+                            onClick={() => handleDelete(payment.id)}
+                            title="Delete"
+                          >
+                            <IconTrash size={18} />
+                          </ActionIcon>
+                        </Group>
+                      ) : (
+                        <Text size="xs" c="dimmed">View only</Text>
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })}
             </Table.Tbody>
           </Table>
 

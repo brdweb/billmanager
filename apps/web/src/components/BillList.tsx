@@ -13,8 +13,11 @@ import {
   Select,
   Menu,
   Pagination,
+  Tooltip,
+  ThemeIcon,
+  Modal,
 } from '@mantine/core';
-import { IconEdit, IconCash, IconPlus, IconFilterOff, IconSearch, IconX, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter, IconCheck } from '@tabler/icons-react';
+import { IconEdit, IconCash, IconPlus, IconFilterOff, IconSearch, IconX, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter, IconUsers } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { exportBillsToCSV, exportBillsToPDF, printBills } from '../utils/export';
 import type { Bill } from '../api/client';
@@ -124,10 +127,15 @@ export function BillList({
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 15;
 
+  // Confirmation modal state for shared bill payment
+  const [confirmPayBill, setConfirmPayBill] = useState<Bill | null>(null);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+
   // Handler for marking shared bill portion as paid
   const handleMarkPaid = async (bill: Bill) => {
     if (!bill.is_shared || !bill.share_info) return;
 
+    setPaymentLoading(true);
     try {
       await markSharePaid(bill.share_info.share_id);
       notifications.show({
@@ -136,12 +144,15 @@ export function BillList({
         color: 'green',
       });
       onRefresh?.();
+      setConfirmPayBill(null);
     } catch (error) {
       notifications.show({
         title: 'Error',
         message: 'Failed to update payment status',
         color: 'red',
       });
+    } finally {
+      setPaymentLoading(false);
     }
   };
 
@@ -340,10 +351,7 @@ export function BillList({
                   opacity: bill.archived ? 0.6 : 1,
                   backgroundColor: bill.archived
                     ? 'var(--mantine-color-gray-light)'
-                    : bill.is_shared
-                    ? 'var(--mantine-color-blue-0)'
                     : undefined,
-                  borderLeft: bill.is_shared ? '3px solid var(--mantine-color-blue-6)' : undefined,
                 }}
                 onClick={() => onViewPayments(bill)}
               >
@@ -351,7 +359,30 @@ export function BillList({
                   <Group gap="sm">
                     <BillIcon icon={bill.icon} size={24} />
                     <div>
-                      <Text fw={500}>{bill.name}</Text>
+                      <Group gap={6} align="center">
+                        <Text fw={500}>{bill.name}</Text>
+                        {/* Sharing indicator icon - inline with bill name */}
+                        {(bill.is_shared || (bill.share_count && bill.share_count > 0)) && (
+                          <Tooltip
+                            label={
+                              bill.is_shared
+                                ? `Shared with you by ${bill.share_info?.owner_name}`
+                                : `Shared with ${bill.share_count} ${bill.share_count === 1 ? 'person' : 'people'}`
+                            }
+                            withArrow
+                          >
+                            <ThemeIcon
+                              size="xs"
+                              radius="xl"
+                              variant="light"
+                              color={bill.is_shared ? 'violet' : 'blue'}
+                              style={{ cursor: 'help' }}
+                            >
+                              <IconUsers size={12} />
+                            </ThemeIcon>
+                          </Tooltip>
+                        )}
+                      </Group>
                       <Group gap={4}>
                         <Badge
                           size="xs"
@@ -362,7 +393,7 @@ export function BillList({
                         </Badge>
                         {bill.is_shared && bill.share_info && (
                           <Badge size="xs" color="violet" variant="filled">
-                            Shared by {bill.share_info.owner_name}
+                            From {bill.share_info.owner_name}
                           </Badge>
                         )}
                         {bill.account && (
@@ -444,12 +475,12 @@ export function BillList({
                     )}
                     {bill.is_shared && bill.share_info && (
                       <ActionIcon
-                        variant={bill.share_info.my_portion_paid ? 'filled' : 'outline'}
+                        variant={bill.share_info.my_portion_paid ? 'light' : 'filled'}
                         color="green"
-                        onClick={() => handleMarkPaid(bill)}
+                        onClick={() => setConfirmPayBill(bill)}
                         title={bill.share_info.my_portion_paid ? 'Mark as unpaid' : 'Mark my portion as paid'}
                       >
-                        <IconCheck size={18} />
+                        <IconCash size={18} />
                       </ActionIcon>
                     )}
                   </Group>
@@ -470,6 +501,45 @@ export function BillList({
           />
         </Group>
       )}
+
+      {/* Confirmation modal for shared bill payment */}
+      <Modal
+        opened={!!confirmPayBill}
+        onClose={() => setConfirmPayBill(null)}
+        title={confirmPayBill?.share_info?.my_portion_paid ? 'Mark as Unpaid' : 'Confirm Payment'}
+        centered
+        size="sm"
+      >
+        {confirmPayBill && confirmPayBill.share_info && (
+          <Stack gap="md">
+            <Text>
+              {confirmPayBill.share_info.my_portion_paid
+                ? `Mark your portion of "${confirmPayBill.name}" as unpaid?`
+                : `Confirm that you have paid your portion of "${confirmPayBill.name}"?`}
+            </Text>
+            {!confirmPayBill.share_info.my_portion_paid && confirmPayBill.share_info.my_portion !== null && (
+              <Paper p="md" withBorder bg="gray.0">
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">Your portion:</Text>
+                  <Text fw={600} size="lg">${confirmPayBill.share_info.my_portion.toFixed(2)}</Text>
+                </Group>
+              </Paper>
+            )}
+            <Group justify="flex-end" gap="sm">
+              <Button variant="default" onClick={() => setConfirmPayBill(null)}>
+                Cancel
+              </Button>
+              <Button
+                color={confirmPayBill.share_info.my_portion_paid ? 'orange' : 'green'}
+                onClick={() => handleMarkPaid(confirmPayBill)}
+                loading={paymentLoading}
+              >
+                {confirmPayBill.share_info.my_portion_paid ? 'Mark Unpaid' : 'Confirm Paid'}
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
     </Stack>
   );
 }

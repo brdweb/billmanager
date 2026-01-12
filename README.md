@@ -4,6 +4,35 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ![BillManager Screenshot](https://docs.billmanager.app/img/screenshot.png)
 
+---
+
+## 🎉 What's New in v3.6.0
+
+**Shared Bills & Split Expenses** - The biggest feature release yet! Now you can share bills with other users and track split payments seamlessly.
+
+### Highlights
+
+- **Share Bills with Anyone** - Share any bill with other BillManager users by username
+- **Flexible Split Options** - Configure splits by percentage (50/50), fixed amount ($500), or equal division
+- **Real-Time Payment Tracking** - See when sharees mark their portion as paid
+- **Automatic Income Recording** - Payments from sharees automatically appear as deposits in your payment history and trends
+- **Protected Transactions** - Sharee payments are view-only for owners; only the person who made the payment can edit or delete it
+- **Visual Indicators** - Shared bills display with a users icon; payment history shows Income vs Expense badges
+
+### For Bill Owners
+- Create a bill, click "Share Bill", enter the sharee's username
+- Configure how the bill is split (percentage, fixed, or equal)
+- Track when your sharee marks their portion as paid
+- See their payments as income in your monthly trends
+
+### For Sharees
+- Accept or decline bill share invitations
+- View the full bill details and your calculated portion
+- Mark your portion as paid with one click
+- Your payment appears in your expense history
+
+---
+
 ## Features
 
 - **Income & Expense Tracking**: Track both recurring bills and deposits to forecast cash flow

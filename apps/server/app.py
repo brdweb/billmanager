@@ -1629,7 +1629,7 @@ def leave_share(share_id):
 @api_bp.route('/shares/<int:share_id>/mark-paid', methods=['POST'])
 @login_required
 def mark_share_paid(share_id):
-    """Mark recipient's portion of shared bill as paid."""
+    """Mark recipient's portion of shared bill as paid and create payment record."""
     share = db.get_or_404(BillShare, share_id)
     current_user_id = session.get('user_id')
 
@@ -1640,21 +1640,45 @@ def mark_share_paid(share_id):
     if share.status != 'accepted':
         return jsonify({'error': 'Share is not active'}), 400
 
+    payment_id = None
+
     # Toggle paid status
     if share.recipient_paid_date:
-        # Already marked as paid, so unmark it
+        # Already marked as paid, so unmark it - delete the associated payment
+        existing_payment = Payment.query.filter_by(share_id=share.id).first()
+        if existing_payment:
+            db.session.delete(existing_payment)
         share.recipient_paid_date = None
         message = 'Marked as unpaid'
     else:
-        # Mark as paid
+        # Mark as paid - create a payment record for tracking
+        portion_amount = share.calculate_portion()
+        if portion_amount is None:
+            portion_amount = share.bill.amount or 0
+
+        # Get recipient's username for the note
+        recipient = db.session.get(User, current_user_id)
+        recipient_name = recipient.username if recipient else 'Unknown'
+
+        payment = Payment(
+            bill_id=share.bill_id,
+            amount=portion_amount,
+            payment_date=datetime.date.today().isoformat(),
+            notes=f"Share payment by {recipient_name}",
+            share_id=share.id
+        )
+        db.session.add(payment)
         share.recipient_paid_date = datetime.datetime.now(datetime.timezone.utc)
         message = 'Marked as paid'
+        db.session.flush()  # Get the payment ID
+        payment_id = payment.id
 
     db.session.commit()
 
     return jsonify({
         'message': message,
-        'recipient_paid_date': share.recipient_paid_date.isoformat() if share.recipient_paid_date else None
+        'recipient_paid_date': share.recipient_paid_date.isoformat() if share.recipient_paid_date else None,
+        'payment_id': payment_id
     })
 
 
@@ -1717,7 +1741,7 @@ def process_auto_payments():
 
 @api_bp.route('/api/version', methods=['GET'])
 def get_version():
-    return jsonify({'version': '3.5.1', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites']})
+    return jsonify({'version': '3.6.0', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites', 'shared_bills']})
 
 @api_bp.route('/ping')
 def ping(): return jsonify({'status': 'ok'})
@@ -2501,6 +2525,19 @@ def jwt_get_bills():
         query = query.filter_by(archived=False)
     owned_bills = query.order_by(Bill.due_date).all()
 
+    # Get share counts for owned bills (how many people each bill is shared with)
+    owned_bill_ids = [b.id for b in owned_bills]
+    share_counts = {}
+    if owned_bill_ids:
+        share_count_query = db.session.query(
+            BillShare.bill_id,
+            func.count(BillShare.id).label('count')
+        ).filter(
+            BillShare.bill_id.in_(owned_bill_ids),
+            BillShare.status.in_(['pending', 'accepted'])
+        ).group_by(BillShare.bill_id).all()
+        share_counts = {row[0]: row[1] for row in share_count_query}
+
     # Get shared bills (bills shared with current user)
     shared_bill_query = db.session.query(Bill).join(
         BillShare, Bill.id == BillShare.bill_id
@@ -2533,7 +2570,8 @@ def jwt_get_bills():
             'frequency_config': bill.frequency_config, 'next_due': bill.due_date,
             'auto_payment': bill.auto_pay, 'icon': bill.icon, 'type': bill.type,
             'account': bill.account, 'notes': bill.notes, 'archived': bill.archived,
-            'is_shared': False
+            'is_shared': False,
+            'share_count': share_counts.get(bill.id, 0)
         }
         if bill.is_variable:
             avg = db.session.query(func.avg(Payment.amount)).filter_by(bill_id=bill.id).scalar()
@@ -2766,7 +2804,8 @@ def jwt_pay_bill(bill_id):
     db.session.add(payment)
 
     if data.get('advance_due', True):
-        next_due = calculate_next_due_date(bill.due_date, bill.frequency, bill.frequency_type, json.loads(bill.frequency_config))
+        freq_config = json.loads(bill.frequency_config) if bill.frequency_config else {}
+        next_due = calculate_next_due_date(bill.due_date, bill.frequency, bill.frequency_type, freq_config)
         bill.due_date = next_due.isoformat()
         bill.archived = False
 
@@ -2776,41 +2815,120 @@ def jwt_pay_bill(bill_id):
 @api_v2_bp.route('/bills/<int:bill_id>/payments', methods=['GET'])
 @jwt_required
 def jwt_get_bill_payments(bill_id):
-    """Get payment history for a bill (JWT version)."""
+    """Get payment history for a bill (JWT version), including for shared bills."""
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
     bill = db.get_or_404(Bill,bill_id)
 
-    if bill.database_id != target_db.id:
+    # Check access: either owns the bill OR has an accepted share
+    has_access = bill.database_id == target_db.id
+    if not has_access:
+        # Check if user has an accepted share for this bill
+        share = BillShare.query.filter_by(
+            bill_id=bill_id,
+            shared_with_user_id=g.jwt_user_id,
+            status='accepted'
+        ).first()
+        has_access = share is not None
+
+    if not has_access:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     payments = Payment.query.filter_by(bill_id=bill_id).order_by(desc(Payment.payment_date)).all()
-    result = [{'id': p.id, 'amount': p.amount, 'payment_date': p.payment_date, 'notes': p.notes} for p in payments]
+    result = [{
+        'id': p.id,
+        'amount': p.amount,
+        'payment_date': p.payment_date,
+        'notes': p.notes,
+        'is_share_payment': p.share_id is not None
+    } for p in payments]
 
     return jsonify({'success': True, 'data': result})
 
 @api_v2_bp.route('/payments', methods=['GET'])
 @jwt_required
 def jwt_get_all_payments():
-    """Get all payments across all bills (JWT version)."""
+    """Get all payments across all bills (JWT version), including shared bill payments."""
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    payments = db.session.query(Payment).join(Bill).filter(Bill.database_id == target_db.id).order_by(desc(Payment.payment_date)).all()
 
-    result = [{
-        'id': p.id,
-        'amount': p.amount,
-        'payment_date': p.payment_date,
-        'notes': p.notes,
-        'bill_id': p.bill_id,
-        'bill_name': p.bill.name,
-        'bill_icon': p.bill.icon,
-        'bill_type': p.bill.type
-    } for p in payments]
+    # Get payments for bills owned by user in current database
+    owned_payments = db.session.query(Payment).join(Bill).filter(
+        Bill.database_id == target_db.id
+    ).all()
+
+    # Get payments for shared bills where current user is the share recipient
+    shared_payments = db.session.query(Payment).join(
+        BillShare, Payment.share_id == BillShare.id
+    ).filter(
+        BillShare.shared_with_user_id == g.jwt_user_id,
+        BillShare.status == 'accepted'
+    ).all()
+
+    # Build result with proper categorization
+    result = []
+    seen_ids = set()
+
+    # Process owned payments
+    for p in owned_payments:
+        if p.id in seen_ids:
+            continue
+        seen_ids.add(p.id)
+
+        # Check if this is a payment received from a sharee (share_id not null on owner's bill)
+        is_received_from_sharee = p.share_id is not None
+
+        # For owner: received share payments are income (deposit), own payments follow bill type
+        if is_received_from_sharee:
+            # Payment from sharee - show as deposit/income for the owner
+            effective_type = 'deposit'
+        else:
+            # Owner's own payment - use bill type (treat 'bill' as 'expense')
+            effective_type = 'deposit' if p.bill.type == 'deposit' else 'expense'
+
+        result.append({
+            'id': p.id,
+            'amount': p.amount,
+            'payment_date': p.payment_date,
+            'notes': p.notes,
+            'bill_id': p.bill_id,
+            'bill_name': p.bill.name,
+            'bill_icon': p.bill.icon,
+            'bill_type': effective_type,  # Use effective type for proper categorization
+            'original_bill_type': p.bill.type,  # Keep original for reference
+            'is_share_payment': is_received_from_sharee,
+            'is_received_payment': is_received_from_sharee  # True = money received from sharee
+        })
+
+    # Process sharee's own share payments (their outgoing expenses)
+    for p in shared_payments:
+        if p.id in seen_ids:
+            continue
+        seen_ids.add(p.id)
+
+        # For sharee: their share payments are expenses (money they paid out)
+        effective_type = 'deposit' if p.bill.type == 'deposit' else 'expense'
+
+        result.append({
+            'id': p.id,
+            'amount': p.amount,
+            'payment_date': p.payment_date,
+            'notes': p.notes,
+            'bill_id': p.bill_id,
+            'bill_name': p.bill.name,
+            'bill_icon': p.bill.icon,
+            'bill_type': effective_type,
+            'original_bill_type': p.bill.type,
+            'is_share_payment': True,
+            'is_received_payment': False  # False = money paid out by sharee
+        })
+
+    # Sort by payment date descending
+    result.sort(key=lambda x: x['payment_date'], reverse=True)
 
     return jsonify({'success': True, 'data': result})
 
@@ -2824,8 +2942,16 @@ def jwt_update_payment(payment_id):
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
     payment = db.get_or_404(Payment,payment_id)
 
-    if payment.bill.database_id != target_db.id:
-        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    # Check access permissions
+    if payment.share_id:
+        # This is a share payment - only the sharee who made it can edit
+        share = db.session.get(BillShare, payment.share_id)
+        if not share or share.shared_with_user_id != g.jwt_user_id:
+            return jsonify({'success': False, 'error': 'Cannot edit payments made by others'}), 403
+    else:
+        # Regular payment - must own the bill's database
+        if payment.bill.database_id != target_db.id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     data = request.get_json(force=True, silent=True)
     if not data:
@@ -2848,8 +2974,18 @@ def jwt_delete_payment(payment_id):
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
     payment = db.get_or_404(Payment,payment_id)
 
-    if payment.bill.database_id != target_db.id:
-        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    # Check access permissions
+    if payment.share_id:
+        # This is a share payment - only the sharee who made it can delete
+        share = db.session.get(BillShare, payment.share_id)
+        if not share or share.shared_with_user_id != g.jwt_user_id:
+            return jsonify({'success': False, 'error': 'Cannot delete payments made by others'}), 403
+        # Also clear the recipient_paid_date on the share since we're deleting the payment
+        share.recipient_paid_date = None
+    else:
+        # Regular payment - must own the bill's database
+        if payment.bill.database_id != target_db.id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     db.session.delete(payment)
     db.session.commit()
@@ -3372,7 +3508,7 @@ def jwt_leave_share(share_id):
 @api_v2_bp.route('/shares/<int:share_id>/mark-paid', methods=['POST'])
 @jwt_required
 def jwt_mark_share_paid(share_id):
-    """Mark recipient's portion of shared bill as paid (recipient only)."""
+    """Mark recipient's portion of shared bill as paid and create payment record."""
     share = db.get_or_404(BillShare, share_id)
 
     # Only the share recipient can mark their portion as paid
@@ -3382,15 +3518,38 @@ def jwt_mark_share_paid(share_id):
     if share.status != 'accepted':
         return jsonify({'success': False, 'error': 'Share is not active'}), 400
 
+    payment_id = None
+
     # Toggle paid status
     if share.recipient_paid_date:
-        # Already marked as paid, so unmark it
+        # Already marked as paid, so unmark it - delete the associated payment
+        existing_payment = Payment.query.filter_by(share_id=share.id).first()
+        if existing_payment:
+            db.session.delete(existing_payment)
         share.recipient_paid_date = None
         message = 'Marked as unpaid'
     else:
-        # Mark as paid
+        # Mark as paid - create a payment record for tracking
+        portion_amount = share.calculate_portion()
+        if portion_amount is None:
+            portion_amount = share.bill.amount or 0
+
+        # Get recipient's username for the note
+        recipient = db.session.get(User, g.jwt_user_id)
+        recipient_name = recipient.username if recipient else 'Unknown'
+
+        payment = Payment(
+            bill_id=share.bill_id,
+            amount=portion_amount,
+            payment_date=datetime.date.today().isoformat(),
+            notes=f"Share payment by {recipient_name}",
+            share_id=share.id
+        )
+        db.session.add(payment)
         share.recipient_paid_date = datetime.datetime.now(datetime.timezone.utc)
         message = 'Marked as paid'
+        db.session.flush()  # Get the payment ID
+        payment_id = payment.id
 
     db.session.commit()
 
@@ -3398,7 +3557,8 @@ def jwt_mark_share_paid(share_id):
         'success': True,
         'data': {
             'message': message,
-            'recipient_paid_date': share.recipient_paid_date.isoformat() if share.recipient_paid_date else None
+            'recipient_paid_date': share.recipient_paid_date.isoformat() if share.recipient_paid_date else None,
+            'payment_id': payment_id
         }
     })
 
@@ -3440,29 +3600,78 @@ def jwt_get_accounts():
 @api_v2_bp.route('/stats/monthly', methods=['GET'])
 @jwt_required
 def jwt_get_monthly_stats():
-    """Get monthly payment totals (JWT version)."""
+    """Get monthly payment totals (JWT version), including shared bill payments."""
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
     target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    results = db.session.query(
+
+    # Get owner's own payments on their bills (share_id IS NULL = owner paid it themselves)
+    owner_payments = db.session.query(
         func.to_char(func.to_date(Payment.payment_date, 'YYYY-MM-DD'), 'YYYY-MM').label('month'),
         func.sum(Payment.amount),
         Bill.type
     ).join(Bill).filter(
-        Bill.database_id == target_db.id
+        Bill.database_id == target_db.id,
+        Payment.share_id == None  # Owner's own payments
+    ).group_by('month', Bill.type).all()
+
+    # Get payments received FROM sharees on owner's bills (share_id IS NOT NULL = sharee paid)
+    # These count as deposits/income for the owner
+    received_from_sharees = db.session.query(
+        func.to_char(func.to_date(Payment.payment_date, 'YYYY-MM-DD'), 'YYYY-MM').label('month'),
+        func.sum(Payment.amount)
+    ).join(Bill).filter(
+        Bill.database_id == target_db.id,
+        Payment.share_id != None  # Payments made by sharees
+    ).group_by('month').all()
+
+    # Get payments for shared bills where current user is the share recipient
+    # These are expenses the sharee paid on bills shared with them
+    sharee_payments = db.session.query(
+        func.to_char(func.to_date(Payment.payment_date, 'YYYY-MM-DD'), 'YYYY-MM').label('month'),
+        func.sum(Payment.amount),
+        Bill.type
+    ).join(Bill).join(
+        BillShare, Payment.share_id == BillShare.id
+    ).filter(
+        BillShare.shared_with_user_id == g.jwt_user_id,
+        BillShare.status == 'accepted'
     ).group_by('month', Bill.type).all()
 
     # Organize by month with expense/deposit breakdown
     monthly = {}
-    for r in results:
+
+    # Process owner's own payments (categorize by bill type)
+    # Note: bill types can be 'expense', 'bill', or 'deposit'
+    # 'bill' type should be treated as an expense (something you pay)
+    for r in owner_payments:
         month = r[0]
         if month not in monthly:
             monthly[month] = {'expenses': 0, 'deposits': 0}
-        if r[2] == 'expense':
-            monthly[month]['expenses'] = float(r[1])
+        if r[2] == 'deposit':
+            monthly[month]['deposits'] += float(r[1])
         else:
-            monthly[month]['deposits'] = float(r[1])
+            # 'expense' and 'bill' types are both expenses
+            monthly[month]['expenses'] += float(r[1])
+
+    # Add payments received from sharees as deposits (income for the owner)
+    for r in received_from_sharees:
+        month = r[0]
+        if month not in monthly:
+            monthly[month] = {'expenses': 0, 'deposits': 0}
+        monthly[month]['deposits'] += float(r[1])
+
+    # Add sharee's own share payments as expenses (money they paid out)
+    for r in sharee_payments:
+        month = r[0]
+        if month not in monthly:
+            monthly[month] = {'expenses': 0, 'deposits': 0}
+        if r[2] == 'deposit':
+            monthly[month]['deposits'] += float(r[1])
+        else:
+            # 'expense' and 'bill' types are both expenses
+            monthly[month]['expenses'] += float(r[1])
 
     return jsonify({'success': True, 'data': monthly})
 
@@ -3943,12 +4152,12 @@ def jwt_get_version():
     return jsonify({
         'success': True,
         'data': {
-            'version': '3.5.1',
+            'version': '3.6.0',
             'api_version': 'v2',
             'license': "O'Saasy",
             'license_url': 'https://osaasy.dev/',
             'deployment_mode': DEPLOYMENT_MODE,
-            'features': ['jwt_auth', 'mobile_api', 'enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites', 'device_management', 'delta_sync', 'conflict_resolution', 'push_notifications']
+            'features': ['jwt_auth', 'mobile_api', 'enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites', 'device_management', 'delta_sync', 'conflict_resolution', 'push_notifications', 'shared_bills']
         }
     })
 

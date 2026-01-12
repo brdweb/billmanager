@@ -188,8 +188,12 @@ class Payment(db.Model):
     amount = db.Column(db.Float, nullable=False)
     payment_date = db.Column(db.String(10), nullable=False) # YYYY-MM-DD
     notes = db.Column(db.Text)
+    share_id = db.Column(db.Integer, db.ForeignKey('bill_shares.id', ondelete='SET NULL'), nullable=True)  # For shared bill payments
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationship to share (for shared bill payments)
+    share = db.relationship('BillShare', backref=db.backref('payments', lazy=True))
 
 
 class RefreshToken(db.Model):

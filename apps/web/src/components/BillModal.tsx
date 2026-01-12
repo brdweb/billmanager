@@ -450,7 +450,7 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
                     leftSection={<IconShare size={16} />}
                     onClick={() => setShareModalOpen(true)}
                   >
-                    Share Bill
+                    {billShares.length > 0 || (bill.share_count && bill.share_count > 0) ? 'Edit Bill Sharing' : 'Share Bill'}
                   </Button>
                 </Group>
 
