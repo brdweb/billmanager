@@ -1,4 +1,5 @@
-import axios, { AxiosError, AxiosRequestConfig } from 'axios';
+import axios, { AxiosError } from 'axios';
+import type { AxiosRequestConfig } from 'axios';
 import { TokenStorage } from '../utils/tokenStorage';
 
 const api = axios.create({
@@ -115,7 +116,9 @@ api.interceptors.response.use(
             TokenStorage.setTokens(response.data.data.access_token, refreshToken);
 
             // Retry original request with new token
-            originalRequest.headers.Authorization = `Bearer ${response.data.data.access_token}`;
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${response.data.data.access_token}`;
+            }
             return api(originalRequest);
           }
         } catch (refreshError) {
