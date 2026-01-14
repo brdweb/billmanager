@@ -308,13 +308,15 @@ Docker Compose uses a named volume for PostgreSQL data:
 - **Forced Password Change**: Admin credentials require immediate password update on first login
 - **Production-Safe Configuration**: Secret keys must be explicitly set in production
 - **Input Validation**: Comprehensive server-side validation for all user inputs
-- **Rate Limiting**: Authentication endpoints protected against brute force attacks
+- **Rate Limiting**: All API endpoints protected with tiered rate limits (60/min reads, 30/min writes)
 - **Row-Level Isolation**: Complete data separation between user groups
-- **Dual Authentication**: Session-based auth for web + JWT for mobile API
+- **JWT Authentication**: Secure token-based authentication for all clients
 - **CORS Protection**: Configurable allowed origins for API security
 - **Password Requirements**: Strong password enforcement (8+ chars, uppercase, lowercase, digit)
 - **Email Verification**: Optional email verification for new accounts
 - **HTTPS Ready**: Deploy behind a reverse proxy (Traefik, nginx, Caddy) for SSL
+- **Content Security Policy**: Strict CSP headers prevent XSS and injection attacks
+- **Secure Token Storage**: Mobile apps use platform-secure storage (Keychain/Keystore) with backup exclusion
 
 ## Technical Details
 
@@ -323,15 +325,15 @@ Docker Compose uses a named volume for PostgreSQL data:
 - **Frontend (Mobile):** React Native + Expo + TypeScript
 - **Backend:** Python 3.12+ + Flask + SQLAlchemy ORM
 - **Database:** PostgreSQL 16 with row-level tenancy
-- **Authentication:** Sessions (web) + JWT (mobile)
+- **Authentication:** JWT tokens (access + refresh)
 - **WSGI Server:** Gunicorn
 - **Deployment:** Docker Compose with persistent volumes
 
 ### API
-- **Web API (v1):** Session-based authentication at `/login`, `/bills`, etc.
-- **Mobile API (v2):** JWT-based authentication at `/api/v2/*`
+- **REST API (v2):** JWT-based authentication at `/api/v2/*`
 - **Documentation:** Interactive Swagger UI at `/api/v2/docs`
-- **Mobile Features:** Delta sync, offline support, device registration, push notifications
+- **Features:** Delta sync, offline support, device registration, push notifications
+- **Legacy API (v1):** Session-based endpoints at `/login`, `/bills`, etc. (deprecated)
 
 ### Key Technologies
 - **Icons:** Tabler Icons (70+ categories)
