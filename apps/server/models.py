@@ -95,10 +95,11 @@ class User(db.Model):
         return self.password_reset_token
 
     def verify_email_token(self, token):
-        """Verify the email verification token"""
+        """Verify the email verification token using constant-time comparison"""
         if not self.email_verification_token or not self.email_verification_expires:
             return False
-        if self.email_verification_token != token:
+        # Use secrets.compare_digest for timing-safe comparison
+        if not secrets.compare_digest(self.email_verification_token, token):
             return False
         # Normalize comparison (database may return naive datetimes)
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -108,10 +109,11 @@ class User(db.Model):
         return True
 
     def verify_password_reset_token(self, token):
-        """Verify the password reset token"""
+        """Verify the password reset token using constant-time comparison"""
         if not self.password_reset_token or not self.password_reset_expires:
             return False
-        if self.password_reset_token != token:
+        # Use secrets.compare_digest for timing-safe comparison
+        if not secrets.compare_digest(self.password_reset_token, token):
             return False
         # Normalize comparison (database may return naive datetimes)
         now = datetime.now(timezone.utc).replace(tzinfo=None)

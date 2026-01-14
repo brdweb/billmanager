@@ -6,7 +6,7 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v3.6.0
+## 🎉 What's New in v3.6.1
 
 **Shared Bills & Split Expenses** - The biggest feature release yet! Now you can share bills with other users and track split payments seamlessly.
 

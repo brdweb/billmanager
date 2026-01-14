@@ -14,11 +14,12 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { History, TrendingUp, TrendingDown, ChevronRight, BarChart3, LineChart, Wallet, Users } from 'lucide-react-native';
-import { BarChart, LineChart as RNLineChart } from 'react-native-chart-kit';
+import { LineChart as RNLineChart } from 'react-native-chart-kit';
+import { BarChart as GiftedBarChart } from 'react-native-gifted-charts';
 import { api } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { MonthlyStats, Bill } from '../types';
+import { ProcessedMonthlyStats, Bill, Payment } from '../types';
 
 type StatsStackParamList = {
   Stats: undefined;
@@ -286,7 +287,7 @@ export default function StatsScreen() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { user, currentDatabase, databases } = useAuth();
-  const [monthlyStats, setMonthlyStats] = useState<any[]>([]);
+  const [monthlyStats, setMonthlyStats] = useState<ProcessedMonthlyStats[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -322,7 +323,7 @@ export default function StatsScreen() {
         paymentsData = paymentsRes.data;
       }
 
-      const processedStats: any[] = [];
+      const processedStats: ProcessedMonthlyStats[] = [];
       const now = new Date();
       
       const months = [];
@@ -411,20 +412,82 @@ export default function StatsScreen() {
 
   const currentDbInfo = databases.find(db => db.name === currentDatabase);
 
-  const chartData = useMemo(() => {
+  // Grouped bar chart data - expenses and income side by side
+  const groupedBarChartData = useMemo(() => {
+    if (!monthlyStats || monthlyStats.length === 0) {
+      return [];
+    }
     const data = [...monthlyStats].reverse().slice(-chartRange);
+    if (data.length === 0) {
+      return [];
+    }
+
+    const barData: any[] = [];
+    data.forEach((d, index) => {
+      const [_, m] = d.month.split('-');
+      const date = new Date(2000, parseInt(m) - 1, 1);
+      const label = date.toLocaleDateString('en-US', { month: 'short' });
+
+      // Expense bar
+      barData.push({
+        value: d.paid || 0,
+        frontColor: colors.danger,
+        label: label,
+        labelTextStyle: { color: colors.textMuted, fontSize: 10 },
+        spacing: 2,
+      });
+
+      // Income bar
+      barData.push({
+        value: d.income || 0,
+        frontColor: colors.success,
+        spacing: chartRange === 6 ? 16 : 8,
+      });
+    });
+
+    return barData;
+  }, [monthlyStats, chartRange, colors.danger, colors.success, colors.textMuted]);
+
+  // Line chart data - supports multiple datasets (expenses + income)
+  const lineChartData = useMemo(() => {
+    if (!monthlyStats || monthlyStats.length === 0) {
+      return {
+        labels: [''],
+        datasets: [{ data: [0], color: (opacity = 1) => colors.danger }],
+      };
+    }
+    const data = [...monthlyStats].reverse().slice(-chartRange);
+    if (data.length === 0) {
+      return {
+        labels: [''],
+        datasets: [{ data: [0], color: (opacity = 1) => colors.danger }],
+      };
+    }
+    const hasAnyIncome = data.some(d => d.income > 0);
+
+    const datasets: Array<{ data: number[]; color: (opacity?: number) => string }> = [{
+      data: data.map(d => d.paid || 0),
+      color: (opacity = 1) => colors.danger,
+    }];
+
+    // Add income dataset only if there's income data to show
+    if (hasAnyIncome) {
+      datasets.push({
+        data: data.map(d => d.income || 0),
+        color: (opacity = 1) => colors.success,
+      });
+    }
+
     return {
       labels: data.map(d => {
         const [_, m] = d.month.split('-');
         const date = new Date(2000, parseInt(m) - 1, 1);
         return date.toLocaleDateString('en-US', { month: 'short' });
       }),
-      datasets: [{
-        data: data.map(d => d.paid),
-        color: (opacity = 1) => colors.danger,
-      }]
+      datasets,
+      legend: hasAnyIncome ? ['Expenses', 'Income'] : ['Expenses'],
     };
-  }, [monthlyStats, chartRange, colors.danger]);
+  }, [monthlyStats, chartRange, colors.danger, colors.success]);
 
   if (isLoading) {
     return (
@@ -434,23 +497,32 @@ export default function StatsScreen() {
     );
   }
 
-  const chartConfig = {
+  const barChartConfig = {
     backgroundGradientFrom: colors.surface,
     backgroundGradientTo: colors.surface,
-    fillShadowGradientFrom: colors.danger,
-    fillShadowGradientTo: colors.danger,
+    color: (opacity = 1) => colors.danger,
+    labelColor: (opacity = 1) => colors.textMuted,
+    barPercentage: 0.6,
+    decimalPlaces: 0,
+    propsForBackgroundLines: {
+      strokeDasharray: "",
+      stroke: colors.border + '40',
+    }
+  };
+
+  const lineChartConfig = {
+    backgroundGradientFrom: colors.surface,
+    backgroundGradientTo: colors.surface,
     fillShadowGradientFromOpacity: 0.2,
     fillShadowGradientToOpacity: 0.05,
     color: (opacity = 1) => colors.danger,
     labelColor: (opacity = 1) => colors.textMuted,
     strokeWidth: 2,
-    barPercentage: 0.7,
-    useShadowColorFromDataset: false,
+    useShadowColorFromDataset: true,
     decimalPlaces: 0,
     propsForDots: {
       r: "4",
       strokeWidth: "2",
-      stroke: colors.danger
     },
     propsForBackgroundLines: {
       strokeDasharray: "",
@@ -564,17 +636,31 @@ export default function StatsScreen() {
 
                         <View style={styles.statsGrid}>
                           <View style={styles.statBox}>
-                                                      <View style={styles.statHeader}>
-                                                        <TrendingDown size={16} color={colors.danger} />
-                                                        <Text style={styles.statLabel}>Paid</Text>
-                                                      </View>
-                                                      <Text style={[styles.statValue, { color: colors.danger }]}>
-                                                        -{formatCurrency(stat.paid)}
-                                                      </Text>
-                                                      {stat.paidCount > 0 && (
-                                                        <Text style={styles.statSubtext}>{stat.paidCount} items</Text>
-                                                      )}
-                                                    </View>
+                            <View style={styles.statHeader}>
+                              <TrendingDown size={16} color={colors.danger} />
+                              <Text style={styles.statLabel}>Paid</Text>
+                            </View>
+                            <Text style={[styles.statValue, { color: colors.danger }]}>
+                              -{formatCurrency(stat.paid)}
+                            </Text>
+                            {stat.paidCount > 0 && (
+                              <Text style={styles.statSubtext}>{stat.paidCount} items</Text>
+                            )}
+                          </View>
+                          {stat.income > 0 && (
+                            <View style={styles.statBox}>
+                              <View style={styles.statHeader}>
+                                <TrendingUp size={16} color={colors.success} />
+                                <Text style={styles.statLabel}>Income</Text>
+                              </View>
+                              <Text style={[styles.statValue, { color: colors.success }]}>
+                                +{formatCurrency(stat.income)}
+                              </Text>
+                              {stat.incomeCount > 0 && (
+                                <Text style={styles.statSubtext}>{stat.incomeCount} items</Text>
+                              )}
+                            </View>
+                          )}
                           <View style={styles.statBox}>
                             <View style={styles.statHeader}>
                               <Wallet size={16} color={colors.warning || '#f59e0b'} />
@@ -646,31 +732,45 @@ export default function StatsScreen() {
 
             <View style={styles.chartCard}>
               {monthlyStats.length > 0 ? (
-                chartType === 'bar' ? (
-                  <BarChart
-                    data={chartData}
-                    width={SCREEN_WIDTH - 64}
-                    height={220}
-                    yAxisLabel="$"
-                    yAxisSuffix=""
-                    chartConfig={chartConfig}
-                    verticalLabelRotation={0}
-                    flatColor={true}
-                    fromZero={true}
-                    showValuesOnTopOfBars={false}
-                    withInnerLines={true}
-                    style={styles.chart}
-                  />
-                ) : (
+                chartType === 'bar' && groupedBarChartData.length > 0 ? (
+                  <View>
+                    <GiftedBarChart
+                      data={groupedBarChartData}
+                      width={SCREEN_WIDTH - 80}
+                      height={180}
+                      barWidth={chartRange === 6 ? 14 : 8}
+                      noOfSections={4}
+                      yAxisThickness={0}
+                      xAxisThickness={1}
+                      xAxisColor={colors.border}
+                      yAxisTextStyle={{ color: colors.textMuted, fontSize: 10 }}
+                      hideRules
+                      showYAxisIndices={false}
+                      formatYLabel={(val: string) => `$${parseInt(val)}`}
+                    />
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8, gap: 16 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <View style={{ width: 12, height: 12, backgroundColor: colors.danger, borderRadius: 2 }} />
+                        <Text style={{ color: colors.textMuted, fontSize: 11 }}>Expenses</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <View style={{ width: 12, height: 12, backgroundColor: colors.success, borderRadius: 2 }} />
+                        <Text style={{ color: colors.textMuted, fontSize: 11 }}>Income</Text>
+                      </View>
+                    </View>
+                  </View>
+                ) : chartType === 'line' && lineChartData?.labels?.length > 0 ? (
                   <RNLineChart
-                    data={chartData}
+                    data={lineChartData}
                     width={SCREEN_WIDTH - 64}
                     height={220}
                     yAxisLabel="$"
-                    chartConfig={chartConfig}
+                    chartConfig={lineChartConfig}
                     bezier
                     style={styles.chart}
                   />
+                ) : (
+                  <ActivityIndicator color={colors.primary} />
                 )
               ) : (
                 <ActivityIndicator color={colors.primary} />

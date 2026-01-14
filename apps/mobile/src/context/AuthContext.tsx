@@ -58,12 +58,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loadServerType(),
       ]);
 
-      console.log('[AuthContext] initializeAuth - hasToken:', hasToken, 'serverType:', serverType);
+      if (__DEV__) {
+        console.log('[AuthContext] initializeAuth - hasToken:', hasToken, 'serverType:', serverType);
+      }
 
       if (hasToken) {
         // Verify token is still valid by fetching user info
         const response = await api.getUserInfo();
-        console.log('[AuthContext] initializeAuth - getUserInfo response:', JSON.stringify(response, null, 2));
 
         let userData: User | null = null;
         let databases: DatabaseInfo[] = [];
@@ -98,7 +99,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (userData) {
-          console.log('[AuthContext] initializeAuth - Setting user:', userData);
+          if (__DEV__) {
+            console.log('[AuthContext] initializeAuth - User authenticated:', userData.username);
+          }
           setState({
             isLoading: false,
             isAuthenticated: true,
@@ -109,7 +112,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
           return;
         } else {
-          console.log('[AuthContext] initializeAuth - No user in response, clearing auth');
+          if (__DEV__) {
+            console.log('[AuthContext] initializeAuth - No user in response, clearing auth');
+          }
         }
       }
 
@@ -122,7 +127,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         serverType,
       });
     } catch (error) {
-      console.error('Auth initialization error:', error);
+      if (__DEV__) {
+        console.error('Auth initialization error:', error);
+      }
       const serverType = await loadServerType();
       setState({
         isLoading: false,
@@ -153,7 +160,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // First, login to get tokens
       const loginResponse = await api.login(username, password);
-      console.log('[AuthContext] Login response:', JSON.stringify(loginResponse, null, 2));
+      if (__DEV__) {
+        console.log('[AuthContext] Login response success:', loginResponse.success);
+      }
 
       if (!loginResponse.success) {
         return { success: false, error: loginResponse.error || 'Login failed' };
@@ -163,9 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const serverType = await loadServerType();
 
       // Fetch user info from /me endpoint after login
-      console.log('[AuthContext] Fetching user info from /me');
       const userInfoResponse = await api.getUserInfo();
-      console.log('[AuthContext] getUserInfo response:', JSON.stringify(userInfoResponse, null, 2));
 
       let userData: User | null = null;
       let databases: DatabaseInfo[] = [];
@@ -208,10 +215,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: true };
       }
 
-      console.error('[AuthContext] Failed to get user info from /me');
+      if (__DEV__) {
+        console.error('[AuthContext] Failed to get user info from /me');
+      }
       return { success: false, error: 'Failed to get user info' };
     } catch (error) {
-      console.error('[AuthContext] Login error:', error);
+      if (__DEV__) {
+        console.error('[AuthContext] Login error:', error);
+      }
       return { success: false, error: 'An unexpected error occurred' };
     }
   }, []);

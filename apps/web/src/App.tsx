@@ -199,8 +199,7 @@ function App() {
       // Fetch bills (include archived so they can be searched)
       const response = await api.getBills(true);
       setBills(Array.isArray(response) ? response : []);
-    } catch (error) {
-      console.error('Failed to fetch bills:', error);
+    } catch {
       setBills([]);
     } finally {
       setBillsLoading(false);
@@ -214,24 +213,18 @@ function App() {
 
   // Check telemetry notice status on login
   useEffect(() => {
-    console.log('🔍 Telemetry useEffect triggered:', { isLoggedIn, isLoading });
     const checkTelemetryNotice = async () => {
       if (!isLoggedIn || isLoading) {
-        console.log('⏸️  Telemetry check skipped:', { isLoggedIn, isLoading });
         return;
       }
 
-      console.log('✅ Calling getTelemetryNotice...');
       try {
         const noticeData = await api.getTelemetryNotice();
-        console.log('📊 Telemetry response:', noticeData);
         if (noticeData.show_notice) {
-          console.log('🎯 Opening telemetry modal');
           openTelemetryModal();
         }
-      } catch (error) {
+      } catch {
         // Silently fail - telemetry notice is not critical
-        console.error('❌ Failed to check telemetry notice:', error);
       }
     };
 
@@ -401,7 +394,7 @@ function App() {
                 />
                 <Divider />
                 <Text size="xs" c="dimmed" ta="center">
-                  BillManager v3.6.0 - Licensed under{' '}
+                  BillManager v3.6.1 - Licensed under{' '}
                   <Anchor href="https://osaasy.dev/" target="_blank" size="xs">
                     O'Saasy
                   </Anchor>

@@ -7,77 +7,58 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  Animated,
   Modal,
   Pressable,
   TextInput,
   Alert,
+  Platform,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Calendar, Users } from 'lucide-react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { api } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
-import { Payment, Bill } from '../types';
+import { Payment } from '../types';
 
 type Props = NativeStackScreenProps<any, 'PaymentHistory'>;
 
-interface PaymentWithBill extends Payment {
-  bill_name?: string;
-  bill_type?: 'expense' | 'deposit';
-}
-
 export default function PaymentHistoryScreen({ navigation }: Props) {
   const { colors } = useTheme();
-  const [payments, setPayments] = useState<PaymentWithBill[]>([]);
-  const [bills, setBills] = useState<Map<number, Bill>>(new Map());
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'expense' | 'deposit'>('all');
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [deleteConfirmModal, setDeleteConfirmModal] = useState<PaymentWithBill | null>(null);
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<Payment | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [editModal, setEditModal] = useState<PaymentWithBill | null>(null);
+  const [editModal, setEditModal] = useState<Payment | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editDate, setEditDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const swipeableRefs = useRef<Map<number, Swipeable>>(new Map());
 
   const fetchData = useCallback(async () => {
     try {
-      const [paymentsRes, billsRes] = await Promise.all([
-        api.getAllPayments(),
-        api.getBills(true), // Include archived to get bill names
-      ]);
+      // API returns enriched payments with bill_name, bill_type, is_share_payment, etc.
+      const paymentsRes = await api.getAllPayments();
 
       if (paymentsRes.success && paymentsRes.data) {
-        // Create a map of bills for quick lookup
-        const billMap = new Map<number, Bill>();
-        if (billsRes.success && billsRes.data) {
-          billsRes.data.forEach(bill => billMap.set(bill.id, bill));
-        }
-        setBills(billMap);
-
-        // Enrich payments with bill info
-        const enrichedPayments = paymentsRes.data.map(payment => ({
-          ...payment,
-          bill_name: billMap.get(payment.bill_id)?.name || 'Unknown Bill',
-          bill_type: billMap.get(payment.bill_id)?.type,
-        }));
-
-        // Sort by date descending (most recent first)
-        enrichedPayments.sort((a, b) =>
+        // Payments are already sorted by API, but ensure descending order
+        const sortedPayments = [...paymentsRes.data].sort((a, b) =>
           new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()
         );
 
-        setPayments(enrichedPayments);
+        setPayments(sortedPayments);
         setError(null);
       } else {
         setError(paymentsRes.error || 'Failed to load payments');
       }
-    } catch (err) {
+    } catch {
       setError('Network error');
     } finally {
       setIsLoading(false);
@@ -112,7 +93,7 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
     setSelectedDate(newDate);
   };
 
-  const handleSwipeDelete = (payment: PaymentWithBill) => {
+  const handleSwipeDelete = (payment: Payment) => {
     // Close the swipeable and show confirmation modal
     const ref = swipeableRefs.current.get(payment.id);
     ref?.close();
@@ -127,6 +108,8 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
     setIsDeleting(false);
 
     if (result.success) {
+      // Clean up ref for deleted payment to prevent memory leak
+      swipeableRefs.current.delete(deleteConfirmModal.id);
       setDeleteConfirmModal(null);
       fetchData();
     } else {
@@ -135,7 +118,7 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
     }
   };
 
-  const renderRightActions = (payment: PaymentWithBill) => {
+  const renderRightActions = (payment: Payment) => {
     return (
       <TouchableOpacity
         style={[styles.deleteAction, { backgroundColor: colors.danger }]}
@@ -146,12 +129,24 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
     );
   };
 
-  const handleSwipeEdit = (payment: PaymentWithBill) => {
+  const handleSwipeEdit = (payment: Payment) => {
     const ref = swipeableRefs.current.get(payment.id);
     ref?.close();
     setEditAmount(payment.amount.toString());
     setEditNotes(payment.notes || '');
+    setEditDate(new Date(payment.payment_date));
     setEditModal(payment);
+  };
+
+  const handleDateChange = (event: DateTimePickerEvent, date?: Date) => {
+    setShowDatePicker(Platform.OS === 'ios');
+    if (date) {
+      setEditDate(date);
+    }
+  };
+
+  const formatEditDate = (date: Date): string => {
+    return date.toISOString().split('T')[0];
   };
 
   const confirmEdit = async () => {
@@ -167,7 +162,7 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
     const result = await api.updatePayment(
       editModal.id,
       amount,
-      editModal.payment_date,
+      formatEditDate(editDate),
       editNotes.trim() || undefined
     );
     setIsEditing(false);
@@ -180,7 +175,7 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
     }
   };
 
-  const renderLeftActions = (payment: PaymentWithBill) => {
+  const renderLeftActions = (payment: Payment) => {
     return (
       <TouchableOpacity
         style={[styles.editAction, { backgroundColor: colors.primary }]}
@@ -221,8 +216,10 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
     );
   });
 
-  const renderPayment = ({ item }: { item: PaymentWithBill }) => {
+  const renderPayment = ({ item }: { item: Payment }) => {
     const isDeposit = item.bill_type === 'deposit';
+    const isSharePayment = item.is_share_payment;
+    const isReceivedPayment = item.is_received_payment;
 
     return (
       <Swipeable
@@ -238,9 +235,30 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
         overshootRight={false}
         overshootLeft={false}
       >
-        <View style={[styles.paymentCard, { backgroundColor: colors.surface }]}>
+        <View style={[
+          styles.paymentCard,
+          { backgroundColor: colors.surface },
+          isSharePayment && styles.sharedPaymentCard,
+          isSharePayment && { borderLeftColor: isReceivedPayment ? colors.success : colors.primary }
+        ]}>
           <View style={styles.paymentInfo}>
-            <Text style={[styles.billName, { color: colors.text }]}>{item.bill_name}</Text>
+            <View style={styles.billNameRow}>
+              <Text style={[styles.billName, { color: colors.text }]}>{item.bill_name || 'Unknown Bill'}</Text>
+              {isSharePayment && (
+                <View style={[
+                  styles.shareBadge,
+                  { backgroundColor: isReceivedPayment ? colors.success + '20' : colors.primary + '20' }
+                ]}>
+                  <Users size={10} color={isReceivedPayment ? colors.success : colors.primary} />
+                  <Text style={[
+                    styles.shareBadgeText,
+                    { color: isReceivedPayment ? colors.success : colors.primary }
+                  ]}>
+                    {isReceivedPayment ? 'Received' : 'Shared'}
+                  </Text>
+                </View>
+              )}
+            </View>
             <Text style={[styles.paymentDate, { color: colors.textMuted }]}>
               {formatDate(item.payment_date)}
             </Text>
@@ -433,8 +451,31 @@ export default function PaymentHistoryScreen({ navigation }: Props) {
           <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Payment</Text>
             <Text style={[styles.modalSubtitle, { color: colors.textMuted }]}>
-              {editModal?.bill_name} • {editModal && formatDate(editModal.payment_date)}
+              {editModal?.bill_name}
             </Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Date</Text>
+              <TouchableOpacity
+                style={[styles.input, styles.dateInput, { backgroundColor: colors.background, borderColor: colors.border }]}
+                onPress={() => setShowDatePicker(true)}
+                disabled={isEditing}
+              >
+                <Calendar size={18} color={colors.textMuted} />
+                <Text style={[styles.dateInputText, { color: colors.text }]}>
+                  {editDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </Text>
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={editDate}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={handleDateChange}
+                  maximumDate={new Date()}
+                />
+              )}
+            </View>
 
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Amount</Text>
@@ -579,12 +620,32 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 8,
   },
+  sharedPaymentCard: {
+    borderLeftWidth: 3,
+  },
   paymentInfo: {
     flex: 1,
     marginRight: 12,
   },
+  billNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   billName: {
     fontSize: 15,
+    fontWeight: '600',
+  },
+  shareBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 4,
+  },
+  shareBadgeText: {
+    fontSize: 10,
     fontWeight: '600',
   },
   paymentDate: {
@@ -718,5 +779,13 @@ const styles = StyleSheet.create({
   notesInput: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  dateInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dateInputText: {
+    fontSize: 16,
   },
 });

@@ -63,6 +63,13 @@ export interface Payment {
   notes: string | null;
   created_at?: string;
   updated_at?: string;
+  // Enriched fields from API (when fetching all payments)
+  bill_name?: string;
+  bill_icon?: string;
+  bill_type?: 'expense' | 'deposit';
+  original_bill_type?: 'expense' | 'deposit' | 'bill';
+  is_share_payment?: boolean;
+  is_received_payment?: boolean;  // True = money received from sharee (income)
 }
 
 // Sync types
@@ -105,6 +112,18 @@ export interface MonthlyStats {
   month: string;
   total_expenses: number;
   total_deposits: number;
+  net: number;
+}
+
+// Processed monthly stats for UI display
+export interface ProcessedMonthlyStats {
+  month: string;
+  paid: number;
+  paidCount: number;
+  income: number;
+  incomeCount: number;
+  remaining: number;
+  remainingCount: number;
   net: number;
 }
 

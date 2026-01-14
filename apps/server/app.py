@@ -28,6 +28,10 @@ from services.stripe_service import (
 )
 from services.telemetry import telemetry
 from services.scheduler import scheduler
+from services.logging_config import (
+    setup_logging, get_logger, request_logging_middleware,
+    log_auth_event, log_security_event, log_audit_event
+)
 from config import (
     DEPLOYMENT_MODE, ENABLE_REGISTRATION, REQUIRE_EMAIL_VERIFICATION,
     ENABLE_BILLING, EMAIL_ENABLED, is_saas, is_self_hosted, get_public_config
@@ -40,9 +44,11 @@ from validation import (
 # --- JWT Configuration ---
 # In production, JWT_SECRET_KEY must be explicitly set
 _jwt_secret = os.environ.get('JWT_SECRET_KEY') or os.environ.get('FLASK_SECRET_KEY')
-# --- Global Logging ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+# --- Initialize Structured Logging ---
+# Environment variables: LOG_LEVEL, LOG_FORMAT, LOG_REQUESTS, LOG_SQL
+setup_logging()
+logger = get_logger(__name__)
 
 if not _jwt_secret:
     if os.environ.get('FLASK_ENV') == 'production' or os.environ.get('ENVIRONMENT') == 'production':
@@ -491,6 +497,7 @@ def login():
     if user and user.check_password(password):
         # Commit any password hash migration that occurred during check_password
         db.session.commit()
+        log_auth_event('login', success=True, user_id=user.id, username=user.username)
         if user.password_change_required:
             token = secrets.token_hex(32); user.change_token = token; db.session.commit()
             return jsonify({'password_change_required': True, 'user_id': user.id, 'change_token': token, 'role': user.role})
@@ -498,6 +505,7 @@ def login():
         dbs = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
         if dbs: session['db_name'] = dbs[0]['name']
         return jsonify({'message': 'Login successful', 'role': user.role, 'databases': dbs})
+    log_auth_event('login', success=False, username=username)
     return jsonify({'error': 'Invalid username or password'}), 401
 
 @api_bp.route('/change-password', methods=['POST'])
@@ -522,6 +530,8 @@ def change_password():
     user.password_change_required = False
     user.change_token = None
     db.session.commit()
+
+    log_auth_event('password_change', success=True, user_id=user.id, username=user.username, first_login=True)
 
     # Set up session (like normal login)
     session['user_id'] = user.id
@@ -948,6 +958,8 @@ def get_accounts():
     return jsonify([a[0] for a in accounts if a[0]])
 
 @api_bp.route('/bills', methods=['GET', 'POST'])
+@limiter.limit("60 per minute", methods=['GET'])
+@limiter.limit("30 per minute", methods=['POST'])
 @login_required
 def bills_handler():
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
@@ -985,6 +997,27 @@ def bills_handler():
 
         result = []
 
+        # Pre-compute average amounts for all variable bills in a single query (fixes N+1)
+        all_bills = owned_bills + shared_bills_data
+        variable_bill_ids = [b.id for b in all_bills if b.is_variable]
+        avg_amounts_map = {}
+        if variable_bill_ids:
+            avg_query = db.session.query(
+                Payment.bill_id,
+                func.avg(Payment.amount).label('avg_amount')
+            ).filter(Payment.bill_id.in_(variable_bill_ids)).group_by(Payment.bill_id).all()
+            avg_amounts_map = {row.bill_id: float(row.avg_amount) for row in avg_query}
+
+        # Pre-fetch database and owner info for shared bills (fixes N+1)
+        owner_names_map = {}
+        if shared_bills_data:
+            db_ids = list(set(b.database_id for b in shared_bills_data))
+            databases_with_owners = db.session.query(Database, User).join(
+                User, Database.owner_id == User.id
+            ).filter(Database.id.in_(db_ids)).all()
+            for database, owner in databases_with_owners:
+                owner_names_map[database.id] = owner.username if owner else 'Unknown'
+
         # Add owned bills
         for bill in owned_bills:
             b_dict = {
@@ -996,8 +1029,7 @@ def bills_handler():
                 'is_shared': False
             }
             if bill.is_variable:
-                avg = db.session.query(func.avg(Payment.amount)).filter_by(bill_id=bill.id).scalar()
-                b_dict['avg_amount'] = float(avg) if avg else 0
+                b_dict['avg_amount'] = avg_amounts_map.get(bill.id, 0)
             result.append(b_dict)
 
         # Add shared bills
@@ -1011,10 +1043,7 @@ def bills_handler():
             if share.split_type and bill.amount is not None:
                 my_portion = share.calculate_portion()
 
-            # Get owner username from database owner
-            database_owner = db.session.get(Database, bill.database_id)
-            owner = db.session.get(User, database_owner.owner_id) if database_owner else None
-            owner_name = owner.username if owner else 'Unknown'
+            owner_name = owner_names_map.get(bill.database_id, 'Unknown')
 
             b_dict = {
                 'id': bill.id, 'name': bill.name, 'amount': bill.amount, 'varies': bill.is_variable,
@@ -1032,8 +1061,7 @@ def bills_handler():
                 }
             }
             if bill.is_variable:
-                avg = db.session.query(func.avg(Payment.amount)).filter_by(bill_id=bill.id).scalar()
-                b_dict['avg_amount'] = float(avg) if avg else 0
+                b_dict['avg_amount'] = avg_amounts_map.get(bill.id, 0)
             result.append(b_dict)
 
         # Sort combined results by due date
@@ -1084,6 +1112,7 @@ def bills_handler():
         db.session.add(new_bill); db.session.commit(); return jsonify({'message': 'Added', 'id': new_bill.id}), 201
 
 @api_bp.route('/bills/<int:bill_id>', methods=['PUT', 'DELETE'])
+@limiter.limit("30 per minute")
 @login_required
 def bill_detail_handler(bill_id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
@@ -1100,6 +1129,7 @@ def bill_detail_handler(bill_id):
     else: bill.archived = True; db.session.commit(); return jsonify({'message': 'Archived'})
 
 @api_bp.route('/bills/<int:bill_id>/unarchive', methods=['POST'])
+@limiter.limit("30 per minute")
 @login_required
 def unarchive_bill(bill_id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
@@ -1109,6 +1139,7 @@ def unarchive_bill(bill_id):
     bill.archived = False; db.session.commit(); return jsonify({'message': 'Unarchived'})
 
 @api_bp.route('/bills/<int:bill_id>/permanent', methods=['DELETE'])
+@limiter.limit("30 per minute")
 @login_required
 def delete_bill_permanent(bill_id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
@@ -1118,6 +1149,7 @@ def delete_bill_permanent(bill_id):
     db.session.delete(bill); db.session.commit(); return jsonify({'message': 'Deleted'})
 
 @api_bp.route('/bills/<int:bill_id>/pay', methods=['POST'])
+@limiter.limit("30 per minute")
 @login_required
 def pay_bill(bill_id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
@@ -1153,6 +1185,7 @@ def pay_bill(bill_id):
         return jsonify({'error': 'Failed to record payment. Please try again.'}), 500
 
 @api_bp.route('/bills/<string:name>/payments', methods=['GET'])
+@limiter.limit("60 per minute")
 @login_required
 def get_payments_by_name(name):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
@@ -1160,6 +1193,7 @@ def get_payments_by_name(name):
     return jsonify([{'id': p.id, 'amount': p.amount, 'payment_date': p.payment_date, 'notes': p.notes} for p in payments])
 
 @api_bp.route('/bills/<int:bill_id>/payments', methods=['GET'])
+@limiter.limit("60 per minute")
 @login_required
 def get_payments_by_id(bill_id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
@@ -1169,6 +1203,7 @@ def get_payments_by_id(bill_id):
     return jsonify([{'id': p.id, 'amount': p.amount, 'payment_date': p.payment_date, 'notes': p.notes} for p in payments])
 
 @api_bp.route('/payments/<int:id>', methods=['PUT'])
+@limiter.limit("30 per minute")
 @login_required
 def update_payment(id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
@@ -1190,6 +1225,7 @@ def update_payment(id):
         return jsonify({'error': 'Failed to update payment. Please try again.'}), 500
 
 @api_bp.route('/payments/<int:id>', methods=['DELETE'])
+@limiter.limit("30 per minute")
 @login_required
 def delete_payment(id):
     target_db = Database.query.filter_by(name=session.get('db_name')).first()
@@ -1210,6 +1246,7 @@ def delete_payment(id):
 # =============================================================================
 
 @api_bp.route('/bills/<int:bill_id>/share', methods=['POST'])
+@limiter.limit("20 per minute")
 @login_required
 def share_bill(bill_id):
     """Share a bill with another user (session-based)."""
@@ -1319,6 +1356,7 @@ def share_bill(bill_id):
 
 
 @api_bp.route('/bills/<int:bill_id>/shares', methods=['GET'])
+@limiter.limit("60 per minute")
 @login_required
 def get_bill_shares(bill_id):
     """Get all shares for a bill."""
@@ -1354,6 +1392,7 @@ def get_bill_shares(bill_id):
 
 
 @api_bp.route('/shares/<int:share_id>', methods=['DELETE'])
+@limiter.limit("20 per minute")
 @login_required
 def revoke_share(share_id):
     """Revoke a bill share."""
@@ -1369,6 +1408,7 @@ def revoke_share(share_id):
 
 
 @api_bp.route('/shares/<int:share_id>', methods=['PUT'])
+@limiter.limit("20 per minute")
 @login_required
 def update_share(share_id):
     """Update share split configuration."""
@@ -1399,19 +1439,41 @@ def update_share(share_id):
 @login_required
 def get_shared_bills():
     """Get bills shared with the current user."""
+    from sqlalchemy.orm import joinedload
+
     current_user_id = session.get('user_id')
 
+    # Use eager loading to avoid N+1 queries for bill and owner relationships
     shares = BillShare.query.filter_by(
         shared_with_user_id=current_user_id,
         status='accepted'
+    ).options(
+        joinedload(BillShare.bill),
+        joinedload(BillShare.owner)
     ).all()
+
+    # Batch fetch latest payments for all bills in a single query
+    bill_ids = [share.bill.id for share in shares]
+    latest_payments_subq = db.session.query(
+        Payment.bill_id,
+        func.max(Payment.payment_date).label('max_date')
+    ).filter(Payment.bill_id.in_(bill_ids)).group_by(Payment.bill_id).subquery()
+
+    latest_payments = db.session.query(Payment).join(
+        latest_payments_subq,
+        db.and_(
+            Payment.bill_id == latest_payments_subq.c.bill_id,
+            Payment.payment_date == latest_payments_subq.c.max_date
+        )
+    ).all() if bill_ids else []
+
+    # Create a map of bill_id -> latest payment
+    payments_map = {p.bill_id: p for p in latest_payments}
 
     result = []
     for share in shares:
         bill = share.bill
-        latest_payment = Payment.query.filter_by(bill_id=bill.id).order_by(
-            desc(Payment.payment_date)
-        ).first()
+        latest_payment = payments_map.get(bill.id)
 
         result.append({
             'share_id': share.id,
@@ -1484,6 +1546,7 @@ def get_pending_shares():
 
 
 @api_bp.route('/shares/<int:share_id>/accept', methods=['POST'])
+@limiter.limit("20 per minute")
 @login_required
 def accept_share(share_id):
     """Accept a pending share invitation."""
@@ -1515,6 +1578,7 @@ def accept_share(share_id):
 
 
 @api_bp.route('/shares/<int:share_id>/decline', methods=['POST'])
+@limiter.limit("20 per minute")
 @login_required
 def decline_share(share_id):
     """Decline a pending share invitation."""
@@ -1540,6 +1604,7 @@ def decline_share(share_id):
 
 
 @api_bp.route('/share/invite/<token>', methods=['GET'])
+@limiter.limit("20 per minute")
 def get_share_invite_details(token):
     """Get share invitation details by token (public endpoint)."""
     share = BillShare.query.filter_by(invite_token=token).first()
@@ -1568,6 +1633,7 @@ def get_share_invite_details(token):
 
 
 @api_bp.route('/share/accept-by-token', methods=['POST'])
+@limiter.limit("20 per minute")
 @login_required
 def accept_share_by_token():
     """Accept a share invitation by token (for email-based invites)."""
@@ -1608,6 +1674,7 @@ def accept_share_by_token():
 
 
 @api_bp.route('/shares/<int:share_id>/leave', methods=['POST'])
+@limiter.limit("20 per minute")
 @login_required
 def leave_share(share_id):
     """Leave a shared bill."""
@@ -1627,6 +1694,7 @@ def leave_share(share_id):
 
 
 @api_bp.route('/shares/<int:share_id>/mark-paid', methods=['POST'])
+@limiter.limit("20 per minute")
 @login_required
 def mark_share_paid(share_id):
     """Mark recipient's portion of shared bill as paid and create payment record."""
@@ -1683,6 +1751,7 @@ def mark_share_paid(share_id):
 
 
 @api_bp.route('/users/search', methods=['GET'])
+@limiter.limit("20 per minute")
 @login_required
 def search_users():
     """Search for users by username (for sharing)."""
@@ -1692,8 +1761,11 @@ def search_users():
     if len(query) < 2:
         return jsonify([])
 
+    # Escape SQL wildcards to prevent pattern-based enumeration attacks
+    query_escaped = query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+
     users = User.query.filter(
-        User.username.ilike(f'%{query}%'),
+        User.username.ilike(f'%{query_escaped}%', escape='\\'),
         User.id != current_user_id
     ).limit(10).all()
 
@@ -1741,7 +1813,7 @@ def process_auto_payments():
 
 @api_bp.route('/api/version', methods=['GET'])
 def get_version():
-    return jsonify({'version': '3.6.0', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites', 'shared_bills']})
+    return jsonify({'version': '3.6.1', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites', 'shared_bills']})
 
 @api_bp.route('/ping')
 def ping(): return jsonify({'status': 'ok'})
@@ -2506,6 +2578,7 @@ def jwt_me():
     })
 
 @api_v2_bp.route('/bills', methods=['GET'])
+@limiter.limit("60 per minute")
 @jwt_required
 def jwt_get_bills():
     """Get bills for the selected database (JWT version), including shared bills."""
@@ -2620,6 +2693,7 @@ def jwt_get_bills():
     return jsonify({'success': True, 'data': result})
 
 @api_v2_bp.route('/bills', methods=['POST'])
+@limiter.limit("30 per minute")
 @jwt_required
 @subscription_required(feature='bills')
 def jwt_create_bill():
@@ -2669,6 +2743,7 @@ def jwt_create_bill():
     return jsonify({'success': True, 'data': {'id': new_bill.id, 'message': 'Bill created'}}), 201
 
 @api_v2_bp.route('/bills/<int:bill_id>', methods=['GET'])
+@limiter.limit("60 per minute")
 @jwt_required
 def jwt_get_bill(bill_id):
     """Get a single bill by ID (JWT version)."""
@@ -2695,6 +2770,7 @@ def jwt_get_bill(bill_id):
     return jsonify({'success': True, 'data': b_dict})
 
 @api_v2_bp.route('/bills/<int:bill_id>', methods=['PUT'])
+@limiter.limit("30 per minute")
 @jwt_required
 def jwt_update_bill(bill_id):
     """Update a bill (JWT version)."""
@@ -2728,6 +2804,7 @@ def jwt_update_bill(bill_id):
     return jsonify({'success': True, 'data': {'message': 'Bill updated'}})
 
 @api_v2_bp.route('/bills/<int:bill_id>', methods=['DELETE'])
+@limiter.limit("30 per minute")
 @jwt_required
 def jwt_archive_bill(bill_id):
     """Archive a bill (JWT version)."""
@@ -2745,6 +2822,7 @@ def jwt_archive_bill(bill_id):
     return jsonify({'success': True, 'data': {'message': 'Bill archived'}})
 
 @api_v2_bp.route('/bills/<int:bill_id>/unarchive', methods=['POST'])
+@limiter.limit("30 per minute")
 @jwt_required
 def jwt_unarchive_bill(bill_id):
     """Unarchive a bill (JWT version)."""
@@ -2762,6 +2840,7 @@ def jwt_unarchive_bill(bill_id):
     return jsonify({'success': True, 'data': {'message': 'Bill unarchived'}})
 
 @api_v2_bp.route('/bills/<int:bill_id>/permanent', methods=['DELETE'])
+@limiter.limit("30 per minute")
 @jwt_required
 def jwt_delete_bill_permanent(bill_id):
     """Permanently delete a bill (JWT version)."""
@@ -2779,6 +2858,7 @@ def jwt_delete_bill_permanent(bill_id):
     return jsonify({'success': True, 'data': {'message': 'Bill permanently deleted'}})
 
 @api_v2_bp.route('/bills/<int:bill_id>/pay', methods=['POST'])
+@limiter.limit("30 per minute")
 @jwt_required
 def jwt_pay_bill(bill_id):
     """Record a payment for a bill (JWT version)."""
@@ -2813,6 +2893,7 @@ def jwt_pay_bill(bill_id):
     return jsonify({'success': True, 'data': {'id': payment.id, 'message': 'Payment recorded'}})
 
 @api_v2_bp.route('/bills/<int:bill_id>/payments', methods=['GET'])
+@limiter.limit("60 per minute")
 @jwt_required
 def jwt_get_bill_payments(bill_id):
     """Get payment history for a bill (JWT version), including for shared bills."""
@@ -2848,6 +2929,7 @@ def jwt_get_bill_payments(bill_id):
     return jsonify({'success': True, 'data': result})
 
 @api_v2_bp.route('/payments', methods=['GET'])
+@limiter.limit("60 per minute")
 @jwt_required
 def jwt_get_all_payments():
     """Get all payments across all bills (JWT version), including shared bill payments."""
@@ -2933,6 +3015,7 @@ def jwt_get_all_payments():
     return jsonify({'success': True, 'data': result})
 
 @api_v2_bp.route('/payments/<int:payment_id>', methods=['PUT'])
+@limiter.limit("30 per minute")
 @jwt_required
 def jwt_update_payment(payment_id):
     """Update a payment (JWT version)."""
@@ -2965,6 +3048,7 @@ def jwt_update_payment(payment_id):
     return jsonify({'success': True, 'data': {'message': 'Payment updated'}})
 
 @api_v2_bp.route('/payments/<int:payment_id>', methods=['DELETE'])
+@limiter.limit("30 per minute")
 @jwt_required
 def jwt_delete_payment(payment_id):
     """Delete a payment (JWT version)."""
@@ -2997,6 +3081,7 @@ def jwt_delete_payment(payment_id):
 # =============================================================================
 
 @api_v2_bp.route('/bills/<int:bill_id>/share', methods=['POST'])
+@limiter.limit("20 per minute")
 @jwt_required
 def jwt_share_bill(bill_id):
     """
@@ -3138,6 +3223,7 @@ def jwt_share_bill(bill_id):
 
 
 @api_v2_bp.route('/bills/<int:bill_id>/shares', methods=['GET'])
+@limiter.limit("60 per minute")
 @jwt_required
 def jwt_get_bill_shares(bill_id):
     """Get all shares for a bill (owner view)."""
@@ -3175,6 +3261,7 @@ def jwt_get_bill_shares(bill_id):
 
 
 @api_v2_bp.route('/shares/<int:share_id>', methods=['DELETE'])
+@limiter.limit("20 per minute")
 @jwt_required
 def jwt_revoke_share(share_id):
     """Revoke a bill share (owner only)."""
@@ -3190,6 +3277,7 @@ def jwt_revoke_share(share_id):
 
 
 @api_v2_bp.route('/shared-bills', methods=['GET'])
+@limiter.limit("60 per minute")
 @jwt_required
 def jwt_get_shared_bills():
     """Get bills shared with the current user."""
@@ -3238,6 +3326,7 @@ def jwt_get_shared_bills():
 
 
 @api_v2_bp.route('/shared-bills/pending', methods=['GET'])
+@limiter.limit("60 per minute")
 @jwt_required
 def jwt_get_pending_shares():
     """Get pending share invitations for the current user."""
@@ -3275,6 +3364,7 @@ def jwt_get_pending_shares():
 
 
 @api_v2_bp.route('/shares/<int:share_id>/accept', methods=['POST'])
+@limiter.limit("20 per minute")
 @jwt_required
 def jwt_accept_share(share_id):
     """Accept a pending share invitation."""
@@ -3320,6 +3410,7 @@ def jwt_accept_share(share_id):
 
 
 @api_v2_bp.route('/shares/<int:share_id>/decline', methods=['POST'])
+@limiter.limit("20 per minute")
 @jwt_required
 def jwt_decline_share(share_id):
     """Decline a pending share invitation."""
@@ -3359,6 +3450,7 @@ def jwt_decline_share(share_id):
 
 
 @api_v2_bp.route('/share-info', methods=['GET'])
+@limiter.limit("20 per minute")
 def jwt_get_share_info():
     """Get share invitation info by token (public endpoint for SaaS)."""
     token = request.args.get('token')
@@ -3390,6 +3482,7 @@ def jwt_get_share_info():
 
 
 @api_v2_bp.route('/share/accept-by-token', methods=['POST'])
+@limiter.limit("20 per minute")
 @jwt_required
 def jwt_accept_share_by_token():
     """Accept a share invitation by token (for email-based invites)."""
@@ -3430,6 +3523,7 @@ def jwt_accept_share_by_token():
 
 
 @api_v2_bp.route('/shares/<int:share_id>', methods=['PUT'])
+@limiter.limit("20 per minute")
 @jwt_required
 def jwt_update_share(share_id):
     """Update share split configuration (owner only)."""
@@ -3477,6 +3571,7 @@ def jwt_update_share(share_id):
 
 
 @api_v2_bp.route('/shares/<int:share_id>/leave', methods=['POST'])
+@limiter.limit("20 per minute")
 @jwt_required
 def jwt_leave_share(share_id):
     """Leave a shared bill (recipient only)."""
@@ -3506,6 +3601,7 @@ def jwt_leave_share(share_id):
 
 
 @api_v2_bp.route('/shares/<int:share_id>/mark-paid', methods=['POST'])
+@limiter.limit("20 per minute")
 @jwt_required
 def jwt_mark_share_paid(share_id):
     """Mark recipient's portion of shared bill as paid and create payment record."""
@@ -3564,6 +3660,7 @@ def jwt_mark_share_paid(share_id):
 
 
 @api_v2_bp.route('/users/search', methods=['GET'])
+@limiter.limit("20 per minute")
 @jwt_required
 def jwt_search_users():
     """Search for users by username (for sharing)."""
@@ -3571,9 +3668,12 @@ def jwt_search_users():
     if len(query) < 2:
         return jsonify({'success': True, 'data': []})
 
+    # Escape SQL wildcards to prevent pattern-based enumeration attacks
+    query_escaped = query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+
     # Search users by username (exclude current user)
     users = User.query.filter(
-        User.username.ilike(f'%{query}%'),
+        User.username.ilike(f'%{query_escaped}%', escape='\\'),
         User.id != g.jwt_user_id
     ).limit(10).all()
 
@@ -4152,7 +4252,7 @@ def jwt_get_version():
     return jsonify({
         'success': True,
         'data': {
-            'version': '3.6.0',
+            'version': '3.6.1',
             'api_version': 'v2',
             'license': "O'Saasy",
             'license_url': 'https://osaasy.dev/',
@@ -4246,6 +4346,7 @@ def trigger_bill_reminders():
 
 
 @api_v2_bp.route('/shares/cleanup-expired', methods=['POST'])
+@limiter.limit("10 per hour")
 @jwt_admin_required
 def cleanup_expired_shares():
     """
@@ -5118,10 +5219,15 @@ def create_app():
                 'style-src': ["'self'", "'unsafe-inline'", "unpkg.com"],
                 'img-src': ["'self'", "data:", "billmanager.app"],
                 'connect-src': ["'self'", "analytics.billmanager.app"],  # Umami analytics
+                'frame-ancestors': "'none'",  # Prevent clickjacking
+                'form-action': "'self'",  # Prevent form hijacking
+                'base-uri': "'self'",  # Prevent base tag injection
+                'object-src': "'none'",  # Prevent plugin-based attacks (Flash, Java)
             },
             referrer_policy='strict-origin-when-cross-origin',
             x_content_type_options=True,
             x_xss_protection=True,
+            frame_options='DENY',  # Additional clickjacking protection
         )
 
     # Secure session cookie configuration
@@ -5130,16 +5236,9 @@ def create_app():
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 
-    @app.before_request
-    def log_request_info():
-        g.start_time = datetime.datetime.now(); logger.info(f"➡️  {request.method} {request.path}")
-    
-    @app.after_request
-    def log_response_info(response):
-        if hasattr(g, 'start_time'):
-            duration = datetime.datetime.now() - g.start_time
-            logger.info(f"⬅️  {response.status} ({duration.total_seconds():.3f}s)")
-        return response
+    # Add request logging middleware (controlled by LOG_REQUESTS env var)
+    # Also adds X-Request-ID header for request tracing
+    request_logging_middleware(app)
 
     # Register API Blueprints first, then SPA
     app.register_blueprint(api_bp)

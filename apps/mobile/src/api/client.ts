@@ -8,6 +8,13 @@ const REFRESH_TOKEN_KEY = 'billmanager_refresh_token';
 const CURRENT_DATABASE_KEY = 'billmanager_current_database';
 const LAST_SYNC_KEY = 'billmanager_last_sync';
 
+// Secure storage options for sensitive data (tokens)
+// WHEN_UNLOCKED_THIS_DEVICE_ONLY: Data is only accessible when device is unlocked
+// AND is NOT backed up to iCloud or migrated to a new device
+const SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = {
+  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+};
+
 // API Configuration
 // For local development, use your machine's IP (not localhost)
 // Physical device (Expo Go): use your computer's local IP
@@ -115,8 +122,8 @@ class BillManagerApi {
         this.accessToken = access_token;
         this.refreshToken = refresh_token;
 
-        await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, access_token);
-        await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refresh_token);
+        await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, access_token, SECURE_STORE_OPTIONS);
+        await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refresh_token, SECURE_STORE_OPTIONS);
 
         // Set first database as default if available
         if (response.data.data.databases?.length > 0) {
@@ -153,7 +160,7 @@ class BillManagerApi {
 
       if (response.data.success && response.data.data) {
         this.accessToken = response.data.data.access_token;
-        await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, this.accessToken);
+        await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, this.accessToken, SECURE_STORE_OPTIONS);
         return true;
       }
       return false;

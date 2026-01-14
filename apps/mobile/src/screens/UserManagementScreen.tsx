@@ -22,7 +22,6 @@ import { AdminUser, DatabaseInfo } from '../types';
 type Props = NativeStackScreenProps<any, 'UserManagement'>;
 
 export default function UserManagementScreen({ navigation }: Props) {
-  console.log('[UserManagementScreen] Component rendering');
   const { colors } = useTheme();
   const { user, databases } = useAuth();
   const { isSelfHosted } = useConfig();
@@ -48,10 +47,8 @@ export default function UserManagementScreen({ navigation }: Props) {
   const [isCreating, setIsCreating] = useState(false);
 
   const fetchUsers = useCallback(async () => {
-    console.log('[UserManagementScreen] fetchUsers called');
     try {
       const response = await api.getUsers();
-      console.log('[UserManagementScreen] getUsers response:', JSON.stringify(response, null, 2));
       if (response.success && response.data) {
         setUsers(response.data);
         setError(null);
@@ -59,7 +56,9 @@ export default function UserManagementScreen({ navigation }: Props) {
         setError(response.error || 'Failed to load users');
       }
     } catch (err) {
-      console.log('[UserManagementScreen] Error:', err);
+      if (__DEV__) {
+        console.log('[UserManagementScreen] Error:', err);
+      }
       setError('Network error');
     } finally {
       setIsLoading(false);

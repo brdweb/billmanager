@@ -402,6 +402,51 @@ def migrate_20260112_01_add_share_id_to_payments(db):
     logger.info("Added share_id column to payments table")
 
 
+def migrate_20260114_01_add_performance_indexes(db):
+    """Add composite indexes for improved query performance.
+
+    Addresses N+1 query optimization by adding:
+    1. payments(bill_id, payment_date DESC) - for ordered payment history queries
+    2. bill_shares(shared_with_user_id, status) - for pending shares lookup
+    3. payments(database_id, payment_date DESC) - for all-payments queries
+    """
+    logger.info("Running migration: 20260114_01_add_performance_indexes")
+
+    # Check existing indexes to avoid duplicates
+    result = db.session.execute(text("""
+        SELECT indexname FROM pg_indexes
+        WHERE tablename IN ('payments', 'bill_shares')
+    """))
+    existing_indexes = {row[0] for row in result.fetchall()}
+
+    # Index for payment history queries (ORDER BY payment_date DESC)
+    if 'idx_payments_bill_date' not in existing_indexes:
+        db.session.execute(text('''
+            CREATE INDEX idx_payments_bill_date
+            ON payments(bill_id, payment_date DESC)
+        '''))
+        logger.info("Created index idx_payments_bill_date")
+
+    # Index for all-payments queries filtered by database
+    if 'idx_payments_db_date' not in existing_indexes:
+        db.session.execute(text('''
+            CREATE INDEX idx_payments_db_date
+            ON payments(database_id, payment_date DESC)
+        '''))
+        logger.info("Created index idx_payments_db_date")
+
+    # Composite index for pending shares lookup
+    if 'idx_bill_shares_user_status' not in existing_indexes:
+        db.session.execute(text('''
+            CREATE INDEX idx_bill_shares_user_status
+            ON bill_shares(shared_with_user_id, status)
+        '''))
+        logger.info("Created index idx_bill_shares_user_status")
+
+    db.session.commit()
+    logger.info("Performance indexes migration completed")
+
+
 def migrate_20260109_02_create_share_audit_log(db):
     """Create share_audit_log table for tracking all share operations"""
     logger.info("Running migration: 20260109_02_create_share_audit_log")
@@ -462,6 +507,7 @@ MIGRATIONS = [
     ('20260109_01', 'Fix email case sensitivity in bill_shares unique constraint', migrate_20260109_01_fix_email_case_sensitivity),
     ('20260109_02', 'Create share_audit_log table for audit trail', migrate_20260109_02_create_share_audit_log),
     ('20260112_01', 'Add share_id to payments for shared bill payment tracking', migrate_20260112_01_add_share_id_to_payments),
+    ('20260114_01', 'Add composite indexes for query performance', migrate_20260114_01_add_performance_indexes),
 ]
 
 

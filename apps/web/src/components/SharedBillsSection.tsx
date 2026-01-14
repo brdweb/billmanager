@@ -78,18 +78,10 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
         api.getSharedBills(),
         api.getPendingShares(),
       ]);
-      console.log('SharedBillsSection - API response types:', {
-        sharedType: typeof shared,
-        sharedIsArray: Array.isArray(shared),
-        sharedValue: shared,
-        pendingType: typeof pending,
-        pendingIsArray: Array.isArray(pending),
-        pendingValue: pending,
-      });
       setSharedBills(Array.isArray(shared) ? shared : []);
       setPendingShares(Array.isArray(pending) ? pending : []);
-    } catch (err) {
-      console.error('Failed to load shared bills:', err);
+    } catch {
+      // Silently fail - shared bills data is not critical
     } finally {
       setLoading(false);
     }
@@ -101,8 +93,8 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
       await api.acceptShare(shareId);
       loadData();
       onRefresh?.();
-    } catch (err) {
-      console.error('Failed to accept share:', err);
+    } catch {
+      // Error handling - share accept failed
     } finally {
       setActionLoading(null);
     }
@@ -113,8 +105,8 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
     try {
       await api.declineShare(shareId);
       loadData();
-    } catch (err) {
-      console.error('Failed to decline share:', err);
+    } catch {
+      // Error handling - share decline failed
     } finally {
       setActionLoading(null);
     }
@@ -126,8 +118,8 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
       await api.leaveShare(shareId);
       loadData();
       onRefresh?.();
-    } catch (err) {
-      console.error('Failed to leave share:', err);
+    } catch {
+      // Error handling - leave share failed
     } finally {
       setActionLoading(null);
     }
