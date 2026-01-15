@@ -3,7 +3,9 @@
   "version": "1.0.0-alpha",
   "main": "index.ts",
   "overrides": {
-    "tmp": "0.2.4"
+    "tmp": "0.2.4",
+    "markdown-it": "^14.1.0",
+    "undici": "^7.18.2"
   },
   "scripts": {
     "start": "expo start",
