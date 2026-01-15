@@ -18,7 +18,7 @@ from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from sqlalchemy import func, extract, desc
 
-from models import db, User, Database, Bill, Payment, RefreshToken, Subscription, UserInvite, UserDevice, BillShare, ShareAuditLog
+from models import db, User, Database, Bill, Payment, RefreshToken, Subscription, UserInvite, UserDevice, BillShare, ShareAuditLog, ReleaseNote
 from migration import migrate_sqlite_to_pg
 from db_migrations import run_pending_migrations
 from services.email import send_verification_email, send_password_reset_email, send_welcome_email, send_invite_email
@@ -5135,6 +5135,230 @@ def opt_out_telemetry():
         'data': {
             'message': 'Telemetry disabled',
             'opted_out': True
+        }
+    })
+
+
+# --- Release Notes Endpoints (V1 - Session Auth) ---
+
+@api_bp.route('/release-notes/check', methods=['GET'])
+@login_required
+def check_release_notes_v1():
+    """
+    Check if there are new release notes to show (session auth version).
+
+    Returns the latest unread release note if available.
+    """
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    # Get latest published release note
+    latest_note = ReleaseNote.query.filter(
+        ReleaseNote.published_at <= datetime.datetime.now(datetime.timezone.utc)
+    ).order_by(ReleaseNote.published_at.desc()).first()
+
+    if not latest_note:
+        return jsonify({
+            'success': True,
+            'data': {'show_release_notes': False, 'reason': 'no_releases'}
+        })
+
+    # Check if user has seen this version
+    if user.last_seen_release_version == latest_note.version:
+        return jsonify({
+            'success': True,
+            'data': {
+                'show_release_notes': False,
+                'current_version': latest_note.version,
+                'last_seen': user.last_seen_release_version
+            }
+        })
+
+    # Return release note for display
+    return jsonify({
+        'success': True,
+        'data': {
+            'show_release_notes': True,
+            'release_note': {
+                'id': latest_note.id,
+                'version': latest_note.version,
+                'title': latest_note.title,
+                'content': latest_note.content,
+                'summary': latest_note.summary,
+                'published_at': latest_note.published_at.isoformat(),
+                'is_major': latest_note.is_major
+            }
+        }
+    })
+
+
+@api_bp.route('/release-notes/dismiss', methods=['POST'])
+@login_required
+def dismiss_release_notes_v1():
+    """Mark release notes as seen for current user (session auth version)."""
+    user = User.query.get(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    data = request.get_json(force=True, silent=True) or {}
+    version = data.get('version')
+
+    if not version:
+        return jsonify({'success': False, 'error': 'Version required'}), 400
+
+    user.last_seen_release_version = version
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'data': {'message': 'Release notes dismissed', 'version': version}
+    })
+
+
+@api_bp.route('/release-notes/history', methods=['GET'])
+@login_required
+def get_release_notes_history_v1():
+    """Get paginated list of all release notes (session auth version)."""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+
+    notes = ReleaseNote.query.filter(
+        ReleaseNote.published_at <= datetime.datetime.now(datetime.timezone.utc)
+    ).order_by(ReleaseNote.published_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'release_notes': [{
+                'id': n.id,
+                'version': n.version,
+                'title': n.title,
+                'content': n.content,
+                'summary': n.summary,
+                'published_at': n.published_at.isoformat(),
+                'is_major': n.is_major
+            } for n in notes.items],
+            'pagination': {
+                'page': notes.page,
+                'per_page': notes.per_page,
+                'total': notes.total,
+                'pages': notes.pages
+            }
+        }
+    })
+
+
+# --- Release Notes Endpoints (V2 - JWT Auth) ---
+
+@api_v2_bp.route('/release-notes/check', methods=['GET'])
+@jwt_required
+def check_release_notes():
+    """
+    Check if there are new release notes to show.
+
+    Returns the latest unread release note if available.
+    """
+    user = User.query.get(g.jwt_user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    # Get latest published release note
+    latest_note = ReleaseNote.query.filter(
+        ReleaseNote.published_at <= datetime.datetime.now(datetime.timezone.utc)
+    ).order_by(ReleaseNote.published_at.desc()).first()
+
+    if not latest_note:
+        return jsonify({
+            'success': True,
+            'data': {'show_release_notes': False, 'reason': 'no_releases'}
+        })
+
+    # Check if user has seen this version
+    if user.last_seen_release_version == latest_note.version:
+        return jsonify({
+            'success': True,
+            'data': {
+                'show_release_notes': False,
+                'current_version': latest_note.version,
+                'last_seen': user.last_seen_release_version
+            }
+        })
+
+    # Return release note for display
+    return jsonify({
+        'success': True,
+        'data': {
+            'show_release_notes': True,
+            'release_note': {
+                'id': latest_note.id,
+                'version': latest_note.version,
+                'title': latest_note.title,
+                'content': latest_note.content,
+                'summary': latest_note.summary,
+                'published_at': latest_note.published_at.isoformat(),
+                'is_major': latest_note.is_major
+            }
+        }
+    })
+
+
+@api_v2_bp.route('/release-notes/dismiss', methods=['POST'])
+@jwt_required
+def dismiss_release_notes():
+    """Mark release notes as seen for current user."""
+    user = User.query.get(g.jwt_user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    data = request.get_json(force=True, silent=True) or {}
+    version = data.get('version')
+
+    if not version:
+        return jsonify({'success': False, 'error': 'Version required'}), 400
+
+    user.last_seen_release_version = version
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'data': {'message': 'Release notes dismissed', 'version': version}
+    })
+
+
+@api_v2_bp.route('/release-notes/history', methods=['GET'])
+@jwt_required
+def get_release_notes_history():
+    """Get paginated list of all release notes."""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+
+    notes = ReleaseNote.query.filter(
+        ReleaseNote.published_at <= datetime.datetime.now(datetime.timezone.utc)
+    ).order_by(ReleaseNote.published_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'release_notes': [{
+                'id': n.id,
+                'version': n.version,
+                'title': n.title,
+                'content': n.content,
+                'summary': n.summary,
+                'published_at': n.published_at.isoformat(),
+                'is_major': n.is_major
+            } for n in notes.items],
+            'pagination': {
+                'page': notes.page,
+                'per_page': notes.per_page,
+                'total': notes.total,
+                'pages': notes.pages
+            }
         }
     })
 

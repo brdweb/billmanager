@@ -809,6 +809,57 @@ class BillManagerApi {
     }
   }
 
+  // ============ Release Notes ============
+
+  async checkReleaseNotes(): Promise<ApiResponse<{
+    show_release_notes: boolean;
+    release_note?: {
+      id: number;
+      version: string;
+      title: string;
+      content: string;
+      summary: string | null;
+      published_at: string;
+      is_major: boolean;
+    };
+    current_version?: string;
+    last_seen?: string;
+    reason?: string;
+  }>> {
+    try {
+      const response = await this.client.get<ApiResponse<{
+        show_release_notes: boolean;
+        release_note?: {
+          id: number;
+          version: string;
+          title: string;
+          content: string;
+          summary: string | null;
+          published_at: string;
+          is_major: boolean;
+        };
+        current_version?: string;
+        last_seen?: string;
+        reason?: string;
+      }>>('/release-notes/check');
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async dismissReleaseNotes(version: string): Promise<ApiResponse<{ message: string; version: string }>> {
+    try {
+      const response = await this.client.post<ApiResponse<{ message: string; version: string }>>(
+        '/release-notes/dismiss',
+        { version }
+      );
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
   // ============ Helpers ============
 
   private handleError(error: unknown): ApiResponse<any> {

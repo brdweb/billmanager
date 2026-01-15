@@ -699,4 +699,42 @@ export const getShareInviteDetails = (token: string) =>
 export const acceptShareByToken = (token: string) =>
   unwrap(api.post<ApiResponse<{ message: string; share_id: number }>>('/share/accept-by-token', { token }));
 
+// Release Notes API
+export interface ReleaseNote {
+  id: number;
+  version: string;
+  title: string;
+  content: string;  // Markdown
+  summary: string | null;
+  published_at: string;
+  is_major: boolean;
+}
+
+export interface ReleaseNotesCheckResponse {
+  show_release_notes: boolean;
+  release_note?: ReleaseNote;
+  current_version?: string;
+  last_seen?: string;
+  reason?: string;
+}
+
+export interface ReleaseNotesHistoryResponse {
+  release_notes: ReleaseNote[];
+  pagination: {
+    page: number;
+    per_page: number;
+    total: number;
+    pages: number;
+  };
+}
+
+export const checkReleaseNotes = () =>
+  unwrap(api.get<ApiResponse<ReleaseNotesCheckResponse>>('/release-notes/check'));
+
+export const dismissReleaseNotes = (version: string) =>
+  unwrap(api.post<ApiResponse<{ message: string; version: string }>>('/release-notes/dismiss', { version }));
+
+export const getReleaseNotesHistory = (page = 1, perPage = 10) =>
+  unwrap(api.get<ApiResponse<ReleaseNotesHistoryResponse>>(`/release-notes/history?page=${page}&per_page=${perPage}`));
+
 export default api;

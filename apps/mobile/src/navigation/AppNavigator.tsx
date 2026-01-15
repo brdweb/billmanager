@@ -8,7 +8,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import TelemetryNoticeModal from '../components/TelemetryNoticeModal';
+import ReleaseNotesModal from '../components/ReleaseNotesModal';
 import { api } from '../api/client';
+import { ReleaseNote } from '../types';
 import LoginScreen from '../screens/LoginScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import BillsScreen from '../screens/BillsScreen';
@@ -193,6 +195,8 @@ function LoadingScreen() {
 export default function AppNavigator() {
   const { isLoading, isAuthenticated } = useAuth();
   const [showTelemetryModal, setShowTelemetryModal] = useState(false);
+  const [showReleaseNotesModal, setShowReleaseNotesModal] = useState(false);
+  const [currentReleaseNote, setCurrentReleaseNote] = useState<ReleaseNote | null>(null);
 
   // Check telemetry notice status when authenticated
   useEffect(() => {
@@ -211,6 +215,26 @@ export default function AppNavigator() {
     };
 
     checkTelemetryNotice();
+  }, [isAuthenticated, isLoading]);
+
+  // Check release notes status when authenticated
+  useEffect(() => {
+    const checkReleaseNotes = async () => {
+      if (!isAuthenticated || isLoading) return;
+
+      try {
+        const response = await api.checkReleaseNotes();
+        if (response.success && response.data?.show_release_notes && response.data?.release_note) {
+          setCurrentReleaseNote(response.data.release_note);
+          setShowReleaseNotesModal(true);
+        }
+      } catch (error) {
+        // Silently fail - release notes check is not critical
+        console.debug('Failed to check release notes:', error);
+      }
+    };
+
+    checkReleaseNotes();
   }, [isAuthenticated, isLoading]);
 
   if (isLoading) {
@@ -233,6 +257,17 @@ export default function AppNavigator() {
         visible={showTelemetryModal}
         onClose={() => setShowTelemetryModal(false)}
       />
+
+      {currentReleaseNote && (
+        <ReleaseNotesModal
+          visible={showReleaseNotesModal}
+          onClose={() => {
+            setShowReleaseNotesModal(false);
+            setCurrentReleaseNote(null);
+          }}
+          releaseNote={currentReleaseNote}
+        />
+      )}
     </>
   );
 }

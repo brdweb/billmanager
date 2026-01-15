@@ -412,6 +412,57 @@ def migrate_20260114_01_add_performance_indexes(db):
     """
     logger.info("Running migration: 20260114_01_add_performance_indexes")
 
+
+def migrate_20260115_01_create_release_notes_table(db):
+    """Create release_notes table for tracking release announcements."""
+    logger.info("Running migration: 20260115_01_create_release_notes_table")
+
+    inspector = inspect(db.engine)
+    if 'release_notes' in inspector.get_table_names():
+        logger.info("release_notes table already exists")
+        return
+
+    db.session.execute(text('''
+        CREATE TABLE release_notes (
+            id SERIAL PRIMARY KEY,
+            version VARCHAR(20) NOT NULL UNIQUE,
+            title VARCHAR(255) NOT NULL,
+            content TEXT NOT NULL,
+            summary VARCHAR(500),
+            published_at TIMESTAMP NOT NULL,
+            is_major BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    '''))
+
+    # Add indexes for efficient queries
+    db.session.execute(text('''
+        CREATE INDEX idx_release_notes_version ON release_notes(version)
+    '''))
+    db.session.execute(text('''
+        CREATE INDEX idx_release_notes_published ON release_notes(published_at DESC)
+    '''))
+
+    db.session.commit()
+    logger.info("Created release_notes table")
+
+
+def migrate_20260115_02_add_user_release_tracking(db):
+    """Add last_seen_release_version column to users table."""
+    logger.info("Running migration: 20260115_02_add_user_release_tracking")
+
+    inspector = inspect(db.engine)
+    columns = [col['name'] for col in inspector.get_columns('users')]
+
+    if 'last_seen_release_version' not in columns:
+        db.session.execute(text('''
+            ALTER TABLE users ADD COLUMN last_seen_release_version VARCHAR(20)
+        '''))
+        logger.info("Added users.last_seen_release_version column")
+
+    db.session.commit()
+
     # Check existing indexes to avoid duplicates
     result = db.session.execute(text("""
         SELECT indexname FROM pg_indexes
@@ -508,6 +559,8 @@ MIGRATIONS = [
     ('20260109_02', 'Create share_audit_log table for audit trail', migrate_20260109_02_create_share_audit_log),
     ('20260112_01', 'Add share_id to payments for shared bill payment tracking', migrate_20260112_01_add_share_id_to_payments),
     ('20260114_01', 'Add composite indexes for query performance', migrate_20260114_01_add_performance_indexes),
+    ('20260115_01', 'Create release_notes table for release announcements', migrate_20260115_01_create_release_notes_table),
+    ('20260115_02', 'Add last_seen_release_version to users table', migrate_20260115_02_add_user_release_tracking),
 ]
 
 

@@ -14,6 +14,7 @@ import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { AdminModal } from './components/AdminPanel/AdminModal';
 import { MonthlyTotalsChart } from './components/MonthlyTotalsChart';
 import { TelemetryNoticeModal } from './components/TelemetryNoticeModal';
+import { ReleaseNotesModal } from './components/ReleaseNotesModal';
 import { AllPayments } from './pages/AllPayments';
 import { Login } from './pages/Login';
 import { VerifyEmail } from './pages/VerifyEmail';
@@ -27,6 +28,7 @@ import { useAuth } from './context/AuthContext';
 import { useConfig } from './context/ConfigContext';
 import * as api from './api/client';
 import type { Bill } from './api/client';
+import type { ReleaseNote } from './api/client';
 import { archiveBill, unarchiveBill, deleteBillPermanent, ApiError } from './api/client';
 
 // Helper to show error notifications
@@ -89,6 +91,8 @@ function App() {
   const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false);
   const [chartOpened, { open: openChart, close: closeChart }] = useDisclosure(false);
   const [telemetryModalOpened, { open: openTelemetryModal, close: closeTelemetryModal }] = useDisclosure(false);
+  const [releaseNotesModalOpened, { open: openReleaseNotesModal, close: closeReleaseNotesModal }] = useDisclosure(false);
+  const [currentReleaseNote, setCurrentReleaseNote] = useState<ReleaseNote | null>(null);
 
   // Current editing/paying bill
   const [currentBill, setCurrentBill] = useState<Bill | null>(null);
@@ -230,6 +234,27 @@ function App() {
 
     checkTelemetryNotice();
   }, [isLoggedIn, isLoading, openTelemetryModal]);
+
+  // Check release notes on login
+  useEffect(() => {
+    const checkReleaseNotes = async () => {
+      if (!isLoggedIn || isLoading) {
+        return;
+      }
+
+      try {
+        const result = await api.checkReleaseNotes();
+        if (result.show_release_notes && result.release_note) {
+          setCurrentReleaseNote(result.release_note);
+          openReleaseNotesModal();
+        }
+      } catch {
+        // Silently fail - release notes check is not critical
+      }
+    };
+
+    checkReleaseNotes();
+  }, [isLoggedIn, isLoading, openReleaseNotesModal]);
 
   // Handle password change required - derive directly from auth state
   const passwordChangeOpened = !!pendingPasswordChange;
@@ -483,6 +508,17 @@ function App() {
       <MonthlyTotalsChart opened={chartOpened} onClose={closeChart} />
 
       <TelemetryNoticeModal opened={telemetryModalOpened} onClose={closeTelemetryModal} />
+
+      {currentReleaseNote && (
+        <ReleaseNotesModal
+          opened={releaseNotesModalOpened}
+          onClose={() => {
+            closeReleaseNotesModal();
+            setCurrentReleaseNote(null);
+          }}
+          releaseNote={currentReleaseNote}
+        />
+      )}
     </>
   );
 }

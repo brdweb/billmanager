@@ -42,6 +42,9 @@ class User(db.Model):
     telemetry_notice_shown_at = db.Column(db.DateTime, nullable=True)
     telemetry_opt_out = db.Column(db.Boolean, default=False)
 
+    # Release notes tracking (last version user acknowledged)
+    last_seen_release_version = db.Column(db.String(20), nullable=True)
+
     # Relationships
     accessible_databases = db.relationship('Database', secondary=user_database_access, backref='users')
     created_by = db.relationship('User', remote_side='User.id', foreign_keys=[created_by_id], backref='created_users')
@@ -613,3 +616,17 @@ class TelemetrySubmission(db.Model):
     __table_args__ = (
         db.Index('idx_instance_received', 'instance_id', 'received_at'),
     )
+
+
+class ReleaseNote(db.Model):
+    """Stores release notes for version announcements shown to users after login"""
+    __tablename__ = 'release_notes'
+    id = db.Column(db.Integer, primary_key=True)
+    version = db.Column(db.String(20), unique=True, nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.Text, nullable=False)  # Markdown content
+    summary = db.Column(db.String(500), nullable=True)
+    published_at = db.Column(db.DateTime, nullable=False)
+    is_major = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

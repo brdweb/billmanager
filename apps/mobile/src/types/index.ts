@@ -235,3 +235,14 @@ export interface UserSearchResult {
   id: number;
   username: string;
 }
+
+// Release Notes types
+export interface ReleaseNote {
+  id: number;
+  version: string;
+  title: string;
+  content: string;
+  summary: string | null;
+  published_at: string;
+  is_major: boolean;
+}
