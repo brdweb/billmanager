@@ -1,3 +1,39 @@
+/**
+ * Release Notes Configuration
+ *
+ * HOW TO ADD RELEASE NOTES FOR A NEW VERSION:
+ *
+ * 1. Add a new entry at the TOP of the `releaseNotes` array (newest first)
+ * 2. Update the version number in these files:
+ *    - apps/server/app.py (search for 'version': - two occurrences)
+ *    - apps/web/package.json
+ *    - README.md (What's New section)
+ * 3. The `currentVersion` export automatically uses the first entry's version
+ *
+ * RELEASE NOTE STRUCTURE:
+ * {
+ *   version: '3.8.0',           // Semver version string
+ *   date: '2026-02-01',         // ISO date (YYYY-MM-DD)
+ *   title: 'Feature Name',      // Short title for the release
+ *   sections: [                 // Array of sections (New Features, Bug Fixes, etc.)
+ *     {
+ *       heading: 'New Features',
+ *       items: ['Feature 1 description', 'Feature 2 description'],
+ *     },
+ *   ],
+ * }
+ *
+ * COMMON SECTION HEADINGS:
+ * - 'New Features' - Major new functionality
+ * - 'Improvements' - Enhancements to existing features
+ * - 'Bug Fixes' - Fixed issues
+ * - 'Security' - Security-related changes
+ * - 'Breaking Changes' - Changes requiring user action
+ *
+ * The release notes modal automatically shows to users when they log in
+ * after a new version is released (tracked via localStorage).
+ */
+
 export interface ReleaseNote {
   version: string;
   date: string;
