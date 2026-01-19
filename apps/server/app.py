@@ -504,7 +504,7 @@ def login():
         log_auth_event('login', success=True, user_id=user.id, username=user.username)
         if user.password_change_required:
             token = secrets.token_hex(32); user.change_token = token; db.session.commit()
-            return jsonify({'password_change_required': True, 'user_id': user.id, 'change_token': token, 'role': user.role})
+            return jsonify({'password_change_required': True, 'user_id': user.id, 'change_token': token, 'role': user.role})  # nosec B105
         session['user_id'] = user.id; session['role'] = user.role
         dbs = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
         if dbs: session['db_name'] = dbs[0]['name']
@@ -1862,7 +1862,7 @@ def jwt_login():
         return jsonify({
             'success': False,
             'error': 'Password change required',
-            'password_change_required': True,
+            'password_change_required': True,  # nosec B105
             'change_token': token
         }), 403
 
@@ -1879,7 +1879,7 @@ def jwt_login():
             'access_token': access_token,
             'refresh_token': refresh_token,
             'expires_in': int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds()),
-            'token_type': 'Bearer',
+            'token_type': 'Bearer',  # nosec B105
             'user': {
                 'id': user.id,
                 'username': user.username,
@@ -1914,7 +1914,7 @@ def jwt_refresh():
         'data': {
             'access_token': access_token,
             'expires_in': int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds()),
-            'token_type': 'Bearer'
+            'token_type': 'Bearer'  # nosec B105
         }
     })
 
@@ -3914,7 +3914,7 @@ def jwt_change_password():
             'access_token': access_token,
             'refresh_token': refresh_token,
             'expires_in': int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds()),
-            'token_type': 'Bearer',
+            'token_type': 'Bearer',  # nosec B105
             'user': {'id': user.id, 'username': user.username, 'role': user.role},
             'databases': databases
         }
