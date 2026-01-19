@@ -2290,8 +2290,10 @@ def create_checkout():
 
     return jsonify({
         'success': True,
-        'url': result['url'],
-        'session_id': result['session_id']
+        'data': {
+            'url': result['url'],
+            'session_id': result['session_id']
+        }
     })
 
 
@@ -2313,7 +2315,9 @@ def billing_portal():
 
     return jsonify({
         'success': True,
-        'url': result['url']
+        'data': {
+            'url': result['url']
+        }
     })
 
 
