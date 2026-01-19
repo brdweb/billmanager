@@ -75,14 +75,14 @@ export function Billing() {
     setActionLoading(true);
     try {
       const response = await api.createCheckoutSession(tier, billingInterval);
-      if (response.success && response.url) {
+      if (response.url) {
         window.umami?.track('checkout_started', { tier, interval: billingInterval });
         window.location.href = response.url;
       } else {
-        setError(response.error || 'Failed to create checkout session');
+        setError('Failed to create checkout session');
       }
-    } catch {
-      setError('Failed to start subscription process');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start subscription process');
     } finally {
       setActionLoading(false);
     }
@@ -92,13 +92,13 @@ export function Billing() {
     setActionLoading(true);
     try {
       const response = await api.createPortalSession();
-      if (response.success && response.url) {
+      if (response.url) {
         window.location.href = response.url;
       } else {
-        setError(response.error || 'Failed to open billing portal');
+        setError('Failed to open billing portal');
       }
-    } catch {
-      setError('Failed to open billing portal');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to open billing portal');
     } finally {
       setActionLoading(false);
     }
@@ -440,12 +440,6 @@ export function Billing() {
         </>
       )}
 
-      <Text size="sm" c="dimmed" ta="center" mt="lg">
-        Need help?{' '}
-        <Text component={Link} to="/support" c="blue" inherit>
-          Contact support
-        </Text>
-      </Text>
     </Container>
   );
 }

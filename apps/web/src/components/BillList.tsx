@@ -16,6 +16,7 @@ import {
   Tooltip,
   ThemeIcon,
   Modal,
+  Anchor,
 } from '@mantine/core';
 import { IconEdit, IconCash, IconPlus, IconFilterOff, IconSearch, IconX, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter, IconUsers } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
@@ -511,6 +512,12 @@ export function BillList({
           />
         </Group>
       )}
+
+      <Text size="xs" c="dimmed" ta="center" mt="md">
+        <Anchor href="https://docs.billmanager.app" target="_blank" inherit>
+          Need help?
+        </Anchor>
+      </Text>
 
       {/* Confirmation modal for shared bill payment */}
       <Modal
