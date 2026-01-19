@@ -61,7 +61,7 @@ export interface BillFilter {
 }
 
 function App() {
-  const { isLoggedIn, isLoading, pendingPasswordChange, currentDb } = useAuth();
+  const { isLoggedIn, isLoading, pendingPasswordChange, currentDb, databases } = useAuth();
   const { config } = useConfig();
   const navigate = useNavigate();
   const location = useLocation();
@@ -429,6 +429,7 @@ function App() {
                     filter={filter}
                     onFilterChange={setFilter}
                     onRefresh={fetchBills}
+                    isAllBucketsMode={currentDb === '_all_'}
                   />
                 </Stack>
               )
@@ -461,6 +462,8 @@ function App() {
         onUnarchive={handleUnarchiveBill}
         onDelete={handleDeleteBill}
         bill={currentBill}
+        isAllBucketsMode={currentDb === '_all_'}
+        databases={databases}
       />
 
       <PayModal

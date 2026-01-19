@@ -21,7 +21,7 @@ import {
 import { IconArchive, IconArchiveOff, IconTrash, IconShare } from '@tabler/icons-react';
 import { DatePickerInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
-import type { Bill, BillShare } from '../api/client';
+import type { Bill, BillShare, Database } from '../api/client';
 import * as api from '../api/client';
 import { IconPicker } from './IconPicker';
 import { BillIcon } from './BillIcon';
@@ -41,6 +41,7 @@ interface BillFormValues {
   icon: string;
   type: 'expense' | 'deposit';
   account: string | null;
+  database_id: number | null;
 }
 
 interface BillModalProps {
@@ -51,6 +52,8 @@ interface BillModalProps {
   onUnarchive?: (bill: Bill) => Promise<void>;
   onDelete?: (bill: Bill) => Promise<void>;
   bill: Bill | null;
+  isAllBucketsMode?: boolean;
+  databases?: Database[];
 }
 
 const frequencyOptions = [
@@ -72,7 +75,7 @@ const dayOptions = [
   { label: 'Sun', value: 6 },
 ];
 
-export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onDelete, bill }: BillModalProps) {
+export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onDelete, bill, isAllBucketsMode = false, databases = [] }: BillModalProps) {
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -93,6 +96,7 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
       icon: 'payment',
       type: 'expense',
       account: null,
+      database_id: null,
     },
     validate: {
       name: (value) => (!value.trim() ? 'Name is required' : null),
@@ -172,6 +176,7 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
             icon: bill.icon || 'payment',
             type: bill.type || 'expense',
             account: bill.account || null,
+            database_id: bill.database_id || null,
           });
         } else {
           form.reset();
@@ -204,6 +209,13 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
   };
 
   const handleSubmit = async (values: BillFormValues) => {
+    // Validate bucket selection when creating in All Buckets mode
+    const isCreating = !bill;
+    if (isCreating && isAllBucketsMode && !values.database_id) {
+      form.setFieldError('database_id', 'Please select a bucket');
+      return;
+    }
+
     setLoading(true);
     try {
       let frequencyConfig: { dates?: number[]; days?: number[] } = {};
@@ -248,6 +260,8 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
         icon: values.icon,
         type: values.type,
         account: values.account || null,
+        // Include database_id if creating in All Buckets mode or moving to a different bucket
+        ...(values.database_id ? { database_id: values.database_id } : {}),
       };
 
       await onSave(billData);
@@ -318,6 +332,24 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
                 limit={5}
               />
             </Group>
+
+            {/* Bucket selector - shown when creating in All Buckets mode or editing any bill */}
+            {(isAllBucketsMode || bill) && databases.length > 0 && (
+              <Select
+                label="Bucket"
+                placeholder={!bill && isAllBucketsMode ? "Select a bucket" : "Move to bucket..."}
+                description={!bill && isAllBucketsMode ? "Select which bucket to create this bill in" : "Change which bucket this bill belongs to"}
+                data={databases.map((db) => ({
+                  value: String(db.id),
+                  label: db.display_name,
+                }))}
+                value={form.values.database_id ? String(form.values.database_id) : null}
+                onChange={(value) => form.setFieldValue('database_id', value ? parseInt(value) : null)}
+                required={!bill && isAllBucketsMode}
+                error={form.errors.database_id}
+                clearable={!!bill}
+              />
+            )}
 
             {/* Row 3: Amount and Varies */}
             <Group grow align="flex-end">

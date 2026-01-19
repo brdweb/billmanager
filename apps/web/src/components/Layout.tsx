@@ -54,10 +54,13 @@ export function Layout({ children, sidebar, onAdminClick, onBillingClick }: Layo
               {isLoggedIn && databases.length > 0 && (
                 <Select
                   placeholder="Select bill group"
-                  data={databases.map((db) => ({
-                    value: db.name,
-                    label: db.display_name,
-                  }))}
+                  data={[
+                    { value: '_all_', label: 'All Buckets' },
+                    ...databases.map((db) => ({
+                      value: db.name,
+                      label: db.display_name,
+                    })),
+                  ]}
                   value={currentDb}
                   onChange={handleDatabaseChange}
                   size="sm"

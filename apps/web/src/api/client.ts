@@ -203,6 +203,8 @@ export interface Bill {
     my_portion_paid: boolean;
     my_portion_paid_date: string | null;
   };
+  database_id?: number;  // Database/bucket the bill belongs to
+  database_name?: string;  // Display name of the database/bucket
 }
 
 export interface Payment {
@@ -219,6 +221,8 @@ export interface PaymentWithBill extends Payment {
   is_share_payment?: boolean;  // True if this is a shared bill payment
   is_received_payment?: boolean;  // True if this is money received from a sharee (owner view)
   notes?: string;
+  database_id?: number;  // Database/bucket the payment's bill belongs to
+  database_name?: string;  // Display name of the database/bucket
 }
 
 export interface MonthlyBillPayment {

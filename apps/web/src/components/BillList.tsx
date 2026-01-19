@@ -40,6 +40,7 @@ interface BillListProps {
   filter: BillFilter;
   onFilterChange: (filter: BillFilter) => void;
   onRefresh?: () => void;
+  isAllBucketsMode?: boolean;
 }
 
 function getFrequencyText(bill: Bill): string {
@@ -119,6 +120,7 @@ export function BillList({
   filter,
   onFilterChange,
   onRefresh,
+  isAllBucketsMode = false,
 }: BillListProps) {
   // Accounts list for filtering
   const [accounts, setAccounts] = useState<string[]>([]);
@@ -339,6 +341,7 @@ export function BillList({
               <Table.Th>Amount</Table.Th>
               <Table.Th>Due Date</Table.Th>
               <Table.Th>Frequency</Table.Th>
+              {isAllBucketsMode && <Table.Th>Bucket</Table.Th>}
               <Table.Th className="no-print">Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
@@ -451,6 +454,13 @@ export function BillList({
                     {getFrequencyText(bill)}
                   </Text>
                 </Table.Td>
+                {isAllBucketsMode && (
+                  <Table.Td>
+                    <Badge size="sm" variant="outline" color="gray">
+                      {bill.database_name || 'Unknown'}
+                    </Badge>
+                  </Table.Td>
+                )}
                 <Table.Td className="no-print">
                   <Group gap="xs" onClick={(e) => e.stopPropagation()}>
                     {!bill.is_shared && (

@@ -224,12 +224,16 @@ def jwt_required(f):
         # Get database from X-Database header for mobile clients
         db_name = request.headers.get('X-Database')
         if db_name:
-            user = db.session.get(User,g.jwt_user_id)
-            target_db = Database.query.filter_by(name=db_name).first()
-            if target_db and target_db in user.accessible_databases:
-                g.jwt_db_name = db_name
+            if db_name == '_all_':
+                # Special value for all-databases view
+                g.jwt_db_name = '_all_'
             else:
-                return jsonify({'success': False, 'error': 'Access denied to database'}), 403
+                user = db.session.get(User,g.jwt_user_id)
+                target_db = Database.query.filter_by(name=db_name).first()
+                if target_db and target_db in user.accessible_databases:
+                    g.jwt_db_name = db_name
+                else:
+                    return jsonify({'success': False, 'error': 'Access denied to database'}), 403
         else:
             g.jwt_db_name = None
 
@@ -2585,15 +2589,26 @@ def jwt_get_bills():
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    if not target_db:
-        return jsonify({'success': False, 'error': 'Database not found'}), 404
-
     current_user_id = g.jwt_user_id
     include_archived = request.args.get('include_archived', 'false').lower() == 'true'
 
-    # Get owned bills
-    query = Bill.query.filter_by(database_id=target_db.id)
+    # Handle "all databases" mode
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        accessible_dbs = user.accessible_databases
+        accessible_db_ids = [d.id for d in accessible_dbs]
+        # Create lookup for database names
+        db_name_lookup = {d.id: d.display_name for d in accessible_dbs}
+        target_db = None  # No single target in all-mode
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db:
+            return jsonify({'success': False, 'error': 'Database not found'}), 404
+        accessible_db_ids = [target_db.id]
+        db_name_lookup = {target_db.id: target_db.display_name}
+
+    # Get owned bills from accessible database(s)
+    query = Bill.query.filter(Bill.database_id.in_(accessible_db_ids))
     if not include_archived:
         query = query.filter_by(archived=False)
     owned_bills = query.order_by(Bill.due_date).all()
@@ -2644,7 +2659,9 @@ def jwt_get_bills():
             'auto_payment': bill.auto_pay, 'icon': bill.icon, 'type': bill.type,
             'account': bill.account, 'notes': bill.notes, 'archived': bill.archived,
             'is_shared': False,
-            'share_count': share_counts.get(bill.id, 0)
+            'share_count': share_counts.get(bill.id, 0),
+            'database_id': bill.database_id,
+            'database_name': db_name_lookup.get(bill.database_id, 'Unknown')
         }
         if bill.is_variable:
             avg = db.session.query(func.avg(Payment.amount)).filter_by(bill_id=bill.id).scalar()
@@ -2680,7 +2697,9 @@ def jwt_get_bills():
                 'my_portion': my_portion,
                 'my_portion_paid': share.is_recipient_paid,
                 'my_portion_paid_date': share.recipient_paid_date.isoformat() if share.recipient_paid_date else None
-            }
+            },
+            'database_id': bill.database_id,
+            'database_name': database_owner.display_name if database_owner else 'Unknown'
         }
         if bill.is_variable:
             avg = db.session.query(func.avg(Payment.amount)).filter_by(bill_id=bill.id).scalar()
@@ -2697,17 +2716,30 @@ def jwt_get_bills():
 @jwt_required
 @subscription_required(feature='bills')
 def jwt_create_bill():
-    """Create a new bill (JWT version)."""
+    """Create a new bill (JWT version). Supports explicit database_id for creation from All Buckets mode."""
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
-
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    if not target_db:
-        return jsonify({'success': False, 'error': 'Database not found'}), 404
 
     data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({'success': False, 'error': 'Invalid JSON body'}), 400
+
+    user = db.session.get(User, g.jwt_user_id)
+
+    # Determine target database: explicit database_id takes precedence over X-Database header
+    if 'database_id' in data:
+        target_db = db.session.get(Database, data['database_id'])
+        if not target_db:
+            return jsonify({'success': False, 'error': 'Target database not found'}), 404
+        if target_db not in user.accessible_databases:
+            return jsonify({'success': False, 'error': 'Access denied to target database'}), 403
+    elif g.jwt_db_name == '_all_':
+        # In All Buckets mode, database_id is required
+        return jsonify({'success': False, 'error': 'database_id is required when creating from All Buckets view'}), 400
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db:
+            return jsonify({'success': False, 'error': 'Database not found'}), 404
 
     # Validate bill name
     is_valid, error = validate_bill_name(data.get('name', ''))
@@ -2773,19 +2805,37 @@ def jwt_get_bill(bill_id):
 @limiter.limit("30 per minute")
 @jwt_required
 def jwt_update_bill(bill_id):
-    """Update a bill (JWT version)."""
+    """Update a bill (JWT version). Supports moving bills between databases."""
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = db.get_or_404(Bill,bill_id)
+    bill = db.get_or_404(Bill, bill_id)
+    user = db.session.get(User, g.jwt_user_id)
 
-    if bill.database_id != target_db.id:
+    # Validate user has access to the bill's current database
+    current_bill_db = db.session.get(Database, bill.database_id)
+    if current_bill_db not in user.accessible_databases:
         return jsonify({'success': False, 'error': 'Access denied'}), 403
+
+    # For non-_all_ mode, also verify X-Database header matches bill's database
+    if g.jwt_db_name != '_all_':
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if bill.database_id != target_db.id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({'success': False, 'error': 'Invalid JSON body'}), 400
+
+    # Handle moving bill to a different database
+    if 'database_id' in data:
+        new_db_id = data['database_id']
+        new_db = db.session.get(Database, new_db_id)
+        if not new_db:
+            return jsonify({'success': False, 'error': 'Target database not found'}), 404
+        if new_db not in user.accessible_databases:
+            return jsonify({'success': False, 'error': 'Access denied to target database'}), 403
+        bill.database_id = new_db_id
 
     if 'name' in data: bill.name = data['name']
     if 'amount' in data: bill.amount = data['amount']
@@ -2936,11 +2986,23 @@ def jwt_get_all_payments():
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+    # Handle "all databases" mode
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        accessible_dbs = user.accessible_databases
+        accessible_db_ids = [d.id for d in accessible_dbs]
+        # Create lookup for database names
+        db_name_lookup = {d.id: d.display_name for d in accessible_dbs}
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db:
+            return jsonify({'success': False, 'error': 'Database not found'}), 404
+        accessible_db_ids = [target_db.id]
+        db_name_lookup = {target_db.id: target_db.display_name}
 
-    # Get payments for bills owned by user in current database
+    # Get payments for bills owned by user in accessible database(s)
     owned_payments = db.session.query(Payment).join(Bill).filter(
-        Bill.database_id == target_db.id
+        Bill.database_id.in_(accessible_db_ids)
     ).all()
 
     # Get payments for shared bills where current user is the share recipient
@@ -2983,7 +3045,9 @@ def jwt_get_all_payments():
             'bill_type': effective_type,  # Use effective type for proper categorization
             'original_bill_type': p.bill.type,  # Keep original for reference
             'is_share_payment': is_received_from_sharee,
-            'is_received_payment': is_received_from_sharee  # True = money received from sharee
+            'is_received_payment': is_received_from_sharee,  # True = money received from sharee
+            'database_id': p.bill.database_id,
+            'database_name': db_name_lookup.get(p.bill.database_id, 'Unknown')
         })
 
     # Process sharee's own share payments (their outgoing expenses)
@@ -2994,6 +3058,10 @@ def jwt_get_all_payments():
 
         # For sharee: their share payments are expenses (money they paid out)
         effective_type = 'deposit' if p.bill.type == 'deposit' else 'expense'
+
+        # Get database name for shared bill (may not be in user's accessible databases)
+        shared_bill_db = db.session.get(Database, p.bill.database_id)
+        shared_db_name = shared_bill_db.display_name if shared_bill_db else 'Unknown'
 
         result.append({
             'id': p.id,
@@ -3006,7 +3074,9 @@ def jwt_get_all_payments():
             'bill_type': effective_type,
             'original_bill_type': p.bill.type,
             'is_share_payment': True,
-            'is_received_payment': False  # False = money paid out by sharee
+            'is_received_payment': False,  # False = money paid out by sharee
+            'database_id': p.bill.database_id,
+            'database_name': shared_db_name
         })
 
     # Sort by payment date descending
@@ -3704,7 +3774,16 @@ def jwt_get_monthly_stats():
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+    # Handle "all databases" mode
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        accessible_dbs = user.accessible_databases
+        accessible_db_ids = [d.id for d in accessible_dbs]
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db:
+            return jsonify({'success': False, 'error': 'Database not found'}), 404
+        accessible_db_ids = [target_db.id]
 
     # Get owner's own payments on their bills (share_id IS NULL = owner paid it themselves)
     owner_payments = db.session.query(
@@ -3712,7 +3791,7 @@ def jwt_get_monthly_stats():
         func.sum(Payment.amount),
         Bill.type
     ).join(Bill).filter(
-        Bill.database_id == target_db.id,
+        Bill.database_id.in_(accessible_db_ids),
         Payment.share_id == None  # Owner's own payments
     ).group_by('month', Bill.type).all()
 
@@ -3722,7 +3801,7 @@ def jwt_get_monthly_stats():
         func.to_char(func.to_date(Payment.payment_date, 'YYYY-MM-DD'), 'YYYY-MM').label('month'),
         func.sum(Payment.amount)
     ).join(Bill).filter(
-        Bill.database_id == target_db.id,
+        Bill.database_id.in_(accessible_db_ids),
         Payment.share_id != None  # Payments made by sharees
     ).group_by('month').all()
 
