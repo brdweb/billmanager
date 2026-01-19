@@ -14,6 +14,8 @@ import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { AdminModal } from './components/AdminPanel/AdminModal';
 import { MonthlyTotalsChart } from './components/MonthlyTotalsChart';
 import { TelemetryNoticeModal } from './components/TelemetryNoticeModal';
+import { ReleaseNotesModal, hasUnseenReleaseNotes } from './components/ReleaseNotesModal';
+import { currentVersion } from './config/releaseNotes';
 import { AllPayments } from './pages/AllPayments';
 import { Login } from './pages/Login';
 import { VerifyEmail } from './pages/VerifyEmail';
@@ -89,6 +91,7 @@ function App() {
   const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false);
   const [chartOpened, { open: openChart, close: closeChart }] = useDisclosure(false);
   const [telemetryModalOpened, { open: openTelemetryModal, close: closeTelemetryModal }] = useDisclosure(false);
+  const [releaseNotesOpened, { open: openReleaseNotes, close: closeReleaseNotes }] = useDisclosure(false);
 
   // Current editing/paying bill
   const [currentBill, setCurrentBill] = useState<Bill | null>(null);
@@ -230,6 +233,17 @@ function App() {
 
     checkTelemetryNotice();
   }, [isLoggedIn, isLoading, openTelemetryModal]);
+
+  // Check for new release notes on login
+  useEffect(() => {
+    if (isLoggedIn && !isLoading && hasUnseenReleaseNotes()) {
+      // Small delay to not overwhelm user with multiple modals
+      const timer = setTimeout(() => {
+        openReleaseNotes();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoggedIn, isLoading, openReleaseNotes]);
 
   // Handle password change required - derive directly from auth state
   const passwordChangeOpened = !!pendingPasswordChange;
@@ -394,7 +408,11 @@ function App() {
                 />
                 <Divider />
                 <Text size="xs" c="dimmed" ta="center">
-                  BillManager v3.6.1 - Licensed under{' '}
+                  BillManager{' '}
+                  <Anchor component="button" size="xs" onClick={openReleaseNotes}>
+                    v{currentVersion}
+                  </Anchor>
+                  {' '}- Licensed under{' '}
                   <Anchor href="https://osaasy.dev/" target="_blank" size="xs">
                     O'Saasy
                   </Anchor>
@@ -486,6 +504,8 @@ function App() {
       <MonthlyTotalsChart opened={chartOpened} onClose={closeChart} />
 
       <TelemetryNoticeModal opened={telemetryModalOpened} onClose={closeTelemetryModal} />
+
+      <ReleaseNotesModal opened={releaseNotesOpened} onClose={closeReleaseNotes} />
     </>
   );
 }

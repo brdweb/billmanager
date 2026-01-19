@@ -6,30 +6,23 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v3.6.1
+## 🎉 What's New in v3.7.0
 
-**Shared Bills & Split Expenses** - The biggest feature release yet! Now you can share bills with other users and track split payments seamlessly.
+**All Buckets View** - Manage all your bills across every bill group from a single unified view.
 
 ### Highlights
 
-- **Share Bills with Anyone** - Share any bill with other BillManager users by username
-- **Flexible Split Options** - Configure splits by percentage (50/50), fixed amount ($500), or equal division
-- **Real-Time Payment Tracking** - See when sharees mark their portion as paid
-- **Automatic Income Recording** - Payments from sharees automatically appear as deposits in your payment history and trends
-- **Protected Transactions** - Sharee payments are view-only for owners; only the person who made the payment can edit or delete it
-- **Visual Indicators** - Shared bills display with a users icon; payment history shows Income vs Expense badges
+- **All Buckets View** - See and manage bills from all your bill groups in one place
+- **Cross-Bucket Bill Management** - Create bills in any bucket from the All Buckets view
+- **Move Bills Between Buckets** - Easily reorganize bills by moving them to different groups
+- **Aggregated Statistics** - Monthly trends combine data from all accessible databases
+- **Mobile Support** - Full All Buckets functionality in the mobile app
+- **Release Notes** - In-app release notes that pop up when new versions are available
 
-### For Bill Owners
-- Create a bill, click "Share Bill", enter the sharee's username
-- Configure how the bill is split (percentage, fixed, or equal)
-- Track when your sharee marks their portion as paid
-- See their payments as income in your monthly trends
+### Bug Fixes
 
-### For Sharees
-- Accept or decline bill share invitations
-- View the full bill details and your calculated portion
-- Mark your portion as paid with one click
-- Your payment appears in your expense history
+- Edit user modal now correctly pre-selects bill group checkboxes
+- Database dropdown updates immediately after changing user permissions
 
 ---
 
