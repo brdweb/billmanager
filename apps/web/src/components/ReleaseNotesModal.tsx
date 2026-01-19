@@ -1,9 +1,7 @@
 import { Modal, Stack, Text, Button, Group, List, Badge, ActionIcon, Divider } from '@mantine/core';
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
-import { useState, useEffect } from 'react';
-import { releaseNotes, currentVersion } from '../config/releaseNotes';
-
-const SEEN_VERSION_KEY = 'billmanager_seen_version';
+import { useState } from 'react';
+import { releaseNotes, markVersionAsSeen, getVersionIndex } from '../config/releaseNotes';
 
 interface ReleaseNotesModalProps {
   opened: boolean;
@@ -12,19 +10,8 @@ interface ReleaseNotesModalProps {
 }
 
 export function ReleaseNotesModal({ opened, onClose, initialVersion }: ReleaseNotesModalProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  // Reset to initial version when modal opens
-  useEffect(() => {
-    if (opened) {
-      if (initialVersion) {
-        const index = releaseNotes.findIndex((r) => r.version === initialVersion);
-        setCurrentIndex(index >= 0 ? index : 0);
-      } else {
-        setCurrentIndex(0);
-      }
-    }
-  }, [opened, initialVersion]);
+  // State initializes from props; parent should use key prop to force reset when modal reopens
+  const [currentIndex, setCurrentIndex] = useState(() => getVersionIndex(initialVersion));
 
   const release = releaseNotes[currentIndex];
   const canGoNewer = currentIndex > 0;
@@ -32,7 +19,7 @@ export function ReleaseNotesModal({ opened, onClose, initialVersion }: ReleaseNo
 
   const handleClose = () => {
     // Mark current version as seen when closing
-    localStorage.setItem(SEEN_VERSION_KEY, currentVersion);
+    markVersionAsSeen();
     onClose();
   };
 
@@ -123,13 +110,3 @@ export function ReleaseNotesModal({ opened, onClose, initialVersion }: ReleaseNo
     </Modal>
   );
 }
-
-// Helper function to check if there are new release notes to show
-export function hasUnseenReleaseNotes(): boolean {
-  const seenVersion = localStorage.getItem(SEEN_VERSION_KEY);
-  if (!seenVersion) return true;
-  return seenVersion !== currentVersion;
-}
-
-// Helper to get the current version
-export { currentVersion };

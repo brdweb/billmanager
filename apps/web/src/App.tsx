@@ -14,8 +14,8 @@ import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { AdminModal } from './components/AdminPanel/AdminModal';
 import { MonthlyTotalsChart } from './components/MonthlyTotalsChart';
 import { TelemetryNoticeModal } from './components/TelemetryNoticeModal';
-import { ReleaseNotesModal, hasUnseenReleaseNotes } from './components/ReleaseNotesModal';
-import { currentVersion } from './config/releaseNotes';
+import { ReleaseNotesModal } from './components/ReleaseNotesModal';
+import { currentVersion, hasUnseenReleaseNotes } from './config/releaseNotes';
 import { AllPayments } from './pages/AllPayments';
 import { Login } from './pages/Login';
 import { VerifyEmail } from './pages/VerifyEmail';
@@ -91,7 +91,14 @@ function App() {
   const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false);
   const [chartOpened, { open: openChart, close: closeChart }] = useDisclosure(false);
   const [telemetryModalOpened, { open: openTelemetryModal, close: closeTelemetryModal }] = useDisclosure(false);
-  const [releaseNotesOpened, { open: openReleaseNotes, close: closeReleaseNotes }] = useDisclosure(false);
+  const [releaseNotesOpened, { open: doOpenReleaseNotes, close: closeReleaseNotes }] = useDisclosure(false);
+  const [releaseNotesKey, setReleaseNotesKey] = useState(0);
+
+  // Wrapper to reset modal state when opening
+  const openReleaseNotes = useCallback(() => {
+    setReleaseNotesKey((k) => k + 1);
+    doOpenReleaseNotes();
+  }, [doOpenReleaseNotes]);
 
   // Current editing/paying bill
   const [currentBill, setCurrentBill] = useState<Bill | null>(null);
@@ -505,7 +512,7 @@ function App() {
 
       <TelemetryNoticeModal opened={telemetryModalOpened} onClose={closeTelemetryModal} />
 
-      <ReleaseNotesModal opened={releaseNotesOpened} onClose={closeReleaseNotes} />
+      <ReleaseNotesModal key={releaseNotesKey} opened={releaseNotesOpened} onClose={closeReleaseNotes} />
     </>
   );
 }

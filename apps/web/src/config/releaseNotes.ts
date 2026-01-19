@@ -158,3 +158,25 @@ export const releaseNotes: ReleaseNote[] = [
 ];
 
 export const currentVersion = releaseNotes[0].version;
+
+// localStorage key for tracking seen version
+const SEEN_VERSION_KEY = 'billmanager_seen_version';
+
+// Helper function to check if there are new release notes to show
+export function hasUnseenReleaseNotes(): boolean {
+  const seenVersion = localStorage.getItem(SEEN_VERSION_KEY);
+  if (!seenVersion) return true;
+  return seenVersion !== currentVersion;
+}
+
+// Helper function to mark current version as seen
+export function markVersionAsSeen(): void {
+  localStorage.setItem(SEEN_VERSION_KEY, currentVersion);
+}
+
+// Helper function to get initial index for a version
+export function getVersionIndex(version?: string): number {
+  if (!version) return 0;
+  const index = releaseNotes.findIndex((r) => r.version === version);
+  return index >= 0 ? index : 0;
+}
