@@ -133,7 +133,10 @@ export default function BillsScreen() {
     }
   };
 
-  const currentDbInfo = databases.find(db => db.name === currentDatabase);
+  const isAllBucketsMode = currentDatabase === '_all_';
+  const currentDbInfo = isAllBucketsMode
+    ? { id: 0, name: '_all_', display_name: 'All Buckets' }
+    : databases.find(db => db.name === currentDatabase);
 
   const filteredBills = useMemo(() => {
     let result = bills;
@@ -203,6 +206,11 @@ export default function BillsScreen() {
             {isShared && bill.share_info && (
               <Text style={styles.sharedOwner} numberOfLines={1}>
                 Shared by {bill.share_info.owner_name}
+              </Text>
+            )}
+            {isAllBucketsMode && bill.database_name && (
+              <Text style={styles.bucketName} numberOfLines={1}>
+                {bill.database_name}
               </Text>
             )}
             <View style={styles.dueRow}>
@@ -407,6 +415,27 @@ export default function BillsScreen() {
         >
           <View style={styles.dbPickerContainer}>
             <Text style={styles.dbPickerTitle}>Select Bill Group</Text>
+            {/* All Buckets option */}
+            <TouchableOpacity
+              style={[
+                styles.dbPickerItem,
+                currentDatabase === '_all_' && styles.dbPickerItemActive,
+              ]}
+              onPress={() => handleSelectDatabase('_all_')}
+            >
+              <Text
+                style={[
+                  styles.dbPickerItemText,
+                  currentDatabase === '_all_' && styles.dbPickerItemTextActive,
+                ]}
+              >
+                All Buckets
+              </Text>
+              {currentDatabase === '_all_' && (
+                <Text style={styles.dbPickerCheck}>✓</Text>
+              )}
+            </TouchableOpacity>
+            {/* Individual databases */}
             {databases.map((db) => (
               <TouchableOpacity
                 key={db.id}
@@ -636,6 +665,12 @@ const createStyles = (colors: any, insets: any) => StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 2,
+  },
+  bucketName: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
+    fontStyle: 'italic',
   },
   myPortion: {
     fontSize: 12,

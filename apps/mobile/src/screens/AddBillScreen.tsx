@@ -16,6 +16,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { Bill } from '../types';
 import IconPicker from '../components/IconPicker';
 import { BillIcon } from '../components/BillIcon';
@@ -35,6 +36,8 @@ export default function AddBillScreen({ navigation, route }: Props) {
   const editBill = route.params?.bill as Bill | undefined;
   const isEditing = !!editBill;
   const { colors, isDark } = useTheme();
+  const { currentDatabase, databases } = useAuth();
+  const isAllBucketsMode = currentDatabase === '_all_';
 
   const [name, setName] = useState(editBill?.name || '');
   const [amount, setAmount] = useState(editBill?.amount?.toString() || '');
@@ -55,6 +58,9 @@ export default function AddBillScreen({ navigation, route }: Props) {
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [accounts, setAccounts] = useState<string[]>([]);
+  const [selectedDatabaseId, setSelectedDatabaseId] = useState<number | null>(
+    editBill?.database_id || null
+  );
 
   const styles = createStyles(colors);
 
@@ -115,6 +121,12 @@ export default function AddBillScreen({ navigation, route }: Props) {
       return;
     }
 
+    // Validate bucket selection when creating in All Buckets mode
+    if (!isEditing && isAllBucketsMode && !selectedDatabaseId) {
+      Alert.alert('Error', 'Please select a bucket for this bill');
+      return;
+    }
+
     setIsSubmitting(true);
 
     const billData: Partial<Bill> = {
@@ -128,6 +140,8 @@ export default function AddBillScreen({ navigation, route }: Props) {
       notes: notes.trim() || null,
       auto_payment: autoPayment,
       icon,
+      // Include database_id if creating in All Buckets mode or moving to different bucket
+      ...(selectedDatabaseId ? { database_id: selectedDatabaseId } : {}),
     };
 
     try {
@@ -311,6 +325,38 @@ export default function AddBillScreen({ navigation, route }: Props) {
               </TouchableOpacity>
             ))}
           </ScrollView>
+        )}
+
+        {/* Bucket selector - shown when creating in All Buckets mode or editing */}
+        {(isAllBucketsMode || isEditing) && databases.length > 0 && (
+          <>
+            <Text style={styles.label}>
+              {!isEditing && isAllBucketsMode ? 'Bucket *' : 'Bucket'}
+            </Text>
+            <View style={styles.bucketContainer}>
+              {databases.map((db) => (
+                <TouchableOpacity
+                  key={db.id}
+                  style={[
+                    styles.bucketButton,
+                    selectedDatabaseId === db.id && styles.bucketButtonActive,
+                  ]}
+                  onPress={() => setSelectedDatabaseId(db.id)}
+                >
+                  <Text style={[
+                    styles.bucketButtonText,
+                    selectedDatabaseId === db.id && styles.bucketButtonTextActive,
+                  ]}>{db.display_name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {!isEditing && isAllBucketsMode && (
+              <Text style={styles.bucketHint}>Select which bucket to create this bill in</Text>
+            )}
+            {isEditing && (
+              <Text style={styles.bucketHint}>Change which bucket this bill belongs to</Text>
+            )}
+          </>
         )}
 
         {/* Auto-payment */}
@@ -538,5 +584,35 @@ const createStyles = (colors: any) => StyleSheet.create({
   switchLabel: {
     fontSize: 14,
     color: colors.textMuted,
+  },
+  bucketContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  bucketButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  bucketButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  bucketButtonText: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  bucketButtonTextActive: {
+    color: '#fff',
+    fontWeight: '500',
+  },
+  bucketHint: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 8,
+    fontStyle: 'italic',
   },
 });

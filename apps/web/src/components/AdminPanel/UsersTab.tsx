@@ -35,6 +35,7 @@ import {
   ApiError,
 } from '../../api/client';
 import { useConfig } from '../../context/ConfigContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface UsersTabProps {
   isActive: boolean;
@@ -42,6 +43,7 @@ interface UsersTabProps {
 
 export function UsersTab({ isActive }: UsersTabProps) {
   const { emailEnabled, isSelfHosted } = useConfig();
+  const { refreshAuth } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [databases, setDatabases] = useState<Database[]>([]);
   const [invites, setInvites] = useState<UserInvite[]>([]);
@@ -271,6 +273,8 @@ export function UsersTab({ isActive }: UsersTabProps) {
         color: 'green',
       });
       await fetchData();
+      // Refresh auth state to update database list in header dropdown
+      await refreshAuth();
       setEditingUser(null);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : 'Failed to update user';

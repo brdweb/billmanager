@@ -4063,6 +4063,21 @@ def jwt_delete_user(target_user_id):
     db.session.commit()
     return jsonify({'success': True, 'data': {'message': 'User deleted'}})
 
+@api_v2_bp.route('/users/<int:target_user_id>/databases', methods=['GET'])
+@jwt_admin_required
+def jwt_get_user_databases(target_user_id):
+    """Get databases a user has access to (admin only)."""
+    user = db.get_or_404(User, target_user_id)
+    current_user_id = g.jwt_user_id
+    # In SaaS mode, only allow viewing databases of users you created (or yourself)
+    if is_saas() and user.id != current_user_id:
+        if user.created_by_id is not None and user.created_by_id != current_user_id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    return jsonify({
+        'success': True,
+        'data': [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
+    })
+
 @api_v2_bp.route('/invitations', methods=['GET'])
 @jwt_admin_required
 def jwt_get_invitations():

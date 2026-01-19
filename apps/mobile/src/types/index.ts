@@ -53,6 +53,8 @@ export interface Bill {
     my_portion_paid: boolean;
     my_portion_paid_date: string | null;
   };
+  database_id?: number;  // Database/bucket the bill belongs to
+  database_name?: string;  // Display name of the database/bucket
 }
 
 export interface Payment {
@@ -70,6 +72,8 @@ export interface Payment {
   original_bill_type?: 'expense' | 'deposit' | 'bill';
   is_share_payment?: boolean;
   is_received_payment?: boolean;  // True = money received from sharee (income)
+  database_id?: number;  // Database/bucket the payment's bill belongs to
+  database_name?: string;  // Display name of the database/bucket
 }
 
 // Sync types
