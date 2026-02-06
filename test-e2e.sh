@@ -17,7 +17,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$PROJECT_ROOT/apps/server"
 WEB_DIR="$PROJECT_ROOT/apps/web"
 TEST_OUTPUT_DIR="/tmp/billmanager-test-results"
-DATABASE_URL="postgresql://billsuser:billspass@192.168.40.240:5432/bills_test"
+DATABASE_URL="postgresql://billsuser:billspass@192.168.40.242:5432/bills_test"
 FLASK_PORT=5001
 VITE_PORT=5173
 
@@ -60,7 +60,7 @@ echo ""
 cat > "$REPORT_FILE" << EOF
 # BillManager End-to-End Test Report
 **Date:** $(date)
-**Test Database:** bills_test on 192.168.40.240
+**Test Database:** bills_test on 192.168.40.242
 **Environment:** Local Development
 
 ---
@@ -82,7 +82,7 @@ python << 'SETUP_SCRIPT'
 import psycopg
 from werkzeug.security import generate_password_hash
 
-DATABASE_URL = "postgresql://billsuser:billspass@192.168.40.240:5432/bills_test"
+DATABASE_URL = "postgresql://billsuser:billspass@192.168.40.242:5432/bills_test"
 
 conn = psycopg.connect(DATABASE_URL)
 cur = conn.cursor()

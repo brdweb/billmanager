@@ -47,3 +47,15 @@ marketing/
 
 # Scripts with credentials
 setup_kuma.py
+
+# Build artifacts
+*.apk
+
+# Instance-specific files
+.instance_id
+
+# Testing status (local only)
+TESTING_STATUS.md
+
+# Root package-lock (monorepo uses per-app locks)
+/package-lock.json
