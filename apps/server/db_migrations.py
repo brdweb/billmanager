@@ -427,13 +427,9 @@ def migrate_20260114_01_add_performance_indexes(db):
         '''))
         logger.info("Created index idx_payments_bill_date")
 
-    # Index for all-payments queries filtered by database
-    if 'idx_payments_db_date' not in existing_indexes:
-        db.session.execute(text('''
-            CREATE INDEX idx_payments_db_date
-            ON payments(database_id, payment_date DESC)
-        '''))
-        logger.info("Created index idx_payments_db_date")
+    # Note: payments table doesn't have database_id column directly
+    # Payments are linked to databases through bills.database_id
+    # Index removed as it referenced non-existent column
 
     # Composite index for pending shares lookup
     if 'idx_bill_shares_user_status' not in existing_indexes:
