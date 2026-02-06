@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Stack, Title, Text, Paper, Group, Badge, Divider, SimpleGrid, ActionIcon, Loader, Button } from '@mantine/core';
-import { IconCalendar, IconCoin, IconCheck, IconChevronLeft, IconChevronRight, IconChartLine, IconListDetails } from '@tabler/icons-react';
+import { Stack, Title, Text, Paper, Group, Badge, Divider, SimpleGrid, ActionIcon, Loader, Button, NavLink } from '@mantine/core';
+import { IconCalendar, IconCoin, IconCheck, IconChevronLeft, IconChevronRight, IconChartLine, IconListDetails, IconHome, IconReceipt, IconChartPie } from '@tabler/icons-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { Bill } from '../api/client';
 import { getMonthlyPayments } from '../api/client';
 import type { BillFilter, DateRangeFilter } from '../App';
@@ -15,6 +16,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ bills, isLoggedIn, filter, onFilterChange, onShowChart, onShowAllPayments }: SidebarProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   // Month offset: 0 = current month, -1 = last month, etc.
   const [monthOffset, setMonthOffset] = useState(0);
   // Monthly payment totals from API (keyed by "YYYY-MM")
@@ -151,7 +155,42 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange, onShowChart
 
   return (
     <Stack gap="xs">
-      <Title order={6}>Dashboard</Title>
+      {/* Navigation Links */}
+      {isLoggedIn && (
+        <>
+          <NavLink
+            label="Dashboard"
+            leftSection={<IconHome size={16} />}
+            active={location.pathname === '/'}
+            onClick={() => navigate('/')}
+            variant="light"
+          />
+          <NavLink
+            label="Bills"
+            leftSection={<IconReceipt size={16} />}
+            active={location.pathname === '/bills'}
+            onClick={() => navigate('/bills')}
+            variant="light"
+          />
+          <NavLink
+            label="Calendar"
+            leftSection={<IconCalendar size={16} />}
+            active={location.pathname === '/calendar'}
+            onClick={() => navigate('/calendar')}
+            variant="light"
+          />
+          <NavLink
+            label="Analytics"
+            leftSection={<IconChartPie size={16} />}
+            active={location.pathname === '/analytics'}
+            onClick={() => navigate('/analytics')}
+            variant="light"
+          />
+          <Divider my="xs" />
+        </>
+      )}
+
+      <Title order={6}>Monthly Summary</Title>
 
       <Paper p="xs" withBorder>
         <Group justify="space-between" mb="xs">

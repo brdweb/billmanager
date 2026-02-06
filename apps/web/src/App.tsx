@@ -25,6 +25,9 @@ import { ResendVerification } from './pages/ResendVerification';
 import { AcceptInvite } from './pages/AcceptInvite';
 import { AcceptShareInvite } from './pages/AcceptShareInvite';
 import { Billing } from './pages/Billing';
+import { Dashboard } from './pages/Dashboard';
+import { CalendarPage } from './pages/CalendarPage';
+import { Analytics } from './pages/Analytics';
 import { useAuth } from './context/AuthContext';
 import { useConfig } from './context/ConfigContext';
 import * as api from './api/client';
@@ -433,6 +436,21 @@ function App() {
           <Route
             path="/"
             element={
+              <Dashboard
+                bills={bills}
+                loading={billsLoading}
+                onAddBill={handleAddBill}
+                onEditBill={handleEditBill}
+                onPayBill={handlePayBill}
+                onViewPayments={handleViewPayments}
+                onViewBills={() => navigate('/bills')}
+                hasDatabase={!!currentDb}
+              />
+            }
+          />
+          <Route
+            path="/bills"
+            element={
               billsLoading ? (
                 <Center py="xl">
                   <Loader />
@@ -461,6 +479,22 @@ function App() {
             }
           />
           <Route path="/all-payments" element={<AllPayments />} />
+          <Route
+            path="/calendar"
+            element={
+              <CalendarPage
+                bills={bills}
+                onAddBill={handleAddBill}
+                onPayBill={handlePayBill}
+                onEditBill={handleEditBill}
+                hasDatabase={!!currentDb}
+              />
+            }
+          />
+          <Route
+            path="/analytics"
+            element={<Analytics hasDatabase={!!currentDb} />}
+          />
           {billingEnabled && (
             <>
               <Route path="/billing" element={<Billing />} />

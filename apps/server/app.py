@@ -2919,11 +2919,18 @@ def jwt_pay_bill(bill_id):
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
     bill = db.get_or_404(Bill,bill_id)
+    user = db.session.get(User, g.jwt_user_id)
 
-    if bill.database_id != target_db.id:
-        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    # Handle all-buckets mode
+    if g.jwt_db_name == '_all_':
+        bill_db = db.session.get(Database, bill.database_id)
+        if not bill_db or bill_db not in user.accessible_databases:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db or bill.database_id != target_db.id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     data = request.get_json(force=True, silent=True)
     if not data:
@@ -3858,6 +3865,168 @@ def jwt_get_monthly_stats():
 
     return jsonify({'success': True, 'data': monthly})
 
+
+@api_v2_bp.route('/stats/by-account', methods=['GET'])
+@jwt_required
+def jwt_get_stats_by_account():
+    """Get payment totals grouped by account."""
+    if not g.jwt_db_name:
+        return jsonify({'success': False, 'error': 'X-Database header required'}), 400
+
+    # Handle "all databases" mode
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        accessible_dbs = user.accessible_databases
+        accessible_db_ids = [d.id for d in accessible_dbs]
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db:
+            return jsonify({'success': False, 'error': 'Database not found'}), 404
+        accessible_db_ids = [target_db.id]
+
+    # Get payments grouped by account
+    results = db.session.query(
+        Bill.account,
+        func.sum(Payment.amount),
+        Bill.type
+    ).join(Payment).filter(
+        Bill.database_id.in_(accessible_db_ids),
+        Bill.account != None,
+        Bill.account != ''
+    ).group_by(Bill.account, Bill.type).all()
+
+    # Organize by account
+    by_account = {}
+    for r in results:
+        account = r[0] or 'Uncategorized'
+        if account not in by_account:
+            by_account[account] = {'expenses': 0, 'deposits': 0, 'total': 0}
+        if r[2] == 'deposit':
+            by_account[account]['deposits'] += float(r[1])
+        else:
+            by_account[account]['expenses'] += float(r[1])
+        by_account[account]['total'] = by_account[account]['expenses'] - by_account[account]['deposits']
+
+    # Convert to sorted list
+    result = [
+        {'account': k, **v}
+        for k, v in sorted(by_account.items(), key=lambda x: x[1]['expenses'], reverse=True)
+    ]
+
+    return jsonify({'success': True, 'data': result})
+
+
+@api_v2_bp.route('/stats/yearly', methods=['GET'])
+@jwt_required
+def jwt_get_stats_yearly():
+    """Get yearly payment totals for year-over-year comparison."""
+    if not g.jwt_db_name:
+        return jsonify({'success': False, 'error': 'X-Database header required'}), 400
+
+    # Handle "all databases" mode
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        accessible_dbs = user.accessible_databases
+        accessible_db_ids = [d.id for d in accessible_dbs]
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db:
+            return jsonify({'success': False, 'error': 'Database not found'}), 404
+        accessible_db_ids = [target_db.id]
+
+    # Get payments grouped by year
+    results = db.session.query(
+        func.to_char(func.to_date(Payment.payment_date, 'YYYY-MM-DD'), 'YYYY').label('year'),
+        func.sum(Payment.amount),
+        Bill.type
+    ).join(Bill).filter(
+        Bill.database_id.in_(accessible_db_ids)
+    ).group_by('year', Bill.type).all()
+
+    # Organize by year
+    by_year = {}
+    for r in results:
+        year = r[0]
+        if year not in by_year:
+            by_year[year] = {'expenses': 0, 'deposits': 0}
+        if r[2] == 'deposit':
+            by_year[year]['deposits'] += float(r[1])
+        else:
+            by_year[year]['expenses'] += float(r[1])
+
+    return jsonify({'success': True, 'data': by_year})
+
+
+@api_v2_bp.route('/stats/monthly-comparison', methods=['GET'])
+@jwt_required
+def jwt_get_monthly_comparison():
+    """Get monthly comparison between this year and last year."""
+    if not g.jwt_db_name:
+        return jsonify({'success': False, 'error': 'X-Database header required'}), 400
+
+    # Handle "all databases" mode
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        accessible_dbs = user.accessible_databases
+        accessible_db_ids = [d.id for d in accessible_dbs]
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db:
+            return jsonify({'success': False, 'error': 'Database not found'}), 404
+        accessible_db_ids = [target_db.id]
+
+    current_year = datetime.date.today().year
+    last_year = current_year - 1
+
+    # Get payments for current year and last year, grouped by month
+    results = db.session.query(
+        func.to_char(func.to_date(Payment.payment_date, 'YYYY-MM-DD'), 'YYYY').label('year'),
+        func.to_char(func.to_date(Payment.payment_date, 'YYYY-MM-DD'), 'MM').label('month'),
+        func.sum(Payment.amount),
+        Bill.type
+    ).join(Bill).filter(
+        Bill.database_id.in_(accessible_db_ids),
+        func.to_char(func.to_date(Payment.payment_date, 'YYYY-MM-DD'), 'YYYY').in_([str(current_year), str(last_year)])
+    ).group_by('year', 'month', Bill.type).all()
+
+    # Organize by month with year comparison
+    monthly = {}
+    for r in results:
+        year = r[0]
+        month = r[1]
+        if month not in monthly:
+            monthly[month] = {
+                'month': month,
+                'current_year_expenses': 0,
+                'current_year_deposits': 0,
+                'last_year_expenses': 0,
+                'last_year_deposits': 0,
+            }
+        is_current = year == str(current_year)
+        if r[3] == 'deposit':
+            if is_current:
+                monthly[month]['current_year_deposits'] += float(r[2])
+            else:
+                monthly[month]['last_year_deposits'] += float(r[2])
+        else:
+            if is_current:
+                monthly[month]['current_year_expenses'] += float(r[2])
+            else:
+                monthly[month]['last_year_expenses'] += float(r[2])
+
+    # Convert to sorted list (by month)
+    result = sorted(monthly.values(), key=lambda x: x['month'])
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'current_year': current_year,
+            'last_year': last_year,
+            'months': result
+        }
+    })
+
+
 @api_v2_bp.route('/process-auto-payments', methods=['POST'])
 @jwt_required
 def jwt_process_auto_payments():
@@ -3865,9 +4034,23 @@ def jwt_process_auto_payments():
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
     today = datetime.date.today().isoformat()
-    auto_bills = Bill.query.filter_by(database_id=target_db.id, auto_pay=True, archived=False).filter(Bill.due_date <= today).all()
+    user = db.session.get(User, g.jwt_user_id)
+
+    # Handle all-buckets mode - process auto-payments across all accessible databases
+    if g.jwt_db_name == '_all_':
+        accessible_db_ids = [d.id for d in user.accessible_databases]
+        auto_bills = Bill.query.filter(
+            Bill.database_id.in_(accessible_db_ids),
+            Bill.auto_pay == True,
+            Bill.archived == False,
+            Bill.due_date <= today
+        ).all()
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db:
+            return jsonify({'success': False, 'error': 'Database not found'}), 404
+        auto_bills = Bill.query.filter_by(database_id=target_db.id, auto_pay=True, archived=False).filter(Bill.due_date <= today).all()
 
     processed = []
     for bill in auto_bills:

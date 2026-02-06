@@ -420,6 +420,41 @@ export const deletePayment = (id: number) =>
 export const getMonthlyPayments = () =>
   unwrap(api.get<ApiResponse<Record<string, {deposits: number, expenses: number}>>>('/stats/monthly'));
 
+export interface AccountStats {
+  account: string;
+  expenses: number;
+  deposits: number;
+  total: number;
+}
+
+export const getStatsByAccount = () =>
+  unwrap(api.get<ApiResponse<AccountStats[]>>('/stats/by-account'));
+
+export interface YearlyStats {
+  [year: string]: {
+    expenses: number;
+    deposits: number;
+  };
+}
+
+export const getStatsYearly = () =>
+  unwrap(api.get<ApiResponse<YearlyStats>>('/stats/yearly'));
+
+export interface MonthlyComparison {
+  current_year: number;
+  last_year: number;
+  months: Array<{
+    month: string;
+    current_year_expenses: number;
+    current_year_deposits: number;
+    last_year_expenses: number;
+    last_year_deposits: number;
+  }>;
+}
+
+export const getMonthlyComparison = () =>
+  unwrap(api.get<ApiResponse<MonthlyComparison>>('/stats/monthly-comparison'));
+
 export const getAllPayments = () =>
   unwrap(api.get<ApiResponse<PaymentWithBill[]>>('/payments'));
 
