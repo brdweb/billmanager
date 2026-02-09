@@ -16,9 +16,8 @@ import {
   Tooltip,
   ThemeIcon,
   Modal,
-  Anchor,
 } from '@mantine/core';
-import { IconEdit, IconCash, IconPlus, IconFilterOff, IconSearch, IconX, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter, IconUsers } from '@tabler/icons-react';
+import { IconEdit, IconCash, IconPlus, IconFilterOff, IconSearch, IconX, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter, IconUsers, IconFilter } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { exportBillsToCSV, exportBillsToPDF, printBills } from '../utils/export';
 import type { Bill } from '../api/client';
@@ -45,7 +44,8 @@ interface BillListProps {
 }
 
 function getFrequencyText(bill: Bill): string {
-  const frequencyConfig = bill.frequency_config ? JSON.parse(bill.frequency_config) : {};
+  let frequencyConfig: Record<string, any> = {};
+  try { frequencyConfig = bill.frequency_config ? JSON.parse(bill.frequency_config) : {}; } catch { /* ignore malformed config */ }
 
   switch (bill.frequency) {
     case 'weekly':
@@ -334,6 +334,40 @@ export function BillList({
         </Group>
       </Group>
 
+      {/* Active filter indicator */}
+      {hasActiveFilter && (
+        <Paper p="xs" px="md" withBorder radius="md" bg="var(--mantine-color-blue-light)" style={{ borderColor: 'var(--mantine-color-blue-3)' }}>
+          <Group justify="space-between">
+            <Group gap="xs">
+              <IconFilter size={14} color="var(--mantine-color-blue-6)" />
+              <Text size="sm" c="blue.7" fw={500}>
+                Filtered:{' '}
+                {filter.dateRange === 'overdue' && 'Overdue bills'}
+                {filter.dateRange === 'thisWeek' && 'Due this week'}
+                {filter.dateRange === 'nextWeek' && 'Due next week'}
+                {filter.dateRange === 'next21Days' && 'Due in next 21 days'}
+                {filter.dateRange === 'next30Days' && 'Due in next 30 days'}
+                {filter.selectedDate && `Due on ${filter.selectedDate}`}
+                {filter.searchQuery && `Search "${filter.searchQuery}"`}
+                {filter.dateRange === 'all' && !filter.selectedDate && !filter.searchQuery && 'Active filters applied'}
+              </Text>
+              <Badge size="sm" variant="light" color="blue">{bills.length} result{bills.length !== 1 ? 's' : ''}</Badge>
+            </Group>
+            {onClearFilter && (
+              <Button
+                variant="subtle"
+                size="compact-xs"
+                color="blue"
+                leftSection={<IconFilterOff size={14} />}
+                onClick={onClearFilter}
+              >
+                Clear
+              </Button>
+            )}
+          </Group>
+        </Paper>
+      )}
+
       <Paper withBorder>
         <Table striped highlightOnHover>
           <Table.Thead>
@@ -512,12 +546,6 @@ export function BillList({
           />
         </Group>
       )}
-
-      <Text size="xs" c="dimmed" ta="center" mt="md">
-        <Anchor href="https://docs.billmanager.app" target="_blank" inherit>
-          Need help?
-        </Anchor>
-      </Text>
 
       {/* Confirmation modal for shared bill payment */}
       <Modal
