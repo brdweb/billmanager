@@ -46,6 +46,45 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '3.8.0',
+    date: '2026-02-09',
+    title: 'Dashboard & Analytics Overhaul',
+    sections: [
+      {
+        heading: 'New Features',
+        items: [
+          'New Dashboard page with stat cards, upcoming bills, and recent payments',
+          'New Calendar page with multi-month view and bill due date indicators',
+          'New Analytics page with spending trends, account breakdown, year-over-year comparison, and yearly summary',
+          'Clickable stat cards on Dashboard navigate to filtered Bills view',
+          'Filter indicator banner on Bills page shows active filters with clear button',
+          'Payment History is now a dedicated sidebar navigation link',
+        ],
+      },
+      {
+        heading: 'Improvements',
+        items: [
+          'Sidebar calendar click navigates to Bills page filtered by selected date',
+          'Upcoming Bills sidebar filters navigate to Bills page',
+          'All Payments page defaults to past 30 days date range',
+          'Monthly Total stat card shows paid and remaining breakdown',
+          'Yearly summary cards show labeled Expenses, Deposits, and Net totals',
+          'Version and license footer pinned to bottom of sidebar',
+          'Need Help link visible in sidebar footer on every page',
+        ],
+      },
+      {
+        heading: 'Bug Fixes',
+        items: [
+          'Fixed editing payments from All Payments page not saving changes',
+          'Fixed deleting payments from All Payments page not refreshing the list',
+          'Fixed yearly summary background too bright in dark mode',
+          'Fixed "Today" button text clipped on Calendar page',
+        ],
+      },
+    ],
+  },
+  {
     version: '3.7.0',
     date: '2026-01-19',
     title: 'All Buckets View',

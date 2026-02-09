@@ -1,13 +1,14 @@
-import { Paper, Text, Group, SimpleGrid, ThemeIcon } from '@mantine/core';
+import { Paper, Text, Group, SimpleGrid, ThemeIcon, Stack } from '@mantine/core';
 import { IconReceipt, IconCalendar, IconAlertTriangle, IconCoin } from '@tabler/icons-react';
 import type { Bill } from '../../api/client';
 
 interface StatCardsProps {
   bills: Bill[];
   monthlyPaid: number;
+  onStatClick: (stat: 'total' | 'thisWeek' | 'overdue') => void;
 }
 
-export function StatCards({ bills, monthlyPaid }: StatCardsProps) {
+export function StatCards({ bills, monthlyPaid, onStatClick }: StatCardsProps) {
   // Get today's date at midnight for comparison
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -54,7 +55,7 @@ export function StatCards({ bills, monthlyPaid }: StatCardsProps) {
 
   return (
     <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
-      <Paper withBorder p="md" radius="md">
+      <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={() => onStatClick('total')}>
         <Group justify="space-between">
           <div>
             <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
@@ -70,7 +71,7 @@ export function StatCards({ bills, monthlyPaid }: StatCardsProps) {
         </Group>
       </Paper>
 
-      <Paper withBorder p="md" radius="md">
+      <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={() => onStatClick('thisWeek')}>
         <Group justify="space-between">
           <div>
             <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
@@ -86,7 +87,7 @@ export function StatCards({ bills, monthlyPaid }: StatCardsProps) {
         </Group>
       </Paper>
 
-      <Paper withBorder p="md" radius="md">
+      <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={() => onStatClick('overdue')}>
         <Group justify="space-between">
           <div>
             <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
@@ -103,18 +104,20 @@ export function StatCards({ bills, monthlyPaid }: StatCardsProps) {
       </Paper>
 
       <Paper withBorder p="md" radius="md">
-        <Group justify="space-between">
-          <div>
+        <Group justify="space-between" align="flex-start">
+          <Stack gap={2}>
             <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
               Monthly Total
             </Text>
             <Text fw={700} size="xl" c="green">
               ${monthlyTotal.toFixed(2)}
             </Text>
-            <Text size="xs" c="dimmed">
-              ${monthlyPaid.toFixed(2)} paid
-            </Text>
-          </div>
+            <Group gap="xs">
+              <Text size="xs" c="green.6" fw={500}>${monthlyPaid.toFixed(2)} paid</Text>
+              <Text size="xs" c="dimmed">|</Text>
+              <Text size="xs" c="orange.6" fw={500}>${monthlyRemaining.toFixed(2)} remaining</Text>
+            </Group>
+          </Stack>
           <ThemeIcon color="green" variant="light" size="lg" radius="md">
             <IconCoin size={20} />
           </ThemeIcon>

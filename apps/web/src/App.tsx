@@ -12,7 +12,6 @@ import { PaymentHistory } from './components/PaymentHistory';
 import { Calendar } from './components/Calendar';
 import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { AdminModal } from './components/AdminPanel/AdminModal';
-import { MonthlyTotalsChart } from './components/MonthlyTotalsChart';
 import { TelemetryNoticeModal } from './components/TelemetryNoticeModal';
 import { ReleaseNotesModal } from './components/ReleaseNotesModal';
 import { currentVersion, hasUnseenReleaseNotes } from './config/releaseNotes';
@@ -92,7 +91,6 @@ function App() {
   const [billModalOpened, { open: openBillModal, close: closeBillModal }] = useDisclosure(false);
   const [payModalOpened, { open: openPayModal, close: closePayModal }] = useDisclosure(false);
   const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false);
-  const [chartOpened, { open: openChart, close: closeChart }] = useDisclosure(false);
   const [telemetryModalOpened, { open: openTelemetryModal, close: closeTelemetryModal }] = useDisclosure(false);
   const [releaseNotesOpened, { open: doOpenReleaseNotes, close: closeReleaseNotes }] = useDisclosure(false);
   const [releaseNotesKey, setReleaseNotesKey] = useState(0);
@@ -394,28 +392,31 @@ function App() {
         onAdminClick={openAdmin}
         onBillingClick={billingEnabled ? () => navigate('/billing') : undefined}
         sidebar={
-          <Stack gap="xs">
+          <Stack gap="xs" style={{ minHeight: 'calc(100vh - 92px)' }}>
             <Sidebar
               bills={bills}
               isLoggedIn={isLoggedIn}
               filter={filter}
               onFilterChange={setFilter}
-              onShowChart={openChart}
-              onShowAllPayments={() => navigate('/all-payments')}
             />
             {isLoggedIn && (
+              <Calendar
+                bills={bills}
+                selectedDate={filter.selectedDate}
+                onDateSelect={(date) => {
+                  setFilter((prev) => ({
+                    ...prev,
+                    selectedDate: date === prev.selectedDate ? null : date,
+                    dateRange: 'all',
+                  }));
+                  navigate('/bills');
+                }}
+              />
+            )}
+            {/* Spacer pushes footer to bottom */}
+            <div style={{ flex: 1 }} />
+            {isLoggedIn && (
               <>
-                <Calendar
-                  bills={bills}
-                  selectedDate={filter.selectedDate}
-                  onDateSelect={(date) =>
-                    setFilter((prev) => ({
-                      ...prev,
-                      selectedDate: date === prev.selectedDate ? null : date,
-                      dateRange: 'all', // Clear date range when specific date selected
-                    }))
-                  }
-                />
                 <Divider />
                 <Text size="xs" c="dimmed" ta="center">
                   BillManager{' '}
@@ -425,6 +426,11 @@ function App() {
                   {' '}- Licensed under{' '}
                   <Anchor href="https://osaasy.dev/" target="_blank" size="xs">
                     O'Saasy
+                  </Anchor>
+                </Text>
+                <Text size="xs" ta="center">
+                  <Anchor href="https://docs.billmanager.app" target="_blank" size="xs">
+                    Need Help?
                   </Anchor>
                 </Text>
               </>
@@ -444,6 +450,16 @@ function App() {
                 onPayBill={handlePayBill}
                 onViewPayments={handleViewPayments}
                 onViewBills={() => navigate('/bills')}
+                onStatClick={(stat) => {
+                  if (stat === 'total') {
+                    setFilter({ searchQuery: '', dateRange: 'all', selectedDate: null, type: 'all', account: null });
+                  } else if (stat === 'thisWeek') {
+                    setFilter({ searchQuery: '', dateRange: 'thisWeek', selectedDate: null, type: 'all', account: null });
+                  } else if (stat === 'overdue') {
+                    setFilter({ searchQuery: '', dateRange: 'overdue', selectedDate: null, type: 'all', account: null });
+                  }
+                  navigate('/bills');
+                }}
                 hasDatabase={!!currentDb}
               />
             }
@@ -541,8 +557,6 @@ function App() {
         shareInfo={historyBillShareInfo}
         onPaymentsChanged={fetchBills}
       />
-
-      <MonthlyTotalsChart opened={chartOpened} onClose={closeChart} />
 
       <TelemetryNoticeModal opened={telemetryModalOpened} onClose={closeTelemetryModal} />
 

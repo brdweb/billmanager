@@ -6,23 +6,25 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v3.7.0
+## 🎉 What's New in v3.8.0
 
-**All Buckets View** - Manage all your bills across every bill group from a single unified view.
+**Dashboard & Analytics Overhaul** - New Dashboard, Calendar, and Analytics pages with spending trends, interactive stat cards, and improved navigation.
 
 ### Highlights
 
-- **All Buckets View** - See and manage bills from all your bill groups in one place
-- **Cross-Bucket Bill Management** - Create bills in any bucket from the All Buckets view
-- **Move Bills Between Buckets** - Easily reorganize bills by moving them to different groups
-- **Aggregated Statistics** - Monthly trends combine data from all accessible databases
-- **Mobile Support** - Full All Buckets functionality in the mobile app
-- **Release Notes** - In-app release notes that pop up when new versions are available
+- **Dashboard Page** - At-a-glance stat cards (Total Bills, Due This Week, Overdue, Monthly Total) with clickable navigation
+- **Calendar Page** - Multi-month calendar view with bill due date indicators
+- **Analytics Page** - Spending trends charts, account pie chart, year-over-year comparison, and yearly summary with labeled totals
+- **Filter Indicators** - Clear visual banner on Bills page when filters are active
+- **Improved Navigation** - Sidebar calendar and Upcoming Bills filters navigate directly to filtered Bills view
+- **Payment History** - Dedicated sidebar nav link and default 30-day date range
 
 ### Bug Fixes
 
-- Edit user modal now correctly pre-selects bill group checkboxes
-- Database dropdown updates immediately after changing user permissions
+- Fixed editing payments from All Payments page not saving changes
+- Fixed deleting payments not refreshing the list
+- Fixed yearly summary background too bright in dark mode
+- Fixed "Today" button text clipped on Calendar page
 
 ---
 

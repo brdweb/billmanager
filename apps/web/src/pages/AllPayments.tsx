@@ -21,8 +21,9 @@ import {
 import { DatePickerInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
 import { BarChart } from '@mantine/charts';
-import { IconSearch, IconX, IconArrowLeft, IconChartBar, IconChevronDown, IconChevronUp, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter, IconArrowUpRight, IconArrowDownRight } from '@tabler/icons-react';
+import { IconSearch, IconX, IconArrowLeft, IconChartBar, IconChevronDown, IconChevronUp, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter, IconArrowUpRight, IconArrowDownRight, IconFilter, IconFilterOff } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
+import { notifications } from '@mantine/notifications';
 import { getAllPayments, updatePayment, deletePayment } from '../api/client';
 import type { PaymentWithBill } from '../api/client';
 import { BillIcon } from '../components/BillIcon';
@@ -42,9 +43,14 @@ export function AllPayments() {
   const [loading, setLoading] = useState(true);
   const [chartOpened, { toggle: toggleChart }] = useDisclosure(true);
 
-  // Filter states
+  // Filter states - default to past 30 days
   const [searchName, setSearchName] = useState('');
-  const [dateFrom, setDateFrom] = useState<Date | null>(null);
+  const [dateFrom, setDateFrom] = useState<Date | null>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
   const [dateTo, setDateTo] = useState<Date | null>(null);
   const [amountMin, setAmountMin] = useState<number | ''>('');
   const [amountMax, setAmountMax] = useState<number | ''>('');
@@ -187,10 +193,12 @@ export function AllPayments() {
 
     try {
       await updatePayment(editingId, editAmount as number, formatDateForAPI(editDate));
+      notifications.show({ message: 'Payment updated', color: 'green', autoClose: 3000 });
       await fetchPayments();
       handleCancelEdit();
     } catch (error) {
       console.error('Failed to update payment:', error);
+      notifications.show({ title: 'Update failed', message: String(error), color: 'red', autoClose: 5000 });
     }
   };
 
@@ -199,9 +207,11 @@ export function AllPayments() {
 
     try {
       await deletePayment(paymentId);
-      await fetchPayments();
+      notifications.show({ message: 'Payment deleted', color: 'green', autoClose: 3000 });
+      setPayments((prev) => prev.filter((p) => p.id !== paymentId));
     } catch (error) {
       console.error('Failed to delete payment:', error);
+      notifications.show({ title: 'Delete failed', message: String(error), color: 'red', autoClose: 5000 });
     }
   };
 
@@ -317,13 +327,13 @@ export function AllPayments() {
             <DatePickerInput
               placeholder="From date"
               value={dateFrom}
-              onChange={(value) => setDateFrom(value ? parseLocalDate(value) : null)}
+              onChange={(val) => setDateFrom(val ? parseLocalDate(val) : null)}
               clearable
             />
             <DatePickerInput
               placeholder="To date"
               value={dateTo}
-              onChange={(value) => setDateTo(value ? parseLocalDate(value) : null)}
+              onChange={(val) => setDateTo(val ? parseLocalDate(val) : null)}
               clearable
             />
             <NumberInput
@@ -343,16 +353,41 @@ export function AllPayments() {
               min={0}
             />
           </Group>
-
-          {hasActiveFilters && (
-            <Group justify="flex-end">
-              <Button variant="subtle" size="xs" leftSection={<IconX size={14} />} onClick={clearFilters}>
-                Clear filters
-              </Button>
-            </Group>
-          )}
         </Stack>
       </Paper>
+
+      {/* Active filter indicator */}
+      {hasActiveFilters && (
+        <Paper p="xs" px="md" withBorder radius="md" bg="var(--mantine-color-blue-light)" style={{ borderColor: 'var(--mantine-color-blue-3)' }}>
+          <Group justify="space-between">
+            <Group gap="xs">
+              <IconFilter size={14} color="var(--mantine-color-blue-6)" />
+              <Text size="sm" c="blue.7" fw={500}>
+                Filtered:{' '}
+                {[
+                  searchName && `"${searchName}"`,
+                  dateFrom && `from ${formatDateString(formatDateForAPI(dateFrom))}`,
+                  dateTo && `to ${formatDateString(formatDateForAPI(dateTo))}`,
+                  amountMin !== '' && `min $${amountMin}`,
+                  amountMax !== '' && `max $${amountMax}`,
+                ].filter(Boolean).join(', ')}
+              </Text>
+              <Badge size="sm" variant="light" color="blue">
+                {filteredPayments.length} result{filteredPayments.length !== 1 ? 's' : ''}
+              </Badge>
+            </Group>
+            <Button
+              variant="subtle"
+              size="compact-xs"
+              color="blue"
+              leftSection={<IconFilterOff size={14} />}
+              onClick={clearFilters}
+            >
+              Clear
+            </Button>
+          </Group>
+        </Paper>
+      )}
 
       {/* Monthly Chart */}
       {monthlyChartData.length > 0 && (
@@ -458,7 +493,7 @@ export function AllPayments() {
                       {editingId === payment.id ? (
                         <DatePickerInput
                           value={editDate}
-                          onChange={(value) => setEditDate(value ? parseLocalDate(value) : null)}
+                          onChange={(val) => setEditDate(val ? parseLocalDate(val) : null)}
                           size="xs"
                           w={140}
                         />

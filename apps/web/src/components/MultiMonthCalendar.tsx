@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Paper, SimpleGrid, Text, Center, Stack, Badge, Group, ActionIcon, SegmentedControl, Title } from '@mantine/core';
+import { Paper, SimpleGrid, Text, Center, Stack, Badge, Group, ActionIcon, Button, SegmentedControl, Title } from '@mantine/core';
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import type { Bill } from '../api/client';
 
@@ -95,16 +95,12 @@ function SingleMonth({
 
               const dateStr = `${monthData.year}-${String(monthData.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-              // Determine background color based on bill type
+              // Determine background color (matches sidebar calendar)
               let background: string | undefined;
               if (isSelected) {
                 background = 'var(--mantine-color-blue-light)';
-              } else if (billInfo?.hasExpense && billInfo?.hasDeposit) {
-                background = 'var(--mantine-color-grape-light)';
-              } else if (billInfo?.hasExpense) {
-                background = 'var(--mantine-color-red-light)';
-              } else if (billInfo?.hasDeposit) {
-                background = 'var(--mantine-color-green-light)';
+              } else if (billCount > 0) {
+                background = 'var(--mantine-color-yellow-light)';
               } else if (isTodayDate) {
                 background = 'var(--mantine-color-violet-light)';
               }
@@ -119,10 +115,8 @@ function SingleMonth({
               let textColor: string | undefined;
               if (isSelected) {
                 textColor = 'blue';
-              } else if (billInfo?.hasExpense) {
-                textColor = 'red.8';
-              } else if (billInfo?.hasDeposit) {
-                textColor = 'green.8';
+              } else if (billCount > 0) {
+                textColor = 'yellow.8';
               } else if (isTodayDate) {
                 textColor = 'violet';
               }
@@ -151,7 +145,7 @@ function SingleMonth({
                   {billCount > 1 && (
                     <Badge
                       size="xs"
-                      color={billInfo?.hasExpense ? 'red' : 'green'}
+                      color="red"
                       variant="filled"
                       style={{
                         position: 'absolute',
@@ -238,9 +232,9 @@ export function MultiMonthCalendar({
           <ActionIcon variant="subtle" onClick={handlePrev}>
             <IconChevronLeft size={16} />
           </ActionIcon>
-          <ActionIcon variant="light" size="sm" onClick={handleToday}>
+          <Button variant="light" size="compact-xs" onClick={handleToday}>
             Today
-          </ActionIcon>
+          </Button>
           <ActionIcon variant="subtle" onClick={handleNext}>
             <IconChevronRight size={16} />
           </ActionIcon>
@@ -263,12 +257,8 @@ export function MultiMonthCalendar({
       {/* Legend */}
       <Group gap="md" justify="center">
         <Group gap={4}>
-          <div style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--mantine-color-red-light)' }} />
-          <Text size="xs" c="dimmed">Expense</Text>
-        </Group>
-        <Group gap={4}>
-          <div style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--mantine-color-green-light)' }} />
-          <Text size="xs" c="dimmed">Deposit</Text>
+          <div style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--mantine-color-yellow-light)' }} />
+          <Text size="xs" c="dimmed">Bills Due</Text>
         </Group>
         <Group gap={4}>
           <div style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--mantine-color-violet-light)', border: '2px solid var(--mantine-color-violet-6)' }} />

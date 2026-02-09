@@ -3,7 +3,6 @@ import { Stack, Title, Group, Button, Text, Paper, Loader, Center, Grid } from '
 import { IconPlus, IconReceipt } from '@tabler/icons-react';
 import { StatCards } from '../components/Dashboard/StatCards';
 import { UpcomingBillsList } from '../components/Dashboard/UpcomingBillsList';
-import { OverdueAlerts } from '../components/Dashboard/OverdueAlerts';
 import type { Bill } from '../api/client';
 import { getMonthlyPayments } from '../api/client';
 
@@ -15,6 +14,7 @@ interface DashboardProps {
   onPayBill: (bill: Bill) => void;
   onViewPayments: (bill: Bill) => void;
   onViewBills: () => void;
+  onStatClick: (stat: 'total' | 'thisWeek' | 'overdue') => void;
   hasDatabase: boolean;
 }
 
@@ -26,6 +26,7 @@ export function Dashboard({
   onPayBill,
   onViewPayments,
   onViewBills,
+  onStatClick,
   hasDatabase,
 }: DashboardProps) {
   const [monthlyPaid, setMonthlyPaid] = useState(0);
@@ -80,11 +81,8 @@ export function Dashboard({
         </Button>
       </Group>
 
-      {/* Overdue Alerts - only show if there are overdue bills */}
-      <OverdueAlerts bills={bills} onPay={onPayBill} />
-
       {/* Stat Cards */}
-      <StatCards bills={bills} monthlyPaid={monthlyPaid} />
+      <StatCards bills={bills} monthlyPaid={monthlyPaid} onStatClick={onStatClick} />
 
       {/* Content Grid */}
       <Grid>
