@@ -1817,7 +1817,7 @@ def process_auto_payments():
 
 @api_bp.route('/api/version', methods=['GET'])
 def get_version():
-    return jsonify({'version': '3.7.0', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites', 'shared_bills']})
+    return jsonify({'version': '3.8.0', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites', 'shared_bills']})
 
 @api_bp.route('/ping')
 def ping(): return jsonify({'status': 'ok'})
@@ -2786,11 +2786,17 @@ def jwt_get_bill(bill_id):
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = db.get_or_404(Bill,bill_id)
+    bill = db.get_or_404(Bill, bill_id)
 
-    if bill.database_id != target_db.id:
-        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        bill_db = db.session.get(Database, bill.database_id)
+        if not bill_db or bill_db not in user.accessible_databases:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db or bill.database_id != target_db.id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     b_dict = {
         'id': bill.id, 'name': bill.name, 'amount': bill.amount, 'varies': bill.is_variable,
@@ -2865,11 +2871,17 @@ def jwt_archive_bill(bill_id):
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = db.get_or_404(Bill,bill_id)
+    bill = db.get_or_404(Bill, bill_id)
 
-    if bill.database_id != target_db.id:
-        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        bill_db = db.session.get(Database, bill.database_id)
+        if not bill_db or bill_db not in user.accessible_databases:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db or bill.database_id != target_db.id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     bill.archived = True
     db.session.commit()
@@ -2883,11 +2895,17 @@ def jwt_unarchive_bill(bill_id):
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = db.get_or_404(Bill,bill_id)
+    bill = db.get_or_404(Bill, bill_id)
 
-    if bill.database_id != target_db.id:
-        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        bill_db = db.session.get(Database, bill.database_id)
+        if not bill_db or bill_db not in user.accessible_databases:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db or bill.database_id != target_db.id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     bill.archived = False
     db.session.commit()
@@ -2901,11 +2919,17 @@ def jwt_delete_bill_permanent(bill_id):
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = db.get_or_404(Bill,bill_id)
+    bill = db.get_or_404(Bill, bill_id)
 
-    if bill.database_id != target_db.id:
-        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        bill_db = db.session.get(Database, bill.database_id)
+        if not bill_db or bill_db not in user.accessible_databases:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db or bill.database_id != target_db.id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     db.session.delete(bill)
     db.session.commit()
@@ -2961,11 +2985,16 @@ def jwt_get_bill_payments(bill_id):
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    bill = db.get_or_404(Bill,bill_id)
+    bill = db.get_or_404(Bill, bill_id)
 
     # Check access: either owns the bill OR has an accepted share
-    has_access = bill.database_id == target_db.id
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        bill_db = db.session.get(Database, bill.database_id)
+        has_access = bill_db is not None and bill_db in user.accessible_databases
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        has_access = target_db is not None and bill.database_id == target_db.id
     if not has_access:
         # Check if user has an accepted share for this bill
         share = BillShare.query.filter_by(
@@ -3103,8 +3132,7 @@ def jwt_update_payment(payment_id):
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    payment = db.get_or_404(Payment,payment_id)
+    payment = db.get_or_404(Payment, payment_id)
 
     # Check access permissions
     if payment.share_id:
@@ -3114,8 +3142,15 @@ def jwt_update_payment(payment_id):
             return jsonify({'success': False, 'error': 'Cannot edit payments made by others'}), 403
     else:
         # Regular payment - must own the bill's database
-        if payment.bill.database_id != target_db.id:
-            return jsonify({'success': False, 'error': 'Access denied'}), 403
+        if g.jwt_db_name == '_all_':
+            user = db.session.get(User, g.jwt_user_id)
+            bill_db = db.session.get(Database, payment.bill.database_id)
+            if not bill_db or bill_db not in user.accessible_databases:
+                return jsonify({'success': False, 'error': 'Access denied'}), 403
+        else:
+            target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+            if not target_db or payment.bill.database_id != target_db.id:
+                return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     data = request.get_json(force=True, silent=True)
     if not data:
@@ -3136,8 +3171,7 @@ def jwt_delete_payment(payment_id):
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
-    payment = db.get_or_404(Payment,payment_id)
+    payment = db.get_or_404(Payment, payment_id)
 
     # Check access permissions
     if payment.share_id:
@@ -3149,8 +3183,15 @@ def jwt_delete_payment(payment_id):
         share.recipient_paid_date = None
     else:
         # Regular payment - must own the bill's database
-        if payment.bill.database_id != target_db.id:
-            return jsonify({'success': False, 'error': 'Access denied'}), 403
+        if g.jwt_db_name == '_all_':
+            user = db.session.get(User, g.jwt_user_id)
+            bill_db = db.session.get(Database, payment.bill.database_id)
+            if not bill_db or bill_db not in user.accessible_databases:
+                return jsonify({'success': False, 'error': 'Access denied'}), 403
+        else:
+            target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+            if not target_db or payment.bill.database_id != target_db.id:
+                return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     db.session.delete(payment)
     db.session.commit()
@@ -3179,11 +3220,17 @@ def jwt_share_bill(bill_id):
         return jsonify({'success': False, 'error': 'Invalid JSON body'}), 400
 
     # Validate bill ownership
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
     bill = db.get_or_404(Bill, bill_id)
 
-    if bill.database_id != target_db.id:
-        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        bill_db = db.session.get(Database, bill.database_id)
+        if not bill_db or bill_db not in user.accessible_databases:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db or bill.database_id != target_db.id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     # Get share parameters
     identifier = data.get('shared_with', '').strip().lower()  # username or email
@@ -3311,11 +3358,17 @@ def jwt_get_bill_shares(bill_id):
     if not g.jwt_db_name:
         return jsonify({'success': False, 'error': 'X-Database header required'}), 400
 
-    target_db = Database.query.filter_by(name=g.jwt_db_name).first()
     bill = db.get_or_404(Bill, bill_id)
 
-    if bill.database_id != target_db.id:
-        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    if g.jwt_db_name == '_all_':
+        user = db.session.get(User, g.jwt_user_id)
+        bill_db = db.session.get(Database, bill.database_id)
+        if not bill_db or bill_db not in user.accessible_databases:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    else:
+        target_db = Database.query.filter_by(name=g.jwt_db_name).first()
+        if not target_db or bill.database_id != target_db.id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
 
     # Security check: Only the database owner can view shares
     database = db.session.get(Database, bill.database_id)
@@ -3867,6 +3920,7 @@ def jwt_get_monthly_stats():
 
 
 @api_v2_bp.route('/stats/by-account', methods=['GET'])
+@limiter.limit("60 per minute")
 @jwt_required
 def jwt_get_stats_by_account():
     """Get payment totals grouped by account."""
@@ -3917,6 +3971,7 @@ def jwt_get_stats_by_account():
 
 
 @api_v2_bp.route('/stats/yearly', methods=['GET'])
+@limiter.limit("60 per minute")
 @jwt_required
 def jwt_get_stats_yearly():
     """Get yearly payment totals for year-over-year comparison."""
@@ -3958,6 +4013,7 @@ def jwt_get_stats_yearly():
 
 
 @api_v2_bp.route('/stats/monthly-comparison', methods=['GET'])
+@limiter.limit("60 per minute")
 @jwt_required
 def jwt_get_monthly_comparison():
     """Get monthly comparison between this year and last year."""
@@ -4533,7 +4589,7 @@ def jwt_get_version():
     return jsonify({
         'success': True,
         'data': {
-            'version': '3.7.0',
+            'version': '3.8.0',
             'api_version': 'v2',
             'license': "O'Saasy",
             'license_url': 'https://osaasy.dev/',
