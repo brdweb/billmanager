@@ -2,7 +2,7 @@
 
 A **secure multi-user** web application for tracking recurring expenses and income with **complete data separation**. Built with React + Mantine frontend and Flask + PostgreSQL backend.
 
-![BillManager Screenshot](https://docs.billmanager.app/img/screenshot.png)
+![BillManager Screenshot](screenshot.png)
 
 ---
 
