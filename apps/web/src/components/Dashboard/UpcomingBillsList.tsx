@@ -43,7 +43,7 @@ function getDueBadgeColor(dateStr: string): string {
 }
 
 function getFrequencyText(bill: Bill): string {
-  let frequencyConfig: Record<string, any> = {};
+  let frequencyConfig: { dates?: number[]; days?: number[] } = {};
   try { frequencyConfig = bill.frequency_config ? JSON.parse(bill.frequency_config) : {}; } catch { /* ignore malformed config */ }
 
   switch (bill.frequency) {
