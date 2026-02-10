@@ -16,7 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Use PostgreSQL test database - CI sets DATABASE_URL, local dev uses default
 if 'DATABASE_URL' not in os.environ:
-    os.environ['DATABASE_URL'] = 'postgresql://billsuser:billspass@192.168.40.242:5432/bills_test'
+    _test_db_host = os.environ.get('TEST_DB_HOST', '192.168.40.242')
+    os.environ['DATABASE_URL'] = f'postgresql://billsuser:billspass@{_test_db_host}:5432/bills_test'
 os.environ['FLASK_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 os.environ['FLASK_ENV'] = 'testing'
 

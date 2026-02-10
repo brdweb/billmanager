@@ -486,6 +486,30 @@ def migrate_20260109_02_create_share_audit_log(db):
     logger.info("Created share_audit_log table with indexes")
 
 
+def migrate_20260210_01_drop_invalid_payments_db_index(db):
+    """Drop the invalid idx_payments_db_date index if it exists.
+
+    The 20260114_01 migration previously attempted to create an index on
+    payments.database_id, but that column doesn't exist (payments link to
+    databases through bills.database_id). If an existing deployment ran
+    the old migration code, the index creation would have failed, but the
+    migration may have been recorded as applied. This cleanup drops the
+    index if it somehow exists.
+    """
+    logger.info("Running migration: 20260210_01_drop_invalid_payments_db_index")
+
+    result = db.session.execute(text("""
+        SELECT indexname FROM pg_indexes
+        WHERE tablename = 'payments' AND indexname = 'idx_payments_db_date'
+    """))
+    if result.fetchone():
+        db.session.execute(text('DROP INDEX idx_payments_db_date'))
+        db.session.commit()
+        logger.info("Dropped invalid index idx_payments_db_date")
+    else:
+        logger.info("Index idx_payments_db_date does not exist, no cleanup needed")
+
+
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -504,6 +528,7 @@ MIGRATIONS = [
     ('20260109_02', 'Create share_audit_log table for audit trail', migrate_20260109_02_create_share_audit_log),
     ('20260112_01', 'Add share_id to payments for shared bill payment tracking', migrate_20260112_01_add_share_id_to_payments),
     ('20260114_01', 'Add composite indexes for query performance', migrate_20260114_01_add_performance_indexes),
+    ('20260210_01', 'Drop invalid idx_payments_db_date index if exists', migrate_20260210_01_drop_invalid_payments_db_index),
 ]
 
 
