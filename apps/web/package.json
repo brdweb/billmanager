@@ -1,7 +1,7 @@
 {
   "name": "client",
   "private": true,
-  "version": "3.8.1",
+  "version": "4.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -22,6 +22,7 @@
     "@mantine/form": "^8.3.10",
     "@mantine/hooks": "^8.3.10",
     "@mantine/notifications": "^8.3.10",
+    "@simplewebauthn/browser": "^13.2.2",
     "@tabler/icons-react": "^3.35.0",
     "axios": "^1.13.5",
     "dayjs": "^1.11.19",

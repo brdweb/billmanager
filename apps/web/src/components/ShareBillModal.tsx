@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Modal,
   TextInput,
@@ -44,12 +44,26 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
   const [editSplitType, setEditSplitType] = useState<string | null>(null);
   const [editSplitValue, setEditSplitValue] = useState<number | undefined>(undefined);
 
+  const loadShares = useCallback(async () => {
+    if (!bill) return;
+    setLoadingShares(true);
+    try {
+      const result = await api.getBillShares(bill.id);
+      setShares(Array.isArray(result) ? result : []);
+    } catch (err) {
+      console.error('Failed to load shares:', err);
+      setShares([]);
+    } finally {
+      setLoadingShares(false);
+    }
+  }, [bill]);
+
   // Load existing shares when modal opens
   useEffect(() => {
     if (opened && bill) {
       loadShares();
     }
-  }, [opened, bill]);
+  }, [opened, bill, loadShares]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -62,20 +76,6 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
       setSearchResults([]);
     }
   }, [opened]);
-
-  const loadShares = async () => {
-    if (!bill) return;
-    setLoadingShares(true);
-    try {
-      const result = await api.getBillShares(bill.id);
-      setShares(Array.isArray(result) ? result : []);
-    } catch (err) {
-      console.error('Failed to load shares:', err);
-      setShares([]);
-    } finally {
-      setLoadingShares(false);
-    }
-  };
 
   const handleSearch = async (query: string) => {
     setIdentifier(query);

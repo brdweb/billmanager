@@ -46,8 +46,35 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '3.8.1',
+    version: '4.0.0',
     date: '2026-02-10',
+    title: 'Social Login & Two-Factor Authentication',
+    sections: [
+      {
+        heading: 'New Features',
+        items: [
+          'Social Login (OIDC) - Sign in with Google, Apple, Microsoft, or any OpenID Connect provider',
+          'Two-Factor Authentication - Email OTP and passkey (WebAuthn) support',
+          'Recovery codes for 2FA backup access',
+          'Linked Accounts management - connect and disconnect OAuth providers',
+          'Security Settings page for managing 2FA and passkeys',
+        ],
+      },
+      {
+        heading: 'Security',
+        items: [
+          'ID token signature verification for all OIDC providers',
+          'Cryptographically secure OTP generation',
+          'OAuth state token replay protection',
+          'Brute-force protection on 2FA verification',
+          'Email normalization for consistent account linking',
+        ],
+      },
+    ],
+  },
+  {
+    version: '3.8.1',
+    date: '2026-02-09',
     title: 'Dashboard & Analytics Overhaul',
     sections: [
       {

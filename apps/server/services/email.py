@@ -201,6 +201,25 @@ def send_welcome_email(email: str, username: str) -> bool:
     return send_email(email, "Welcome to BillManager!", html)
 
 
+def send_2fa_code_email(email: str, code: str, username: str) -> bool:
+    """Send a 2FA verification code via email"""
+    content = f"""
+        <p>Hi {username},</p>
+        <p>Your BillManager verification code is:</p>
+        <div style="text-align: center; margin: 30px 0;">
+            <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #059669; background: #f0fdf4; padding: 16px 32px; border-radius: 8px; display: inline-block;">{code}</span>
+        </div>
+        <p>This code will expire in <strong>10 minutes</strong>.</p>
+        <div class="warning">
+            <strong>If you didn't request this code, someone may be trying to access your account.</strong>
+            Please change your password immediately.
+        </div>
+    """
+
+    html = get_email_template(content, "Verification Code")
+    return send_email(email, f"Your BillManager verification code: {code}", html)
+
+
 def send_bill_share_email(email: str, token: str, bill_name: str, shared_by: str) -> bool:
     """Send bill share invitation email"""
     share_url = f"{APP_URL}/share/accept?token={token}"

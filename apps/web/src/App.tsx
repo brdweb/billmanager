@@ -23,10 +23,12 @@ import { ResetPassword } from './pages/ResetPassword';
 import { ResendVerification } from './pages/ResendVerification';
 import { AcceptInvite } from './pages/AcceptInvite';
 import { AcceptShareInvite } from './pages/AcceptShareInvite';
+import { AuthCallback } from './pages/AuthCallback';
 import { Billing } from './pages/Billing';
 import { Dashboard } from './pages/Dashboard';
 import { CalendarPage } from './pages/CalendarPage';
 import { Analytics } from './pages/Analytics';
+import { Settings } from './pages/Settings';
 import { useAuth } from './context/AuthContext';
 import { useConfig } from './context/ConfigContext';
 import * as api from './api/client';
@@ -350,7 +352,7 @@ function App() {
   }
 
   // Public routes - no authentication required
-  const publicRoutes = ['/login', '/register', '/verify-email', '/forgot-password', '/reset-password', '/resend-verification', '/accept-invite', '/accept-share-invite'];
+  const publicRoutes = ['/login', '/register', '/verify-email', '/forgot-password', '/reset-password', '/resend-verification', '/accept-invite', '/accept-share-invite', '/auth/callback'];
   const isPublicRoute = publicRoutes.includes(location.pathname);
 
   // If not logged in and not on a public route, render just the routes (no Layout)
@@ -376,6 +378,7 @@ function App() {
           <Route path="/resend-verification" element={<ResendVerification />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/accept-share-invite" element={<AcceptShareInvite />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
         </Routes>
         {/* Password change modal must be accessible from login page */}
         <PasswordChangeModal
@@ -511,6 +514,7 @@ function App() {
             path="/analytics"
             element={<Analytics hasDatabase={!!currentDb} />}
           />
+          <Route path="/settings" element={<Settings />} />
           {billingEnabled && (
             <>
               <Route path="/billing" element={<Billing />} />

@@ -477,6 +477,9 @@ export interface AppConfig {
   registration_enabled: boolean;
   email_enabled: boolean;
   email_verification_required: boolean;
+  oauth_providers?: { id: string; display_name: string; icon: string }[];
+  twofa_enabled?: boolean;
+  passkeys_enabled?: boolean;
 }
 
 export interface AppConfigResponse {
@@ -737,5 +740,204 @@ export const getShareInviteDetails = (token: string) =>
 // Accept share invitation by token (requires login)
 export const acceptShareByToken = (token: string) =>
   unwrap(api.post<ApiResponse<{ message: string; share_id: number }>>('/share/accept-by-token', { token }));
+
+// ============ OIDC / OAuth API ============
+
+export interface OAuthProvider {
+  id: string;
+  display_name: string;
+  icon: string;
+}
+
+export interface OAuthAccount {
+  id: number;
+  provider: string;
+  provider_email: string | null;
+  created_at: string | null;
+}
+
+export const getOAuthProviders = () =>
+  unwrap(api.get<ApiResponse<OAuthProvider[]>>('/auth/oauth/providers'));
+
+export const getOAuthAuthorizeUrl = (provider: string) =>
+  unwrap(api.get<ApiResponse<{ auth_url: string; state: string }>>(`/auth/oauth/${provider}/authorize`));
+
+export interface OAuthCallbackResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: string;
+  user: User & { is_new_user?: boolean };
+  databases: Database[];
+}
+
+export const oauthCallback = async (provider: string, code: string, state: string): Promise<OAuthCallbackResponse> => {
+  const response = await api.post<ApiResponse<OAuthCallbackResponse>>(
+    `/auth/oauth/${provider}/callback`,
+    { code, state }
+  );
+
+  // Handle 2FA required (403 with twofa_required)
+  const apiResponse = response.data;
+  if (!apiResponse.success && (apiResponse as unknown as Record<string, unknown>).twofa_required) {
+    throw new TwoFARequiredError(apiResponse as unknown as TwoFARequiredResponse);
+  }
+
+  if (!apiResponse.success) {
+    throw new Error(apiResponse.error || 'OAuth callback failed');
+  }
+
+  const result = apiResponse.data as OAuthCallbackResponse;
+
+  // Store tokens
+  if (result.access_token && result.refresh_token) {
+    TokenStorage.setTokens(result.access_token, result.refresh_token);
+    if (result.databases?.length > 0) {
+      TokenStorage.setCurrentDatabase(result.databases[0].name);
+    }
+  }
+
+  return result;
+};
+
+export const getOAuthAccounts = () =>
+  unwrap(api.get<ApiResponse<OAuthAccount[]>>('/auth/oauth/accounts'));
+
+export const unlinkOAuthProvider = (provider: string) =>
+  unwrap(api.delete<ApiResponse<{ message: string }>>(`/auth/oauth/${provider}`));
+
+// ============ Two-Factor Authentication API ============
+
+export interface TwoFAStatus {
+  enabled: boolean;
+  email_otp_enabled: boolean;
+  passkey_enabled: boolean;
+  passkeys: Array<{
+    id: number;
+    device_name: string;
+    created_at: string | null;
+    last_used_at: string | null;
+  }>;
+  has_recovery_codes: boolean;
+}
+
+export interface TwoFARequiredResponse {
+  success: false;
+  twofa_required: true;
+  twofa_session_token: string;
+  twofa_methods: string[];
+}
+
+export class TwoFARequiredError extends Error {
+  public response: TwoFARequiredResponse;
+  constructor(response: TwoFARequiredResponse) {
+    super('2FA verification required');
+    this.name = 'TwoFARequiredError';
+    this.response = response;
+  }
+}
+
+export const get2FAStatus = () =>
+  unwrap(api.get<ApiResponse<TwoFAStatus>>('/auth/2fa/status'));
+
+export const setup2FAEmail = () =>
+  unwrap(api.post<ApiResponse<{ message: string; setup_token: string }>>('/auth/2fa/setup/email'));
+
+export const confirm2FAEmail = (setup_token: string, code: string) =>
+  unwrap(api.post<ApiResponse<{ message: string; recovery_codes: string[] | null }>>('/auth/2fa/setup/email/confirm', { setup_token, code }));
+
+export const getRecoveryCodes = () =>
+  unwrap(api.get<ApiResponse<{ recovery_codes: string[] }>>('/auth/2fa/recovery-codes'));
+
+export const getPasskeyRegistrationOptions = () =>
+  unwrap(api.post<ApiResponse<{ options: Record<string, unknown>; registration_token: string }>>('/auth/2fa/setup/passkey/options'));
+
+export const registerPasskey = (registration_token: string, credential: Record<string, unknown>, device_name: string) =>
+  unwrap(api.post<ApiResponse<{ message: string; credential_id: number; device_name: string; recovery_codes: string[] | null }>>('/auth/2fa/setup/passkey/register', { registration_token, credential, device_name }));
+
+export const listPasskeys = () =>
+  unwrap(api.get<ApiResponse<Array<{ id: number; device_name: string; created_at: string | null; last_used_at: string | null }>>>('/auth/2fa/setup/passkeys'));
+
+export const deletePasskey = (passkeyId: number) =>
+  unwrap(api.delete<ApiResponse<{ message: string }>>(`/auth/2fa/setup/passkey/${passkeyId}`));
+
+export const disable2FA = (password: string) =>
+  unwrap(api.post<ApiResponse<{ message: string }>>('/auth/2fa/disable', { password }));
+
+export const request2FAChallenge = (session_token: string, method: string) =>
+  unwrap(api.post<ApiResponse<{ message: string }>>('/auth/2fa/challenge', { session_token, method }));
+
+export const getPasskeyAuthOptions = (session_token: string) =>
+  unwrap(api.post<ApiResponse<{ options: Record<string, unknown> }>>('/auth/2fa/verify/passkey/options', { session_token }));
+
+export interface TwoFAVerifyResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: string;
+  user: User;
+  databases: Database[];
+}
+
+export const verify2FA = async (session_token: string, method: string, payload: Record<string, unknown>): Promise<TwoFAVerifyResponse> => {
+  const response = await unwrap(
+    api.post<ApiResponse<TwoFAVerifyResponse>>('/auth/2fa/verify', {
+      session_token,
+      method,
+      ...payload,
+    })
+  );
+
+  // Store tokens
+  if (response.access_token && response.refresh_token) {
+    TokenStorage.setTokens(response.access_token, response.refresh_token);
+    if (response.databases?.length > 0) {
+      TokenStorage.setCurrentDatabase(response.databases[0].name);
+    }
+  }
+
+  return response;
+};
+
+// Override login to handle 2FA required response
+const originalLogin = login;
+export { originalLogin };
+
+// Wrap the existing login to detect 2FA
+export const loginWith2FA = async (username: string, password: string): Promise<LoginResponse | TwoFARequiredResponse> => {
+  try {
+    const response = await api.post<ApiResponse<LoginResponse>>('/auth/login', { username, password });
+    const apiResponse = response.data;
+
+    // Check for 2FA required (comes as 403 with specific fields)
+    if (!apiResponse.success && (apiResponse as unknown as Record<string, unknown>).twofa_required) {
+      return apiResponse as unknown as TwoFARequiredResponse;
+    }
+
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.error || 'Login failed');
+    }
+
+    const result = apiResponse.data as LoginResponse;
+
+    // Store tokens
+    if (result.access_token && result.refresh_token) {
+      TokenStorage.setTokens(result.access_token, result.refresh_token);
+      if (result.databases?.length > 0) {
+        TokenStorage.setCurrentDatabase(result.databases[0].name);
+      }
+    }
+
+    return result;
+  } catch (error: unknown) {
+    // Axios interceptor converts 403 to error, check if it's a 2FA response
+    const axiosErr = error as { originalError?: { response?: { data?: Record<string, unknown> } } };
+    const responseData = axiosErr.originalError?.response?.data;
+    if (responseData && responseData.twofa_required) {
+      return responseData as unknown as TwoFARequiredResponse;
+    }
+    throw error;
+  }
+};
 
 export default api;

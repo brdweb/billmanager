@@ -11,6 +11,7 @@ from functools import wraps
 import jwt
 from flask import Flask, request, jsonify, send_from_directory, session, g, Blueprint
 from werkzeug.utils import safe_join
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_limiter import Limiter
@@ -18,7 +19,7 @@ from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from sqlalchemy import func, extract, desc
 
-from models import db, User, Database, Bill, Payment, RefreshToken, Subscription, UserInvite, UserDevice, BillShare, ShareAuditLog
+from models import db, User, Database, Bill, Payment, RefreshToken, Subscription, UserInvite, UserDevice, BillShare, ShareAuditLog, OAuthAccount, TwoFAConfig, TwoFAChallenge, WebAuthnCredential
 from migration import migrate_sqlite_to_pg
 from db_migrations import run_pending_migrations
 from services.email import send_verification_email, send_password_reset_email, send_welcome_email, send_invite_email
@@ -34,7 +35,9 @@ from services.logging_config import (
 )
 from config import (
     DEPLOYMENT_MODE, ENABLE_REGISTRATION, REQUIRE_EMAIL_VERIFICATION,
-    ENABLE_BILLING, EMAIL_ENABLED, is_saas, is_self_hosted, get_public_config
+    ENABLE_BILLING, EMAIL_ENABLED, is_saas, is_self_hosted, get_public_config,
+    OAUTH_PROVIDERS, get_enabled_oauth_providers, OAUTH_AUTO_REGISTER,
+    ENABLE_2FA, ENABLE_PASSKEYS, WEBAUTHN_RP_ID, WEBAUTHN_RP_NAME, WEBAUTHN_ORIGIN,
 )
 from validation import (
     validate_email, validate_username, validate_password, validate_amount,
@@ -1861,7 +1864,7 @@ def process_auto_payments():
 
 @api_bp.route('/api/version', methods=['GET'])
 def get_version():
-    return jsonify({'version': '3.8.1', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites', 'shared_bills']})
+    return jsonify({'version': '4.0.0', 'license': "O'Saasy", 'license_url': 'https://osaasy.dev/', 'features': ['enhanced_frequencies', 'auto_payments', 'postgresql_saas', 'row_tenancy', 'user_invites', 'shared_bills']})
 
 @api_bp.route('/ping')
 def ping(): return jsonify({'status': 'ok'})
@@ -1908,6 +1911,34 @@ def jwt_login():
             'error': 'Password change required',
             'password_change_required': True,  # nosec B105
             'change_token': token
+        }), 403
+
+    # Check if 2FA is enabled for this user
+    if ENABLE_2FA and user.twofa_config and user.twofa_config.is_enabled:
+        session_token = secrets.token_urlsafe(32)
+        session_hash = hashlib.sha256(session_token.encode()).hexdigest()
+
+        challenge = TwoFAChallenge(
+            user_id=user.id,
+            token_hash=session_hash,
+            challenge_type='pending',
+            expires_at=_naive_utcnow() + datetime.timedelta(minutes=10),
+        )
+        db.session.add(challenge)
+        db.session.commit()
+
+        methods = []
+        if user.twofa_config.email_otp_enabled:
+            methods.append('email_otp')
+        if user.twofa_config.passkey_enabled:
+            methods.append('passkey')
+        methods.append('recovery')
+
+        return jsonify({
+            'success': False,
+            'twofa_required': True,
+            'twofa_session_token': session_token,
+            'twofa_methods': methods,
         }), 403
 
     # Create tokens
@@ -4108,6 +4139,1263 @@ def jwt_change_password():
         }
     })
 
+# ============ OIDC / OAuth Routes ============
+
+# Cache for OIDC discovery metadata (provider -> (metadata_dict, fetched_at))
+_oidc_metadata_cache = {}
+_OIDC_CACHE_TTL = 3600  # 1 hour
+
+# Cache for JWKS keys (provider -> (jwks_dict, fetched_at))
+_jwks_cache = {}
+_JWKS_CACHE_TTL = 3600  # 1 hour
+
+# Used OAuth state nonces to prevent replay (nonce -> expiry_timestamp)
+_used_oauth_nonces = {}
+_NONCE_CLEANUP_INTERVAL = 300  # Clean up expired nonces every 5 minutes
+_nonce_last_cleanup = 0
+
+def _get_oidc_metadata(provider_key):
+    """Fetch and cache OIDC discovery metadata for a provider."""
+    import time
+    import requests as http_requests
+
+    cached = _oidc_metadata_cache.get(provider_key)
+    if cached and (time.time() - cached[1]) < _OIDC_CACHE_TTL:
+        return cached[0]
+
+    cfg = OAUTH_PROVIDERS.get(provider_key)
+    if not cfg or not cfg.get('discovery_url'):
+        return None
+
+    try:
+        resp = http_requests.get(cfg['discovery_url'], timeout=10)
+        resp.raise_for_status()
+        metadata = resp.json()
+        _oidc_metadata_cache[provider_key] = (metadata, time.time())
+        return metadata
+    except Exception as e:
+        logger.error(f"Failed to fetch OIDC metadata for {provider_key}: {e}")
+        return None
+
+
+def _get_jwks(provider_key):
+    """Fetch and cache JWKS (JSON Web Key Set) for a provider."""
+    import time
+    import requests as http_requests
+
+    cached = _jwks_cache.get(provider_key)
+    if cached and (time.time() - cached[1]) < _JWKS_CACHE_TTL:
+        return cached[0]
+
+    metadata = _get_oidc_metadata(provider_key)
+    if not metadata or not metadata.get('jwks_uri'):
+        return None
+
+    try:
+        resp = http_requests.get(metadata['jwks_uri'], timeout=10)
+        resp.raise_for_status()
+        jwks = resp.json()
+        _jwks_cache[provider_key] = (jwks, time.time())
+        return jwks
+    except Exception as e:
+        logger.error(f"Failed to fetch JWKS for {provider_key}: {e}")
+        return None
+
+
+def _cleanup_used_nonces():
+    """Remove expired nonces from the used set."""
+    import time
+    global _nonce_last_cleanup
+    now = time.time()
+    if now - _nonce_last_cleanup < _NONCE_CLEANUP_INTERVAL:
+        return
+    _nonce_last_cleanup = now
+    expired = [n for n, exp in _used_oauth_nonces.items() if exp < now]
+    for n in expired:
+        del _used_oauth_nonces[n]
+
+
+def _generate_oauth_state(provider, code_verifier, nonce):
+    """Generate encrypted state parameter as signed JWT.
+
+    The nonce is included so it can be validated in the ID token callback.
+    A separate state_nonce prevents replay of the state token itself.
+    """
+    state_nonce = secrets.token_hex(16)
+    state_payload = {
+        'provider': provider,
+        'state_nonce': state_nonce,
+        'id_token_nonce': nonce,
+        'code_verifier': code_verifier,
+        'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5),
+        'iat': datetime.datetime.now(datetime.timezone.utc),
+        'type': 'oauth_state',
+    }
+    return jwt.encode(state_payload, JWT_SECRET_KEY, algorithm='HS256')
+
+
+def _verify_oauth_state(state_token):
+    """Verify and decode the OAuth state parameter.
+
+    Also checks that the state_nonce has not been used before (replay prevention).
+    """
+    import time
+    _cleanup_used_nonces()
+
+    try:
+        payload = jwt.decode(state_token, JWT_SECRET_KEY, algorithms=['HS256'])
+        if payload.get('type') != 'oauth_state':
+            return None
+
+        # Check state_nonce for replay (CRITICAL-5)
+        state_nonce = payload.get('state_nonce')
+        if not state_nonce:
+            return None
+        if state_nonce in _used_oauth_nonces:
+            logger.warning(f"Replayed OAuth state nonce detected: {state_nonce[:8]}...")
+            return None
+
+        # Mark nonce as used (expires after 10 minutes to allow cleanup)
+        _used_oauth_nonces[state_nonce] = time.time() + 600
+
+        return payload
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+        return None
+
+
+def _resolve_oauth_user(provider, provider_user_id, email, profile_data=None):
+    """Resolve or create a user from OIDC claims.
+
+    Resolution order:
+    1. Find existing OAuthAccount link -> return that user
+    2. Find existing user with matching verified email -> auto-link
+    3. Auto-register new user (OIDC-only, no password)
+
+    Returns (user, is_new_user, error_message)
+    """
+    # 1. Check for existing OAuth link
+    oauth_account = OAuthAccount.query.filter_by(
+        provider=provider,
+        provider_user_id=provider_user_id
+    ).first()
+
+    if oauth_account:
+        user = db.session.get(User, oauth_account.user_id)
+        if user:
+            # Update profile data
+            if profile_data:
+                oauth_account.profile_data = json.dumps(profile_data)
+                oauth_account.provider_email = email
+                db.session.commit()
+            return user, False, None
+        # Orphaned OAuth account - clean up
+        db.session.delete(oauth_account)
+        db.session.commit()
+
+    # 2. Auto-link by verified email
+    if email:
+        existing_user = User.query.filter(
+            db.func.lower(User.email) == email.lower()
+        ).first()
+        if existing_user:
+            # Only auto-link if email is verified (prevent takeover)
+            if existing_user.email_verified_at:
+                new_link = OAuthAccount(
+                    user_id=existing_user.id,
+                    provider=provider,
+                    provider_user_id=provider_user_id,
+                    provider_email=email,
+                    profile_data=json.dumps(profile_data) if profile_data else None,
+                )
+                db.session.add(new_link)
+                db.session.commit()
+                return existing_user, False, None
+            else:
+                return None, False, 'An account with this email exists but is not verified. Please verify your email first or log in with your password.'
+
+    # 3. Auto-register new user (HIGH-4: check if auto-registration is allowed)
+    if not OAUTH_AUTO_REGISTER:
+        return None, False, 'Account not found. Contact your administrator.'
+
+    # Generate a unique username from email or provider info
+    base_username = email.split('@')[0] if email else f'{provider}_user'
+    username = base_username
+    counter = 1
+    while User.query.filter_by(username=username).first():
+        username = f'{base_username}{counter}'
+        counter += 1
+
+    new_user = User(
+        username=username,
+        email=email,
+        password_hash=None,  # OIDC-only user
+        auth_provider=provider,
+        role='admin',  # Account owner
+        email_verified_at=datetime.datetime.now(datetime.timezone.utc),  # OIDC emails are pre-verified
+    )
+    db.session.add(new_user)
+    db.session.flush()  # Get user.id
+
+    # Create default database for new user
+    db_name = f'db_{new_user.id}'
+    new_db = Database(
+        name=db_name,
+        display_name='Personal',
+        description='My bills and finances',
+        owner_id=new_user.id,
+    )
+    db.session.add(new_db)
+    db.session.flush()
+    new_user.accessible_databases.append(new_db)
+
+    # Link OAuth account
+    new_link = OAuthAccount(
+        user_id=new_user.id,
+        provider=provider,
+        provider_user_id=provider_user_id,
+        provider_email=email,
+        profile_data=json.dumps(profile_data) if profile_data else None,
+    )
+    db.session.add(new_link)
+    db.session.commit()
+
+    return new_user, True, None
+
+
+@api_v2_bp.route('/auth/oauth/providers', methods=['GET'])
+def oauth_list_providers():
+    """List enabled OAuth/OIDC providers with display names and icons."""
+    enabled = get_enabled_oauth_providers()
+    providers = []
+    for p in enabled:
+        cfg = OAUTH_PROVIDERS[p]
+        providers.append({
+            'id': p,
+            'display_name': cfg['display_name'],
+            'icon': cfg['icon'],
+        })
+    return jsonify({'success': True, 'data': providers})
+
+
+@api_v2_bp.route('/auth/oauth/<provider>/authorize', methods=['GET'])
+@limiter.limit("20 per minute")
+def oauth_authorize(provider):
+    """Redirect browser to OIDC provider authorization URL (web flow)."""
+    if provider not in get_enabled_oauth_providers():
+        return jsonify({'success': False, 'error': f'Provider "{provider}" is not enabled'}), 400
+
+    cfg = OAUTH_PROVIDERS[provider]
+    metadata = _get_oidc_metadata(provider)
+    if not metadata:
+        return jsonify({'success': False, 'error': 'Failed to fetch provider configuration'}), 502
+
+    # Generate PKCE code verifier and challenge
+    code_verifier = secrets.token_urlsafe(64)
+    code_challenge = hashlib.sha256(code_verifier.encode()).digest()
+    import base64
+    code_challenge_b64 = base64.urlsafe_b64encode(code_challenge).rstrip(b'=').decode()
+
+    # Generate nonce for ID token validation (HIGH-2)
+    id_token_nonce = secrets.token_hex(16)
+
+    # Generate state token (includes nonce for later validation)
+    state = _generate_oauth_state(provider, code_verifier, id_token_nonce)
+
+    # Build authorization URL
+    auth_endpoint = metadata.get('authorization_endpoint')
+    if not auth_endpoint:
+        return jsonify({'success': False, 'error': 'Provider missing authorization endpoint'}), 502
+
+    from urllib.parse import urlencode
+    app_url = os.environ.get('APP_URL', 'http://localhost:5173')
+    redirect_uri = f'{app_url}/auth/callback'
+
+    params = {
+        'response_type': 'code',
+        'client_id': cfg['client_id'],
+        'redirect_uri': redirect_uri,
+        'scope': cfg['scopes'],
+        'state': state,
+        'code_challenge': code_challenge_b64,
+        'code_challenge_method': 'S256',
+        'nonce': id_token_nonce,
+    }
+
+    # Apple requires response_mode=form_post
+    if provider == 'apple':
+        params['response_mode'] = 'form_post'
+
+    auth_url = f'{auth_endpoint}?{urlencode(params)}'
+    return jsonify({'success': True, 'data': {'auth_url': auth_url, 'state': state}})
+
+
+@api_v2_bp.route('/auth/oauth/<provider>/callback', methods=['POST'])
+@limiter.limit("20 per minute")
+def oauth_callback(provider):
+    """Exchange authorization code for tokens and resolve user.
+
+    Frontend sends: { code, state }
+    Returns: JWT tokens or 2FA challenge.
+    """
+    if provider not in get_enabled_oauth_providers():
+        return jsonify({'success': False, 'error': f'Provider "{provider}" is not enabled'}), 400
+
+    data = request.get_json(force=True, silent=True) or {}
+    code = data.get('code')
+    state = data.get('state')
+
+    if not code or not state:
+        return jsonify({'success': False, 'error': 'Missing code or state'}), 400
+
+    # Verify state token
+    state_payload = _verify_oauth_state(state)
+    if not state_payload:
+        return jsonify({'success': False, 'error': 'Invalid or expired state'}), 400
+
+    if state_payload.get('provider') != provider:
+        return jsonify({'success': False, 'error': 'State provider mismatch'}), 400
+
+    code_verifier = state_payload.get('code_verifier')
+    cfg = OAUTH_PROVIDERS[provider]
+    metadata = _get_oidc_metadata(provider)
+    if not metadata:
+        return jsonify({'success': False, 'error': 'Failed to fetch provider configuration'}), 502
+
+    # Exchange code for tokens
+    token_endpoint = metadata.get('token_endpoint')
+    if not token_endpoint:
+        return jsonify({'success': False, 'error': 'Provider missing token endpoint'}), 502
+
+    import requests as http_requests
+    app_url = os.environ.get('APP_URL', 'http://localhost:5173')
+    redirect_uri = f'{app_url}/auth/callback'
+
+    token_data = {
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': redirect_uri,
+        'client_id': cfg['client_id'],
+        'code_verifier': code_verifier,
+    }
+
+    # Apple uses client_secret differently (JWT-based), but for now use standard flow
+    if cfg.get('client_secret'):
+        token_data['client_secret'] = cfg['client_secret']
+
+    try:
+        token_resp = http_requests.post(token_endpoint, data=token_data, timeout=10)
+        token_resp.raise_for_status()
+        token_json = token_resp.json()
+    except Exception as e:
+        logger.error(f"OAuth token exchange failed for {provider}: {e}")
+        return jsonify({'success': False, 'error': 'Failed to exchange authorization code'}), 502
+
+    id_token = token_json.get('id_token')
+    if not id_token:
+        return jsonify({'success': False, 'error': 'No ID token in provider response'}), 502
+
+    # Decode and validate ID token with JWKS signature verification (CRITICAL-1)
+    try:
+        from authlib.jose import JsonWebKey, jwt as authlib_jwt
+
+        # Fetch JWKS for signature verification
+        jwks_data = _get_jwks(provider)
+        if not jwks_data:
+            return jsonify({'success': False, 'error': 'Failed to fetch provider signing keys'}), 502
+
+        jwk_set = JsonWebKey.import_key_set(jwks_data)
+
+        # Decode and verify signature using provider's public keys
+        claims = authlib_jwt.decode(id_token, jwk_set)
+        claims.validate()  # Validates exp, iat, nbf
+
+        # Validate issuer
+        expected_issuer = metadata.get('issuer')
+        if claims.get('iss') != expected_issuer:
+            return jsonify({'success': False, 'error': 'ID token issuer mismatch'}), 401
+
+        # Validate audience
+        aud = claims.get('aud')
+        if isinstance(aud, list):
+            if cfg['client_id'] not in aud:
+                return jsonify({'success': False, 'error': 'ID token audience mismatch'}), 401
+        elif aud != cfg['client_id']:
+            return jsonify({'success': False, 'error': 'ID token audience mismatch'}), 401
+
+        # Validate nonce matches what we sent in the authorize request (HIGH-2)
+        expected_nonce = state_payload.get('id_token_nonce')
+        if expected_nonce and claims.get('nonce') != expected_nonce:
+            return jsonify({'success': False, 'error': 'ID token nonce mismatch'}), 401
+
+    except Exception as e:
+        logger.error(f"ID token verification failed for {provider}: {e}")
+        return jsonify({'success': False, 'error': 'Failed to verify ID token'}), 502
+
+    # Extract user info from claims
+    provider_user_id = claims.get('sub')
+    email = claims.get('email', '').strip().lower() if claims.get('email') else None  # HIGH-3: normalize email
+    profile_data = {
+        'name': claims.get('name'),
+        'given_name': claims.get('given_name'),
+        'family_name': claims.get('family_name'),
+        'picture': claims.get('picture'),
+    }
+
+    if not provider_user_id:
+        return jsonify({'success': False, 'error': 'No subject in ID token'}), 502
+
+    # Resolve or create user
+    user, is_new_user, error = _resolve_oauth_user(provider, provider_user_id, email, profile_data)
+    if error:
+        return jsonify({'success': False, 'error': error}), 409
+
+    if not user:
+        return jsonify({'success': False, 'error': 'Failed to resolve user'}), 500
+
+    # Check if 2FA is enabled for this user
+    if ENABLE_2FA and user.twofa_config and user.twofa_config.is_enabled:
+        # Create 2FA challenge session
+        session_token = secrets.token_urlsafe(32)
+        session_hash = hashlib.sha256(session_token.encode()).hexdigest()
+
+        challenge = TwoFAChallenge(
+            user_id=user.id,
+            token_hash=session_hash,
+            challenge_type='pending',
+            expires_at=_naive_utcnow() + datetime.timedelta(minutes=10),
+        )
+        db.session.add(challenge)
+        db.session.commit()
+
+        methods = []
+        if user.twofa_config.email_otp_enabled:
+            methods.append('email_otp')
+        if user.twofa_config.passkey_enabled:
+            methods.append('passkey')
+        methods.append('recovery')
+
+        return jsonify({
+            'success': False,
+            'twofa_required': True,
+            'twofa_session_token': session_token,
+            'twofa_methods': methods,
+        }), 403
+
+    # Issue JWT tokens
+    access_token = create_access_token(user.id, user.role)
+    refresh_token = create_refresh_token(user.id, data.get('device_info'))
+    databases = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'expires_in': int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds()),
+            'token_type': 'Bearer',  # nosec B105
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'role': user.role,
+                'is_new_user': is_new_user,
+            },
+            'databases': databases,
+        }
+    })
+
+
+@api_v2_bp.route('/auth/oauth/accounts', methods=['GET'])
+@jwt_required
+def oauth_list_accounts():
+    """List the current user's linked OAuth provider accounts."""
+    accounts = OAuthAccount.query.filter_by(user_id=g.jwt_user_id).all()
+    return jsonify({
+        'success': True,
+        'data': [{
+            'id': a.id,
+            'provider': a.provider,
+            'provider_email': a.provider_email,
+            'created_at': a.created_at.isoformat() if a.created_at else None,
+        } for a in accounts]
+    })
+
+
+@api_v2_bp.route('/auth/oauth/<provider>', methods=['DELETE'])
+@jwt_required
+def oauth_unlink_provider(provider):
+    """Unlink an OAuth provider from the current user's account."""
+    user = db.session.get(User, g.jwt_user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    account = OAuthAccount.query.filter_by(
+        user_id=g.jwt_user_id,
+        provider=provider
+    ).first()
+
+    if not account:
+        return jsonify({'success': False, 'error': f'No {provider} account linked'}), 404
+
+    # Prevent unlinking if user has no password (would lock them out)
+    if not user.password_hash:
+        other_accounts = OAuthAccount.query.filter(
+            OAuthAccount.user_id == g.jwt_user_id,
+            OAuthAccount.provider != provider
+        ).count()
+        if other_accounts == 0:
+            return jsonify({
+                'success': False,
+                'error': 'Cannot unlink your only login method. Set a password first.'
+            }), 400
+
+    db.session.delete(account)
+    db.session.commit()
+
+    return jsonify({'success': True, 'data': {'message': f'{provider} account unlinked'}})
+
+
+# ============ Two-Factor Authentication Routes ============
+
+def _naive_utcnow():
+    """Return current UTC time as a naive datetime (no tzinfo).
+
+    PostgreSQL 'timestamp without time zone' columns store naive datetimes.
+    psycopg3 converts timezone-aware datetimes to server-local time before
+    storing, which causes expiry comparisons to break when the DB server
+    is in a different timezone from UTC. Using naive UTC datetimes avoids
+    this conversion.
+    """
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+
+def _verify_2fa_session(token):
+    """Verify a 2FA session token. Returns (challenge, error_response).
+
+    Returns remaining attempts in error response to help clients show feedback (HIGH-1).
+    Protection layers: max_attempts=5 per challenge, rate limiter 5/min per IP on verify endpoint.
+    """
+    if not token:
+        return None, (jsonify({'success': False, 'error': 'Missing 2FA session token'}), 400)
+
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    challenge = TwoFAChallenge.query.filter_by(token_hash=token_hash).first()
+
+    if not challenge:
+        return None, (jsonify({'success': False, 'error': 'Invalid or expired 2FA session'}), 401)
+
+    if challenge.is_expired:
+        return None, (jsonify({'success': False, 'error': '2FA session expired. Please log in again.'}), 401)
+
+    if challenge.used:
+        return None, (jsonify({'success': False, 'error': '2FA session already used'}), 401)
+
+    if challenge.attempts >= challenge.max_attempts:
+        return None, (jsonify({
+            'success': False,
+            'error': 'Too many failed attempts. Please log in again.',
+            'locked': True,
+        }), 429)
+
+    return challenge, None
+
+
+@api_v2_bp.route('/auth/2fa/status', methods=['GET'])
+@jwt_required
+def twofa_status():
+    """Get the current user's 2FA configuration status."""
+    user = db.session.get(User, g.jwt_user_id)
+    config = user.twofa_config
+
+    passkeys = []
+    if config and config.passkey_enabled:
+        creds = WebAuthnCredential.query.filter_by(user_id=g.jwt_user_id).all()
+        passkeys = [{
+            'id': c.id,
+            'device_name': c.device_name,
+            'created_at': c.created_at.isoformat() if c.created_at else None,
+            'last_used_at': c.last_used_at.isoformat() if c.last_used_at else None,
+        } for c in creds]
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'enabled': config.is_enabled if config else False,
+            'email_otp_enabled': config.email_otp_enabled if config else False,
+            'passkey_enabled': config.passkey_enabled if config else False,
+            'passkeys': passkeys,
+            'has_recovery_codes': bool(config.recovery_codes_hash) if config else False,
+        }
+    })
+
+
+@api_v2_bp.route('/auth/2fa/setup/email', methods=['POST'])
+@jwt_required
+@limiter.limit("10 per minute")
+def twofa_setup_email():
+    """Enable email OTP 2FA - sends a test code to verify email works."""
+    user = db.session.get(User, g.jwt_user_id)
+    if not user.email:
+        return jsonify({'success': False, 'error': 'You must have an email address to enable email OTP'}), 400
+
+    # Generate a 6-digit code using cryptographic randomness (CRITICAL-2)
+    code = str(secrets.randbelow(900000) + 100000)
+    code_hash = generate_password_hash(code)
+
+    # Store as a challenge
+    session_token = secrets.token_urlsafe(32)
+    session_hash = hashlib.sha256(session_token.encode()).hexdigest()
+
+    challenge = TwoFAChallenge(
+        user_id=user.id,
+        token_hash=session_hash,
+        challenge_type='email_otp_setup',
+        otp_code_hash=code_hash,
+        expires_at=_naive_utcnow() + datetime.timedelta(minutes=10),
+    )
+    db.session.add(challenge)
+    db.session.commit()
+
+    # Send the code via email
+    from services.email import send_2fa_code_email
+    sent = send_2fa_code_email(user.email, code, user.username)
+    if not sent:
+        return jsonify({'success': False, 'error': 'Failed to send verification code. Check email configuration.'}), 502
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'message': 'Verification code sent to your email',
+            'setup_token': session_token,
+        }
+    })
+
+
+@api_v2_bp.route('/auth/2fa/setup/email/confirm', methods=['POST'])
+@jwt_required
+@limiter.limit("5 per minute")
+def twofa_setup_email_confirm():
+    """Confirm email OTP setup with the test code."""
+    data = request.get_json(force=True, silent=True) or {}
+    setup_token = data.get('setup_token')
+    code = data.get('code')
+
+    if not setup_token or not code:
+        return jsonify({'success': False, 'error': 'Missing setup_token or code'}), 400
+
+    challenge, err = _verify_2fa_session(setup_token)
+    if err:
+        return err
+
+    if challenge.user_id != g.jwt_user_id:
+        return jsonify({'success': False, 'error': 'Invalid session'}), 403
+
+    if challenge.challenge_type != 'email_otp_setup':
+        return jsonify({'success': False, 'error': 'Invalid challenge type'}), 400
+
+    # Verify code
+    from werkzeug.security import check_password_hash as check_hash
+    if not check_hash(challenge.otp_code_hash, code):
+        challenge.attempts += 1
+        db.session.commit()
+        return jsonify({'success': False, 'error': 'Invalid verification code'}), 400
+
+    # Mark challenge as used
+    challenge.used = True
+
+    # Enable email OTP for this user
+    config = TwoFAConfig.query.filter_by(user_id=g.jwt_user_id).first()
+    if not config:
+        config = TwoFAConfig(user_id=g.jwt_user_id)
+        db.session.add(config)
+    config.email_otp_enabled = True
+    db.session.commit()
+
+    # Generate recovery codes if not already present
+    recovery_codes = None
+    if not config.recovery_codes_hash:
+        recovery_codes = _generate_recovery_codes(config)
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'message': 'Email OTP 2FA enabled successfully',
+            'recovery_codes': recovery_codes,
+        }
+    })
+
+
+def _generate_recovery_codes(twofa_config, count=10):
+    """Generate and store recovery codes. Returns plaintext codes (show once)."""
+    codes = [secrets.token_hex(4).upper() for _ in range(count)]  # 8-char hex codes
+    hashes = [generate_password_hash(c) for c in codes]
+    twofa_config.recovery_codes_hash = json.dumps(hashes)
+    db.session.commit()
+    return codes
+
+
+@api_v2_bp.route('/auth/2fa/recovery-codes', methods=['GET'])
+@jwt_required
+def twofa_get_recovery_codes():
+    """Regenerate recovery codes. Old codes are invalidated."""
+    config = TwoFAConfig.query.filter_by(user_id=g.jwt_user_id).first()
+    if not config or not config.is_enabled:
+        return jsonify({'success': False, 'error': '2FA is not enabled'}), 400
+
+    codes = _generate_recovery_codes(config)
+    return jsonify({
+        'success': True,
+        'data': {'recovery_codes': codes}
+    })
+
+
+@api_v2_bp.route('/auth/2fa/setup/passkey/options', methods=['POST'])
+@jwt_required
+def twofa_passkey_registration_options():
+    """Get WebAuthn registration options for adding a passkey."""
+    if not ENABLE_PASSKEYS:
+        return jsonify({'success': False, 'error': 'Passkeys are not enabled'}), 400
+
+    from webauthn import generate_registration_options, options_to_json
+    from webauthn.helpers.structs import (
+        AuthenticatorSelectionCriteria,
+        ResidentKeyRequirement,
+        UserVerificationRequirement,
+        PublicKeyCredentialDescriptor,
+    )
+    import base64
+
+    user = db.session.get(User, g.jwt_user_id)
+
+    # Get existing credentials to exclude
+    existing_creds = WebAuthnCredential.query.filter_by(user_id=g.jwt_user_id).all()
+    exclude_creds = []
+    for c in existing_creds:
+        exclude_creds.append(PublicKeyCredentialDescriptor(
+            id=base64.urlsafe_b64decode(c.credential_id + '=='),
+            transports=json.loads(c.transports) if c.transports else [],
+        ))
+
+    options = generate_registration_options(
+        rp_id=WEBAUTHN_RP_ID,
+        rp_name=WEBAUTHN_RP_NAME,
+        user_id=str(user.id).encode(),
+        user_name=user.username,
+        user_display_name=user.username,
+        exclude_credentials=exclude_creds,
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            resident_key=ResidentKeyRequirement.PREFERRED,
+            user_verification=UserVerificationRequirement.PREFERRED,
+        ),
+    )
+
+    # Store challenge in session for verification
+    options_json = json.loads(options_to_json(options))
+
+    # Store the challenge
+    session_token = secrets.token_urlsafe(32)
+    session_hash = hashlib.sha256(session_token.encode()).hexdigest()
+    challenge_b64 = options_json['challenge']
+
+    twofa_challenge = TwoFAChallenge(
+        user_id=user.id,
+        token_hash=session_hash,
+        challenge_type='passkey_registration',
+        otp_code_hash=challenge_b64,  # Store the challenge for verification
+        expires_at=_naive_utcnow() + datetime.timedelta(minutes=5),
+    )
+    db.session.add(twofa_challenge)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'options': options_json,
+            'registration_token': session_token,
+        }
+    })
+
+
+@api_v2_bp.route('/auth/2fa/setup/passkey/register', methods=['POST'])
+@jwt_required
+def twofa_passkey_register():
+    """Complete passkey registration with the attestation response."""
+    if not ENABLE_PASSKEYS:
+        return jsonify({'success': False, 'error': 'Passkeys are not enabled'}), 400
+
+    from webauthn import verify_registration_response
+    from webauthn.helpers.structs import RegistrationCredential
+    import base64
+
+    data = request.get_json(force=True, silent=True) or {}
+    registration_token = data.get('registration_token')
+    credential = data.get('credential')
+    device_name = data.get('device_name', 'Security Key')
+
+    if not registration_token or not credential:
+        return jsonify({'success': False, 'error': 'Missing registration_token or credential'}), 400
+
+    challenge, err = _verify_2fa_session(registration_token)
+    if err:
+        return err
+
+    if challenge.user_id != g.jwt_user_id or challenge.challenge_type != 'passkey_registration':
+        return jsonify({'success': False, 'error': 'Invalid registration session'}), 403
+
+    expected_challenge = base64.urlsafe_b64decode(challenge.otp_code_hash + '==')
+
+    try:
+        registration = RegistrationCredential.parse_raw(json.dumps(credential))
+        verification = verify_registration_response(
+            credential=registration,
+            expected_challenge=expected_challenge,
+            expected_rp_id=WEBAUTHN_RP_ID,
+            expected_origin=WEBAUTHN_ORIGIN,
+        )
+    except Exception as e:
+        logger.error(f"Passkey registration verification failed: {e}")
+        return jsonify({'success': False, 'error': 'Passkey registration failed'}), 400
+
+    # Store the credential
+    cred_id_b64 = base64.urlsafe_b64encode(verification.credential_id).rstrip(b'=').decode()
+    pub_key_b64 = base64.urlsafe_b64encode(verification.credential_public_key).rstrip(b'=').decode()
+
+    webauthn_cred = WebAuthnCredential(
+        user_id=g.jwt_user_id,
+        credential_id=cred_id_b64,
+        public_key=pub_key_b64,
+        sign_count=verification.sign_count,
+        device_name=device_name,
+        transports=json.dumps(credential.get('response', {}).get('transports', [])) if isinstance(credential, dict) else None,
+    )
+    db.session.add(webauthn_cred)
+
+    # Enable passkey 2FA
+    config = TwoFAConfig.query.filter_by(user_id=g.jwt_user_id).first()
+    if not config:
+        config = TwoFAConfig(user_id=g.jwt_user_id)
+        db.session.add(config)
+    config.passkey_enabled = True
+
+    # Mark challenge as used
+    challenge.used = True
+    db.session.commit()
+
+    # Generate recovery codes if not already present
+    recovery_codes = None
+    if not config.recovery_codes_hash:
+        recovery_codes = _generate_recovery_codes(config)
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'message': 'Passkey registered successfully',
+            'credential_id': webauthn_cred.id,
+            'device_name': device_name,
+            'recovery_codes': recovery_codes,
+        }
+    })
+
+
+@api_v2_bp.route('/auth/2fa/setup/passkeys', methods=['GET'])
+@jwt_required
+def twofa_list_passkeys():
+    """List registered passkeys for the current user."""
+    creds = WebAuthnCredential.query.filter_by(user_id=g.jwt_user_id).all()
+    return jsonify({
+        'success': True,
+        'data': [{
+            'id': c.id,
+            'device_name': c.device_name,
+            'created_at': c.created_at.isoformat() if c.created_at else None,
+            'last_used_at': c.last_used_at.isoformat() if c.last_used_at else None,
+        } for c in creds]
+    })
+
+
+@api_v2_bp.route('/auth/2fa/setup/passkey/<int:passkey_id>', methods=['DELETE'])
+@jwt_required
+def twofa_delete_passkey(passkey_id):
+    """Remove a registered passkey. Requires password or email OTP confirmation (HIGH-5)."""
+    data = request.get_json(force=True, silent=True) or {}
+    password = data.get('password')
+    confirmation_code = data.get('confirmation_code')
+
+    user = db.session.get(User, g.jwt_user_id)
+
+    # Require confirmation before deleting a passkey
+    if user.password_hash:
+        if not password:
+            return jsonify({'success': False, 'error': 'Password required to delete passkey'}), 400
+        if not user.check_password(password):
+            return jsonify({'success': False, 'error': 'Invalid password'}), 401
+    else:
+        # OIDC-only users: require email OTP
+        if not confirmation_code:
+            return jsonify({
+                'success': False,
+                'error': 'Email confirmation code required to delete passkey',
+                'requires_email_confirmation': True,
+            }), 400
+        # Verify against most recent disable challenge (reuses disable_2fa_confirm type)
+        confirm_challenge = TwoFAChallenge.query.filter_by(
+            user_id=g.jwt_user_id,
+            challenge_type='disable_2fa_confirm',
+        ).order_by(TwoFAChallenge.created_at.desc()).first()
+
+        if not confirm_challenge or not confirm_challenge.is_valid:
+            return jsonify({'success': False, 'error': 'Invalid or expired confirmation code'}), 401
+
+        from werkzeug.security import check_password_hash as check_hash
+        if not check_hash(confirm_challenge.otp_code_hash, confirmation_code):
+            confirm_challenge.attempts += 1
+            db.session.commit()
+            return jsonify({'success': False, 'error': 'Invalid confirmation code'}), 401
+
+        confirm_challenge.used = True
+
+    cred = WebAuthnCredential.query.filter_by(id=passkey_id, user_id=g.jwt_user_id).first()
+    if not cred:
+        return jsonify({'success': False, 'error': 'Passkey not found'}), 404
+
+    db.session.delete(cred)
+
+    # If no more passkeys, disable passkey 2FA
+    remaining = WebAuthnCredential.query.filter_by(user_id=g.jwt_user_id).count()
+    if remaining == 0:
+        config = TwoFAConfig.query.filter_by(user_id=g.jwt_user_id).first()
+        if config:
+            config.passkey_enabled = False
+
+    db.session.commit()
+    return jsonify({'success': True, 'data': {'message': 'Passkey removed'}})
+
+
+@api_v2_bp.route('/auth/2fa/disable', methods=['POST'])
+@jwt_required
+@limiter.limit("5 per minute")
+def twofa_disable():
+    """Disable all 2FA for the current user. Requires password or email OTP confirmation."""
+    data = request.get_json(force=True, silent=True) or {}
+    password = data.get('password')
+    confirmation_code = data.get('confirmation_code')
+
+    user = db.session.get(User, g.jwt_user_id)
+
+    # Require password for local auth users
+    if user.password_hash:
+        if not password:
+            return jsonify({'success': False, 'error': 'Password required to disable 2FA'}), 400
+        if not user.check_password(password):
+            return jsonify({'success': False, 'error': 'Invalid password'}), 401
+    else:
+        # OIDC-only users: require email OTP confirmation (CRITICAL-4)
+        if not confirmation_code:
+            return jsonify({
+                'success': False,
+                'error': 'Email confirmation code required to disable 2FA',
+                'requires_email_confirmation': True,
+            }), 400
+
+        # Verify the confirmation code against the most recent disable challenge
+        disable_challenge = TwoFAChallenge.query.filter_by(
+            user_id=g.jwt_user_id,
+            challenge_type='disable_2fa_confirm',
+        ).order_by(TwoFAChallenge.created_at.desc()).first()
+
+        if not disable_challenge or not disable_challenge.is_valid:
+            return jsonify({'success': False, 'error': 'Invalid or expired confirmation code. Request a new one.'}), 401
+
+        from werkzeug.security import check_password_hash as check_hash
+        if not check_hash(disable_challenge.otp_code_hash, confirmation_code):
+            disable_challenge.attempts += 1
+            db.session.commit()
+            return jsonify({'success': False, 'error': 'Invalid confirmation code'}), 401
+
+        disable_challenge.used = True
+
+    config = TwoFAConfig.query.filter_by(user_id=g.jwt_user_id).first()
+    if config:
+        config.email_otp_enabled = False
+        config.passkey_enabled = False
+        config.recovery_codes_hash = None
+
+    # Remove all passkeys
+    WebAuthnCredential.query.filter_by(user_id=g.jwt_user_id).delete()
+    # Remove all pending challenges
+    TwoFAChallenge.query.filter_by(user_id=g.jwt_user_id).delete()
+
+    db.session.commit()
+    return jsonify({'success': True, 'data': {'message': '2FA disabled successfully'}})
+
+
+@api_v2_bp.route('/auth/2fa/disable/send-code', methods=['POST'])
+@jwt_required
+@limiter.limit("5 per minute")
+def twofa_disable_send_code():
+    """Send email confirmation code for OIDC-only users to disable 2FA."""
+    user = db.session.get(User, g.jwt_user_id)
+
+    if user.password_hash:
+        return jsonify({'success': False, 'error': 'Use password confirmation instead'}), 400
+
+    if not user.email:
+        return jsonify({'success': False, 'error': 'No email address on account'}), 400
+
+    # Generate and send code
+    code = str(secrets.randbelow(900000) + 100000)
+    code_hash = generate_password_hash(code)
+
+    session_token = secrets.token_urlsafe(32)
+    session_hash = hashlib.sha256(session_token.encode()).hexdigest()
+
+    challenge = TwoFAChallenge(
+        user_id=user.id,
+        token_hash=session_hash,
+        challenge_type='disable_2fa_confirm',
+        otp_code_hash=code_hash,
+        expires_at=_naive_utcnow() + datetime.timedelta(minutes=10),
+    )
+    db.session.add(challenge)
+    db.session.commit()
+
+    from services.email import send_2fa_code_email
+    sent = send_2fa_code_email(user.email, code, user.username)
+    if not sent:
+        return jsonify({'success': False, 'error': 'Failed to send confirmation code'}), 502
+
+    return jsonify({'success': True, 'data': {'message': 'Confirmation code sent to your email'}})
+
+
+@api_v2_bp.route('/auth/2fa/challenge', methods=['POST'])
+@limiter.limit("10 per minute")
+def twofa_challenge():
+    """Request a 2FA challenge. Sends email OTP if email_otp method is requested."""
+    data = request.get_json(force=True, silent=True) or {}
+    session_token = data.get('session_token')
+    method = data.get('method', 'email_otp')
+
+    challenge, err = _verify_2fa_session(session_token)
+    if err:
+        return err
+
+    user = db.session.get(User, challenge.user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    if method == 'email_otp':
+        if not user.email:
+            return jsonify({'success': False, 'error': 'No email address configured'}), 400
+
+        # Generate 6-digit code using cryptographic randomness (CRITICAL-2)
+        code = str(secrets.randbelow(900000) + 100000)
+        challenge.otp_code_hash = generate_password_hash(code)
+        challenge.challenge_type = 'email_otp'
+        db.session.commit()
+
+        from services.email import send_2fa_code_email
+        sent = send_2fa_code_email(user.email, code, user.username)
+        if not sent:
+            return jsonify({'success': False, 'error': 'Failed to send verification code'}), 502
+
+        return jsonify({'success': True, 'data': {'message': 'Verification code sent to your email'}})
+
+    elif method == 'passkey':
+        return jsonify({'success': True, 'data': {'message': 'Use passkey to verify'}})
+
+    return jsonify({'success': False, 'error': f'Unknown 2FA method: {method}'}), 400
+
+
+@api_v2_bp.route('/auth/2fa/verify/passkey/options', methods=['POST'])
+@limiter.limit("10 per minute")
+def twofa_passkey_auth_options():
+    """Get WebAuthn authentication options for 2FA passkey verification."""
+    if not ENABLE_PASSKEYS:
+        return jsonify({'success': False, 'error': 'Passkeys are not enabled'}), 400
+
+    from webauthn import generate_authentication_options, options_to_json
+    from webauthn.helpers.structs import PublicKeyCredentialDescriptor, UserVerificationRequirement
+    import base64
+
+    data = request.get_json(force=True, silent=True) or {}
+    session_token = data.get('session_token')
+
+    challenge, err = _verify_2fa_session(session_token)
+    if err:
+        return err
+
+    # Get user's passkeys
+    creds = WebAuthnCredential.query.filter_by(user_id=challenge.user_id).all()
+    if not creds:
+        return jsonify({'success': False, 'error': 'No passkeys registered'}), 400
+
+    allow_creds = []
+    for c in creds:
+        allow_creds.append(PublicKeyCredentialDescriptor(
+            id=base64.urlsafe_b64decode(c.credential_id + '=='),
+            transports=json.loads(c.transports) if c.transports else [],
+        ))
+
+    options = generate_authentication_options(
+        rp_id=WEBAUTHN_RP_ID,
+        allow_credentials=allow_creds,
+        user_verification=UserVerificationRequirement.PREFERRED,
+    )
+
+    options_json = json.loads(options_to_json(options))
+
+    # Store the challenge for verification
+    challenge.otp_code_hash = options_json['challenge']
+    challenge.challenge_type = 'passkey'
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'data': {'options': options_json}
+    })
+
+
+@api_v2_bp.route('/auth/2fa/verify', methods=['POST'])
+@limiter.limit("5 per minute")
+def twofa_verify():
+    """Verify a 2FA challenge. On success, issues JWT tokens.
+
+    Accepts: { session_token, method, code/credential/recovery_code }
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    session_token = data.get('session_token')
+    method = data.get('method', 'email_otp')
+
+    challenge, err = _verify_2fa_session(session_token)
+    if err:
+        return err
+
+    user = db.session.get(User, challenge.user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    verified = False
+
+    if method == 'email_otp':
+        code = data.get('code')
+        if not code or not challenge.otp_code_hash:
+            challenge.attempts += 1
+            db.session.commit()
+            return jsonify({'success': False, 'error': 'Missing verification code'}), 400
+
+        from werkzeug.security import check_password_hash as check_hash
+        if check_hash(challenge.otp_code_hash, code):
+            verified = True
+        else:
+            challenge.attempts += 1
+            db.session.commit()
+            return jsonify({'success': False, 'error': 'Invalid verification code'}), 400
+
+    elif method == 'passkey':
+        credential_data = data.get('credential')
+        if not credential_data:
+            return jsonify({'success': False, 'error': 'Missing credential'}), 400
+
+        if not ENABLE_PASSKEYS:
+            return jsonify({'success': False, 'error': 'Passkeys are not enabled'}), 400
+
+        from webauthn import verify_authentication_response
+        from webauthn.helpers.structs import AuthenticationCredential
+        import base64
+
+        expected_challenge = base64.urlsafe_b64decode(challenge.otp_code_hash + '==')
+
+        # Find the matching credential
+        cred_id_from_response = credential_data.get('id', '')
+        stored_cred = WebAuthnCredential.query.filter_by(
+            user_id=challenge.user_id,
+            credential_id=cred_id_from_response
+        ).first()
+
+        if not stored_cred:
+            challenge.attempts += 1
+            db.session.commit()
+            return jsonify({'success': False, 'error': 'Unrecognized credential'}), 400
+
+        try:
+            auth_credential = AuthenticationCredential.parse_raw(json.dumps(credential_data))
+            verification = verify_authentication_response(
+                credential=auth_credential,
+                expected_challenge=expected_challenge,
+                expected_rp_id=WEBAUTHN_RP_ID,
+                expected_origin=WEBAUTHN_ORIGIN,
+                credential_public_key=base64.urlsafe_b64decode(stored_cred.public_key + '=='),
+                credential_current_sign_count=stored_cred.sign_count,
+            )
+            stored_cred.sign_count = verification.new_sign_count
+            stored_cred.last_used_at = datetime.datetime.now(datetime.timezone.utc)
+            verified = True
+        except Exception as e:
+            logger.error(f"Passkey verification failed: {e}")
+            challenge.attempts += 1
+            db.session.commit()
+            return jsonify({'success': False, 'error': 'Passkey verification failed'}), 400
+
+    elif method == 'recovery':
+        recovery_code = data.get('recovery_code')
+        if not recovery_code:
+            return jsonify({'success': False, 'error': 'Missing recovery code'}), 400
+
+        # Lock the TwoFAConfig row to prevent race condition (CRITICAL-3)
+        config = db.session.query(TwoFAConfig).filter_by(
+            user_id=challenge.user_id
+        ).with_for_update().first()
+        if not config or not config.recovery_codes_hash:
+            return jsonify({'success': False, 'error': 'No recovery codes available'}), 400
+
+        from werkzeug.security import check_password_hash as check_hash
+        code_hashes = json.loads(config.recovery_codes_hash)
+        matched_idx = None
+        for idx, h in enumerate(code_hashes):
+            if check_hash(h, recovery_code.upper()):
+                matched_idx = idx
+                break
+
+        if matched_idx is not None:
+            # Consume the recovery code (single-use) - row is locked, safe from races
+            code_hashes.pop(matched_idx)
+            config.recovery_codes_hash = json.dumps(code_hashes)
+            verified = True
+        else:
+            challenge.attempts += 1
+            db.session.commit()
+            return jsonify({'success': False, 'error': 'Invalid recovery code'}), 400
+    else:
+        return jsonify({'success': False, 'error': f'Unknown 2FA method: {method}'}), 400
+
+    if not verified:
+        return jsonify({'success': False, 'error': '2FA verification failed'}), 401
+
+    # Mark challenge as used
+    challenge.used = True
+    db.session.commit()
+
+    # Issue JWT tokens
+    access_token = create_access_token(user.id, user.role)
+    refresh_token = create_refresh_token(user.id, data.get('device_info'))
+    databases = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'expires_in': int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds()),
+            'token_type': 'Bearer',  # nosec B105
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'role': user.role
+            },
+            'databases': databases,
+        }
+    })
+
+
 # ============ API v2 Admin Endpoints ============
 
 @api_v2_bp.route('/users', methods=['GET'])
@@ -4534,7 +5822,7 @@ def jwt_get_version():
     return jsonify({
         'success': True,
         'data': {
-            'version': '3.8.1',
+            'version': '4.0.0',
             'api_version': 'v2',
             'license': "O'Saasy",
             'license_url': 'https://osaasy.dev/',

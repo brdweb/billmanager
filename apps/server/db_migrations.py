@@ -510,6 +510,141 @@ def migrate_20260210_01_drop_invalid_payments_db_index(db):
         logger.info("Index idx_payments_db_date does not exist, no cleanup needed")
 
 
+def migrate_20260210_02_create_oauth_accounts(db):
+    """Create oauth_accounts table for OIDC provider account linking."""
+    logger.info("Running migration: 20260210_02_create_oauth_accounts")
+
+    inspector = inspect(db.engine)
+    if 'oauth_accounts' in inspector.get_table_names():
+        logger.info("oauth_accounts table already exists")
+        return
+
+    db.session.execute(text('''
+        CREATE TABLE oauth_accounts (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            provider VARCHAR(20) NOT NULL,
+            provider_user_id VARCHAR(255) NOT NULL,
+            provider_email VARCHAR(255),
+            profile_data TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(provider, provider_user_id)
+        )
+    '''))
+
+    db.session.execute(text('''
+        CREATE INDEX idx_oauth_accounts_user_id ON oauth_accounts(user_id)
+    '''))
+    db.session.execute(text('''
+        CREATE INDEX idx_oauth_accounts_provider ON oauth_accounts(provider, provider_user_id)
+    '''))
+
+    db.session.commit()
+    logger.info("Created oauth_accounts table")
+
+
+def migrate_20260210_03_create_twofa_tables(db):
+    """Create 2FA tables: twofa_config, twofa_challenges, webauthn_credentials."""
+    logger.info("Running migration: 20260210_03_create_twofa_tables")
+
+    inspector = inspect(db.engine)
+    existing_tables = inspector.get_table_names()
+
+    if 'twofa_config' not in existing_tables:
+        db.session.execute(text('''
+            CREATE TABLE twofa_config (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                email_otp_enabled BOOLEAN DEFAULT FALSE,
+                passkey_enabled BOOLEAN DEFAULT FALSE,
+                recovery_codes_hash TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        '''))
+        logger.info("Created twofa_config table")
+
+    if 'twofa_challenges' not in existing_tables:
+        db.session.execute(text('''
+            CREATE TABLE twofa_challenges (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                token_hash VARCHAR(64) NOT NULL UNIQUE,
+                challenge_type VARCHAR(20) NOT NULL,
+                otp_code_hash VARCHAR(256),
+                attempts INTEGER DEFAULT 0,
+                max_attempts INTEGER DEFAULT 5,
+                expires_at TIMESTAMP NOT NULL,
+                used BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        '''))
+        db.session.execute(text('''
+            CREATE INDEX idx_twofa_challenges_user_id ON twofa_challenges(user_id)
+        '''))
+        db.session.execute(text('''
+            CREATE INDEX idx_twofa_challenges_token ON twofa_challenges(token_hash)
+        '''))
+        logger.info("Created twofa_challenges table")
+
+    if 'webauthn_credentials' not in existing_tables:
+        db.session.execute(text('''
+            CREATE TABLE webauthn_credentials (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                credential_id TEXT NOT NULL UNIQUE,
+                public_key TEXT NOT NULL,
+                sign_count INTEGER DEFAULT 0,
+                device_name VARCHAR(100),
+                transports TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used_at TIMESTAMP
+            )
+        '''))
+        db.session.execute(text('''
+            CREATE INDEX idx_webauthn_creds_user_id ON webauthn_credentials(user_id)
+        '''))
+        logger.info("Created webauthn_credentials table")
+
+    db.session.commit()
+
+
+def migrate_20260210_04_nullable_password_hash(db):
+    """Make password_hash nullable for OIDC-only users."""
+    logger.info("Running migration: 20260210_04_nullable_password_hash")
+
+    db.session.execute(text('''
+        ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL
+    '''))
+
+    db.session.commit()
+    logger.info("Made users.password_hash nullable")
+
+
+def migrate_20260210_05_add_auth_provider(db):
+    """Add auth_provider column to users table."""
+    logger.info("Running migration: 20260210_05_add_auth_provider")
+
+    result = db.session.execute(text("""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name='users'
+        AND column_name='auth_provider'
+    """))
+
+    if result.fetchone():
+        logger.info("auth_provider column already exists")
+        return
+
+    db.session.execute(text('''
+        ALTER TABLE users ADD COLUMN auth_provider VARCHAR(20) DEFAULT 'local'
+    '''))
+
+    db.session.commit()
+    logger.info("Added users.auth_provider column")
+
+
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -529,6 +664,10 @@ MIGRATIONS = [
     ('20260112_01', 'Add share_id to payments for shared bill payment tracking', migrate_20260112_01_add_share_id_to_payments),
     ('20260114_01', 'Add composite indexes for query performance', migrate_20260114_01_add_performance_indexes),
     ('20260210_01', 'Drop invalid idx_payments_db_date index if exists', migrate_20260210_01_drop_invalid_payments_db_index),
+    ('20260210_02', 'Create oauth_accounts table', migrate_20260210_02_create_oauth_accounts),
+    ('20260210_03', 'Create 2FA tables (twofa_config, twofa_challenges, webauthn_credentials)', migrate_20260210_03_create_twofa_tables),
+    ('20260210_04', 'Make password_hash nullable for OIDC-only users', migrate_20260210_04_nullable_password_hash),
+    ('20260210_05', 'Add auth_provider column to users', migrate_20260210_05_add_auth_provider),
 ]
 
 
