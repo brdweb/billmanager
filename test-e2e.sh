@@ -8,7 +8,7 @@
 #   start the servers with external access:
 #
 #     # Flask (already binds 0.0.0.0):
-#     cd apps/server && DATABASE_URL=postgresql://billsuser:billspass@192.168.40.242:5432/bills_test \
+#     cd apps/server && DATABASE_URL=postgresql://billsuser:billspass@$TEST_DB_HOST:5432/bills_test \
 #       FLASK_RUN_PORT=5001 RATE_LIMIT_ENABLED=false python3 app.py
 #
 #     # Vite (must pass --host):
@@ -31,7 +31,8 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$PROJECT_ROOT/apps/server"
 WEB_DIR="$PROJECT_ROOT/apps/web"
 TEST_OUTPUT_DIR="/tmp/billmanager-test-results"
-DATABASE_URL="postgresql://billsuser:billspass@192.168.40.242:5432/bills_test"
+TEST_DB_HOST="${TEST_DB_HOST:-192.168.40.242}"
+DATABASE_URL="postgresql://billsuser:billspass@${TEST_DB_HOST}:5432/bills_test"
 FLASK_PORT=5001
 VITE_PORT=5173
 # Bind to 0.0.0.0 so the test servers are accessible from other machines on the LAN
@@ -79,7 +80,7 @@ echo ""
 cat > "$REPORT_FILE" << EOF
 # BillManager End-to-End Test Report
 **Date:** $(date)
-**Test Database:** bills_test on 192.168.40.242
+**Test Database:** bills_test on $TEST_DB_HOST
 **Dev Server LAN IP:** $LAN_IP
 **Environment:** Local Development (headless)
 
@@ -106,12 +107,14 @@ echo -e "${BLUE}========================${NC}\n"
 
 echo -e "${YELLOW}Ensuring test user 'admin' exists...${NC}"
 cd "$SERVER_DIR"
-python3 << 'SETUP_SCRIPT'
+TEST_DB_HOST="$TEST_DB_HOST" python3 << 'SETUP_SCRIPT'
+import os
 import psycopg
 import datetime
 from werkzeug.security import generate_password_hash
 
-DATABASE_URL = "postgresql://billsuser:billspass@192.168.40.242:5432/bills_test"
+_db_host = os.environ.get('TEST_DB_HOST', '192.168.40.242')
+DATABASE_URL = f"postgresql://billsuser:billspass@{_db_host}:5432/bills_test"
 
 conn = psycopg.connect(DATABASE_URL)
 cur = conn.cursor()
@@ -795,7 +798,7 @@ For manual browser testing from another machine on the LAN:
 \`\`\`bash
 # Start servers (from this dev machine):
 cd $PROJECT_ROOT/apps/server
-DATABASE_URL=postgresql://billsuser:billspass@192.168.40.242:5432/bills_test \\
+DATABASE_URL=postgresql://billsuser:billspass@\$TEST_DB_HOST:5432/bills_test \\
   FLASK_RUN_PORT=5001 RATE_LIMIT_ENABLED=false python3 app.py &
 
 cd $PROJECT_ROOT/apps/web

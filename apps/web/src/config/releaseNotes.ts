@@ -46,8 +46,8 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '3.8.0',
-    date: '2026-02-09',
+    version: '3.8.1',
+    date: '2026-02-10',
     title: 'Dashboard & Analytics Overhaul',
     sections: [
       {

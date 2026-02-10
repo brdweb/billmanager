@@ -6,7 +6,7 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v3.8.0
+## 🎉 What's New in v3.8.1
 
 **Dashboard & Analytics Overhaul** - New Dashboard, Calendar, and Analytics pages with spending trends, interactive stat cards, and improved navigation.
 
