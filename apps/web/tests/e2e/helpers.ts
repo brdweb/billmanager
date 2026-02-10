@@ -33,7 +33,7 @@ async function dismissModals(page: Page) {
  */
 export async function suppressModals(page: Page) {
   await page.addInitScript(() => {
-    localStorage.setItem('billmanager_seen_version', '3.8.0');
+    localStorage.setItem('billmanager_seen_version', '3.8.1');
   });
 }
 
