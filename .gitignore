@@ -57,5 +57,8 @@ setup_kuma.py
 # Testing status (local only)
 TESTING_STATUS.md
 
+# Store submission (sensitive internal docs)
+STORE-SUBMISSION.md
+
 # Root package-lock (monorepo uses per-app locks)
 /package-lock.json
