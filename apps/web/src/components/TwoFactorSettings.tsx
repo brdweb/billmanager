@@ -51,6 +51,27 @@ export function TwoFactorSettings() {
   const [showDisable, setShowDisable] = useState(false);
   const [disabling, setDisabling] = useState(false);
 
+  // Passkey setup
+  const [registeringPasskey, setRegisteringPasskey] = useState(false);
+  const [passkeyDeviceName, setPasskeyDeviceName] = useState('This device');
+
+  const base64urlToArrayBuffer = (value: string): ArrayBuffer => {
+    const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return bytes.buffer as ArrayBuffer;
+  };
+
+  const arrayBufferToBase64url = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  };
+
   const fetchStatus = useCallback(async () => {
     try {
       const result = await api.get2FAStatus();
@@ -126,6 +147,74 @@ export function TwoFactorSettings() {
       await fetchStatus();
     } catch {
       setError('Failed to delete passkey');
+    }
+  };
+
+  const handleRegisterPasskey = async () => {
+    setRegisteringPasskey(true);
+    setError('');
+    try {
+      if (!window.PublicKeyCredential || !navigator.credentials) {
+        setError('Passkeys are not supported by this browser/device');
+        return;
+      }
+
+      const { options, registration_token } = await api.getPasskeyRegistrationOptions();
+      const publicKeyOptions = options as Record<string, unknown>;
+
+      const challenge = publicKeyOptions.challenge as string;
+      const user = publicKeyOptions.user as Record<string, unknown>;
+      const excludeCredentials = (publicKeyOptions.excludeCredentials as Array<Record<string, unknown>> | undefined) || [];
+
+      const credential = (await navigator.credentials.create({
+        publicKey: {
+          ...(publicKeyOptions as unknown as PublicKeyCredentialCreationOptions),
+          challenge: base64urlToArrayBuffer(challenge),
+          user: {
+            ...(user as unknown as PublicKeyCredentialUserEntity),
+            id: base64urlToArrayBuffer(user.id as string),
+          },
+          excludeCredentials: excludeCredentials.map((excluded) => ({
+            ...(excluded as unknown as PublicKeyCredentialDescriptor),
+            id: base64urlToArrayBuffer(excluded.id as string),
+          })),
+        },
+      })) as PublicKeyCredential | null;
+
+      if (!credential) {
+        setError('Passkey registration was cancelled');
+        return;
+      }
+
+      const response = credential.response as AuthenticatorAttestationResponse;
+      const registrationPayload = {
+        id: credential.id,
+        rawId: arrayBufferToBase64url(credential.rawId),
+        type: credential.type,
+        response: {
+          clientDataJSON: arrayBufferToBase64url(response.clientDataJSON),
+          attestationObject: arrayBufferToBase64url(response.attestationObject),
+          transports: response.getTransports ? response.getTransports() : [],
+        },
+        clientExtensionResults: credential.getClientExtensionResults(),
+      };
+
+      const result = await api.registerPasskey(
+        registration_token,
+        registrationPayload as unknown as Record<string, unknown>,
+        passkeyDeviceName.trim() || 'Security Key'
+      );
+
+      if (result.recovery_codes) {
+        setRecoveryCodes(result.recovery_codes);
+        setShowRecoveryCodes(true);
+      }
+
+      await fetchStatus();
+    } catch {
+      setError('Failed to register passkey. Try again on a supported device/browser.');
+    } finally {
+      setRegisteringPasskey(false);
     }
   };
 
@@ -210,6 +299,24 @@ export function TwoFactorSettings() {
               <Badge color={status?.passkey_enabled ? 'green' : 'gray'}>
                 {status?.passkeys?.length || 0} registered
               </Badge>
+            </Group>
+            <Group gap="xs" mt="sm">
+              <TextInput
+                size="xs"
+                placeholder="Device name"
+                value={passkeyDeviceName}
+                onChange={(e) => setPasskeyDeviceName(e.currentTarget.value)}
+                style={{ flex: 1 }}
+              />
+              <Button
+                size="xs"
+                variant="light"
+                leftSection={<IconKey size={14} />}
+                onClick={handleRegisterPasskey}
+                loading={registeringPasskey}
+              >
+                Add Passkey
+              </Button>
             </Group>
             {status?.passkeys && status.passkeys.length > 0 && (
               <Stack gap="xs" mt="sm">
