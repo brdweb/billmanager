@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Tabs } from '@mantine/core';
+import { Modal, Stack, Tabs } from '@mantine/core';
 import { IconUsers, IconFolders, IconShieldLock } from '@tabler/icons-react';
 import { UsersTab } from './UsersTab';
 import { DatabasesTab } from './DatabasesTab';
@@ -51,9 +51,11 @@ export function AdminModal({ opened, onClose }: AdminModalProps) {
 
         {showSecurity && (
           <Tabs.Panel value="security" pt="md">
-            <TwoFactorSettings />
-            <LinkedAccounts />
-            <AccountDangerZone />
+            <Stack gap="xl">
+              <TwoFactorSettings />
+              <LinkedAccounts />
+              <AccountDangerZone />
+            </Stack>
           </Tabs.Panel>
         )}
       </Tabs>
