@@ -66,12 +66,16 @@ export function AuthCallback() {
         const result = await loginWithOAuth(decoded.provider, code, state);
         if (result.success && !result.require2FA) {
           navigate('/', { replace: true });
+          return;
         }
         // If require2FA, AuthContext will set pending2FA and the Login/TwoFactorVerify
         // page will render the 2FA UI
         if (result.require2FA) {
           navigate('/login', { replace: true });
+          return;
         }
+
+        setError('Failed to complete sign-in. Please try again.');
       } catch {
         setError('Failed to complete sign-in. Please try again.');
       }
