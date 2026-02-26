@@ -777,8 +777,8 @@ export interface OAuthAccount {
 export const getOAuthProviders = () =>
   unwrap(api.get<ApiResponse<OAuthProvider[]>>('/auth/oauth/providers'));
 
-export const getOAuthAuthorizeUrl = (provider: string) =>
-  unwrap(api.get<ApiResponse<{ auth_url: string; state: string }>>(`/auth/oauth/${provider}/authorize`));
+export const getOAuthAuthorizeUrl = (provider: string, flow: 'login' | 'link' = 'login') =>
+  unwrap(api.get<ApiResponse<{ auth_url: string; state: string }>>(`/auth/oauth/${provider}/authorize?flow=${flow}`));
 
 export interface OAuthCallbackResponse {
   access_token: string;

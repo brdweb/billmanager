@@ -4310,7 +4310,7 @@ def _cleanup_used_nonces():
         del _used_oauth_nonces[n]
 
 
-def _generate_oauth_state(provider, code_verifier, nonce):
+def _generate_oauth_state(provider, code_verifier, nonce, flow='login', link_user_id=None):
     """Generate encrypted state parameter as signed JWT.
 
     The nonce is included so it can be validated in the ID token callback.
@@ -4319,6 +4319,7 @@ def _generate_oauth_state(provider, code_verifier, nonce):
     state_nonce = secrets.token_hex(16)
     state_payload = {
         'provider': provider,
+        'flow': flow,
         'state_nonce': state_nonce,
         'id_token_nonce': nonce,
         'code_verifier': code_verifier,
@@ -4326,6 +4327,8 @@ def _generate_oauth_state(provider, code_verifier, nonce):
         'iat': datetime.datetime.now(datetime.timezone.utc),
         'type': 'oauth_state',
     }
+    if link_user_id is not None:
+        state_payload['link_user_id'] = link_user_id
     return jwt.encode(state_payload, JWT_SECRET_KEY, algorithm='HS256')
 
 
@@ -4479,6 +4482,18 @@ def oauth_authorize(provider):
     if provider not in get_enabled_oauth_providers():
         return jsonify({'success': False, 'error': f'Provider "{provider}" is not enabled'}), 400
 
+    flow = request.args.get('flow', 'login')
+    link_user_id = None
+    if flow == 'link':
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'Authentication required for account linking'}), 401
+        token = auth_header.split(' ')[1]
+        payload = verify_access_token(token)
+        if not payload:
+            return jsonify({'success': False, 'error': 'Invalid or expired token'}), 401
+        link_user_id = payload['user_id']
+
     cfg = OAUTH_PROVIDERS[provider]
     metadata = _get_oidc_metadata(provider)
     if not metadata:
@@ -4494,7 +4509,13 @@ def oauth_authorize(provider):
     id_token_nonce = secrets.token_hex(16)
 
     # Generate state token (includes nonce for later validation)
-    state = _generate_oauth_state(provider, code_verifier, id_token_nonce)
+    state = _generate_oauth_state(
+        provider,
+        code_verifier,
+        id_token_nonce,
+        flow=flow,
+        link_user_id=link_user_id,
+    )
 
     # Build authorization URL
     auth_endpoint = metadata.get('authorization_endpoint')
@@ -4651,16 +4672,51 @@ def oauth_callback(provider):
     if not provider_user_id:
         return jsonify({'success': False, 'error': 'No subject in ID token'}), 502
 
-    # Resolve or create user
-    user, is_new_user, error = _resolve_oauth_user(provider, provider_user_id, email, profile_data)
-    if error:
-        return jsonify({'success': False, 'error': error}), 409
+    # Link flow: bind provider to an existing authenticated account
+    flow = state_payload.get('flow', 'login')
+    if flow == 'link':
+        link_user_id = state_payload.get('link_user_id')
+        link_user = db.session.get(User, link_user_id) if link_user_id else None
+        if not link_user:
+            return jsonify({'success': False, 'error': 'Invalid link session'}), 400
 
-    if not user:
-        return jsonify({'success': False, 'error': 'Failed to resolve user'}), 500
+        existing_provider_link = OAuthAccount.query.filter_by(
+            provider=provider,
+            provider_user_id=provider_user_id
+        ).first()
+        if existing_provider_link and existing_provider_link.user_id != link_user.id:
+            return jsonify({'success': False, 'error': 'This social account is already linked to another user'}), 409
+
+        account_for_user_provider = OAuthAccount.query.filter_by(
+            user_id=link_user.id,
+            provider=provider
+        ).first()
+        if account_for_user_provider:
+            account_for_user_provider.provider_user_id = provider_user_id
+            account_for_user_provider.provider_email = email
+            account_for_user_provider.profile_data = json.dumps(profile_data) if profile_data else None
+        else:
+            db.session.add(OAuthAccount(
+                user_id=link_user.id,
+                provider=provider,
+                provider_user_id=provider_user_id,
+                provider_email=email,
+                profile_data=json.dumps(profile_data) if profile_data else None,
+            ))
+        db.session.commit()
+        user = link_user
+        is_new_user = False
+    else:
+        # Resolve or create user
+        user, is_new_user, error = _resolve_oauth_user(provider, provider_user_id, email, profile_data)
+        if error:
+            return jsonify({'success': False, 'error': error}), 409
+
+        if not user:
+            return jsonify({'success': False, 'error': 'Failed to resolve user'}), 500
 
     # Check if 2FA is enabled for this user
-    if user.twofa_config and user.twofa_config.is_enabled:
+    if flow != 'link' and user.twofa_config and user.twofa_config.is_enabled:
         # Create 2FA challenge session
         session_token = secrets.token_urlsafe(32)
         session_hash = hashlib.sha256(session_token.encode()).hexdigest()
