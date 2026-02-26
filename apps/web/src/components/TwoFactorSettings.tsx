@@ -211,12 +211,8 @@ export function TwoFactorSettings() {
       }
 
       await fetchStatus();
-    } catch (error: unknown) {
-      if (error instanceof api.ApiError) {
-        setError(error.message);
-      } else {
-        setError('Failed to register passkey. Try again on a supported device/browser.');
-      }
+    } catch {
+      setError('Failed to register passkey. Try again on a supported device/browser.');
     } finally {
       setRegisteringPasskey(false);
     }
