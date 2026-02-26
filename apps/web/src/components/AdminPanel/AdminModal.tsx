@@ -5,6 +5,7 @@ import { UsersTab } from './UsersTab';
 import { DatabasesTab } from './DatabasesTab';
 import { TwoFactorSettings } from '../TwoFactorSettings';
 import { LinkedAccounts } from '../LinkedAccounts';
+import { AccountDangerZone } from '../AccountDangerZone';
 import { useConfig } from '../../context/ConfigContext';
 
 interface AdminModalProps {
@@ -52,6 +53,7 @@ export function AdminModal({ opened, onClose }: AdminModalProps) {
           <Tabs.Panel value="security" pt="md">
             <TwoFactorSettings />
             <LinkedAccounts />
+            <AccountDangerZone />
           </Tabs.Panel>
         )}
       </Tabs>
