@@ -4516,9 +4516,9 @@ def oauth_authorize(provider):
         'nonce': id_token_nonce,
     }
 
-    # Apple requires response_mode=form_post
+    # Use query callback mode so browser returns to SPA route with GET.
     if provider == 'apple':
-        params['response_mode'] = 'form_post'
+        params['response_mode'] = 'query'
 
     auth_url = f'{auth_endpoint}?{urlencode(params)}'
     return jsonify({'success': True, 'data': {'auth_url': auth_url, 'state': state}})
