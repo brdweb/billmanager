@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from functools import wraps
 
 import jwt
-from flask import Flask, request, jsonify, send_from_directory, session, g, Blueprint
+from flask import Flask, request, jsonify, send_from_directory, session, g, Blueprint, redirect
 from werkzeug.utils import safe_join
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_cors import CORS
@@ -4537,9 +4537,9 @@ def oauth_authorize(provider):
         'nonce': id_token_nonce,
     }
 
-    # Use query callback mode so browser returns to SPA route with GET.
+    # Apple requires form_post when requesting email/name scopes.
     if provider == 'apple':
-        params['response_mode'] = 'query'
+        params['response_mode'] = 'form_post'
 
     auth_url = f'{auth_endpoint}?{urlencode(params)}'
     return jsonify({'success': True, 'data': {'auth_url': auth_url, 'state': state}})
@@ -6886,6 +6886,24 @@ def get_client_dir():
 @spa_bp.route('/', methods=['GET'])
 def index():
     return send_from_directory(get_client_dir(), 'index.html')
+
+
+@spa_bp.route('/auth/callback', methods=['POST'])
+def oauth_callback_form_post_bridge():
+    """Bridge IdP form_post callbacks to the SPA GET callback route."""
+    params = {}
+    for key in ('code', 'state', 'error', 'error_description'):
+        value = request.form.get(key)
+        if value:
+            params[key] = value
+
+    from urllib.parse import urlencode
+
+    query = urlencode(params)
+    target = '/auth/callback'
+    if query:
+        target = f'{target}?{query}'
+    return redirect(target, code=303)
 
 @spa_bp.route('/<path:path>', methods=['GET'])
 def serve_static(path):
