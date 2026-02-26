@@ -125,7 +125,7 @@ OAUTH_PROVIDERS = {
     'apple': {
         'enabled': os.environ.get('OAUTH_APPLE_ENABLED', 'false').lower() == 'true',
         'client_id': os.environ.get('OAUTH_APPLE_CLIENT_ID'),
-        'client_secret': None,  # Apple uses JWT-based client_secret
+        'client_secret': None,  # nosec B105 - Apple uses JWT-based client_secret
         'team_id': os.environ.get('OAUTH_APPLE_TEAM_ID'),
         'key_id': os.environ.get('OAUTH_APPLE_KEY_ID'),
         'private_key': os.environ.get('OAUTH_APPLE_PRIVATE_KEY'),

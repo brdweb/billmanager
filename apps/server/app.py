@@ -63,7 +63,7 @@ JWT_SECRET_KEY = _jwt_secret
 JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)
 JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)
 CHANGE_TOKEN_EXPIRES = timedelta(minutes=15)
-REFRESH_TOKEN_COOKIE_NAME = 'bm_refresh_token'
+REFRESH_TOKEN_COOKIE_NAME = 'bm_refresh_token'  # nosec B105
 
 # --- Blueprints ---
 api_bp = Blueprint('api', __name__)
