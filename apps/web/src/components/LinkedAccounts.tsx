@@ -85,8 +85,6 @@ export function LinkedAccounts() {
   const handleLink = async (providerId: string) => {
     try {
       const result = await api.getOAuthAuthorizeUrl(providerId);
-      sessionStorage.setItem('oauth_state', result.state);
-      sessionStorage.setItem('oauth_provider', providerId);
       window.location.assign(result.auth_url);
     } catch {
       setError('Failed to start linking process');

@@ -4,6 +4,22 @@ import { Center, Loader, Stack, Text, Alert, Button, Box } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { useAuth } from '../context/AuthContext';
 
+function decodeProviderFromState(stateToken: string): string | null {
+  const parts = stateToken.split('.');
+  if (parts.length !== 3) return null;
+
+  try {
+    // JWT payload is base64url-encoded JSON
+    const payloadB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padding = '='.repeat((4 - (payloadB64.length % 4)) % 4);
+    const payloadJson = atob(payloadB64 + padding);
+    const payload = JSON.parse(payloadJson) as { provider?: unknown };
+    return typeof payload.provider === 'string' ? payload.provider : null;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthCallback() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -27,23 +43,11 @@ export function AuthCallback() {
         return;
       }
 
-      // Get the provider from sessionStorage
-      const provider = sessionStorage.getItem('oauth_provider');
-      const storedState = sessionStorage.getItem('oauth_state');
-
+      const provider = decodeProviderFromState(state);
       if (!provider) {
-        setError('Missing OAuth provider info. Please try signing in again.');
+        setError('Invalid OAuth state. Please try signing in again.');
         return;
       }
-
-      if (storedState !== state) {
-        setError('State mismatch - possible CSRF attack. Please try again.');
-        return;
-      }
-
-      // Clean up sessionStorage
-      sessionStorage.removeItem('oauth_state');
-      sessionStorage.removeItem('oauth_provider');
 
       try {
         const result = await loginWithOAuth(provider, code, state);

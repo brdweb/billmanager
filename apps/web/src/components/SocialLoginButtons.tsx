@@ -33,9 +33,6 @@ export function SocialLoginButtons({ providers, loading, onError }: SocialLoginB
   const handleOAuthLogin = async (provider: OAuthProviderInfo) => {
     try {
       const result = await api.getOAuthAuthorizeUrl(provider.id);
-      // Store state in sessionStorage for callback verification
-      sessionStorage.setItem('oauth_state', result.state);
-      sessionStorage.setItem('oauth_provider', provider.id);
       // Redirect to provider
       window.location.assign(result.auth_url);
     } catch {

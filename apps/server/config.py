@@ -174,7 +174,7 @@ def get_enabled_oauth_providers():
             continue
         missing = [f for f in required_fields.get(provider, []) if not cfg.get(f)]
         if missing:
-            logger.warning(f"OAuth provider '{provider}' enabled but missing: {', '.join(missing)}")
+            logger.warning(f"OAuth provider '{provider}' enabled but missing required credentials")
             continue
         enabled.append(provider)
     return enabled
