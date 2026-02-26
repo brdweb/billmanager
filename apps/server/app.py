@@ -1994,7 +1994,7 @@ def jwt_login():
         }), 403
 
     # Check if 2FA is enabled for this user
-    if ENABLE_2FA and user.twofa_config and user.twofa_config.is_enabled:
+    if user.twofa_config and user.twofa_config.is_enabled:
         session_token = secrets.token_urlsafe(32)
         session_hash = hashlib.sha256(session_token.encode()).hexdigest()
 
@@ -4660,7 +4660,7 @@ def oauth_callback(provider):
         return jsonify({'success': False, 'error': 'Failed to resolve user'}), 500
 
     # Check if 2FA is enabled for this user
-    if ENABLE_2FA and user.twofa_config and user.twofa_config.is_enabled:
+    if user.twofa_config and user.twofa_config.is_enabled:
         # Create 2FA challenge session
         session_token = secrets.token_urlsafe(32)
         session_hash = hashlib.sha256(session_token.encode()).hexdigest()

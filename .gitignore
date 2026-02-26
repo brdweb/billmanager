@@ -38,6 +38,10 @@ marketing-plan.md
 # Test files
 test_*.py
 
+# Coverage outputs
+.coverage
+coverage.xml
+
 # Marketing site is in separate repo (git@git.brdweb.com:brdweb/billmanager-marketing)
 marketing/
 
