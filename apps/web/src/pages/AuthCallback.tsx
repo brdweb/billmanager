@@ -75,7 +75,7 @@ export function AuthCallback() {
           return;
         }
 
-        setError('Failed to complete sign-in. Please try again.');
+        setError(result.error || 'Failed to complete sign-in. Please try again.');
       } catch {
         setError('Failed to complete sign-in. Please try again.');
       }

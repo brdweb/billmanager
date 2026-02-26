@@ -25,6 +25,7 @@ interface AuthState {
 
 interface LoginResult {
   success: boolean;
+  error?: string;
   warning?: string;
   requirePasswordChange?: boolean;
   require2FA?: boolean;
@@ -204,7 +205,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           twofa_methods: error.response.twofa_methods,
         };
       }
-      return { success: false };
+      if (error instanceof api.ApiError) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: 'Authentication failed' };
     }
   };
 
