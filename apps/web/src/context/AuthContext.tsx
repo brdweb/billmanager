@@ -60,22 +60,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     pending2FA: null,
   });
 
+  const clearAuthState = useCallback(() => {
+    setState({
+      isLoggedIn: false,
+      isAdmin: false,
+      role: null,
+      databases: [],
+      currentDb: null,
+      isLoading: false,
+      pendingPasswordChange: null,
+      pending2FA: null,
+    });
+  }, []);
+
   const refreshAuth = useCallback(async () => {
     try {
-      // Check if we have a valid access token
-      const accessToken = TokenStorage.getAccessToken();
+      // Access token is memory-only. On reload, recover it via refresh cookie.
+      let accessToken = TokenStorage.getAccessToken();
       if (!accessToken) {
-        setState({
-          isLoggedIn: false,
-          isAdmin: false,
-          role: null,
-          databases: [],
-          currentDb: null,
-          isLoading: false,
-          pendingPasswordChange: null,
-          pending2FA: null,
-        });
-        return;
+        const refreshed = await api.refreshSession();
+        if (!refreshed) {
+          clearAuthState();
+          return;
+        }
+        accessToken = TokenStorage.getAccessToken();
+        if (!accessToken) {
+          clearAuthState();
+          return;
+        }
       }
 
       const response = await api.getMe();
@@ -94,18 +106,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     } catch {
       TokenStorage.clearTokens();
-      setState({
-        isLoggedIn: false,
-        isAdmin: false,
-        role: null,
-        databases: [],
-        currentDb: null,
-        isLoading: false,
-        pendingPasswordChange: null,
-        pending2FA: null,
-      });
+      clearAuthState();
     }
-  }, []);
+  }, [clearAuthState]);
 
   useEffect(() => {
     refreshAuth();

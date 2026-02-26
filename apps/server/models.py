@@ -21,6 +21,7 @@ class User(db.Model):
     role = db.Column(db.String(20), default='user')
     password_change_required = db.Column(db.Boolean, default=False)
     change_token = db.Column(db.String(64), nullable=True)
+    change_token_expires = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # SaaS multi-tenancy: track which admin created this user (null for self-registered admins)

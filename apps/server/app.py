@@ -62,6 +62,8 @@ if not _jwt_secret:
 JWT_SECRET_KEY = _jwt_secret
 JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)
 JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)
+CHANGE_TOKEN_EXPIRES = timedelta(minutes=15)
+REFRESH_TOKEN_COOKIE_NAME = 'bm_refresh_token'
 
 # --- Blueprints ---
 api_bp = Blueprint('api', __name__)
@@ -79,12 +81,65 @@ limiter = Limiter(
     enabled=RATE_LIMIT_ENABLED,
 )
 
+
+def _is_production_security_mode():
+    """Return True when strict cookie/security defaults should be used."""
+    return (
+        os.environ.get('FLASK_ENV') == 'production' or
+        os.environ.get('ENVIRONMENT') == 'production' or
+        'billmanager.app' in os.environ.get('APP_URL', '')
+    )
+
+
+def _set_refresh_cookie(response, refresh_token):
+    """Attach an HttpOnly refresh-token cookie to a response."""
+    response.set_cookie(
+        REFRESH_TOKEN_COOKIE_NAME,
+        refresh_token,
+        max_age=int(JWT_REFRESH_TOKEN_EXPIRES.total_seconds()),
+        httponly=True,
+        secure=_is_production_security_mode(),
+        samesite='Lax',
+        path='/api/v2/auth',
+    )
+    return response
+
+
+def _clear_refresh_cookie(response):
+    """Delete refresh-token cookie."""
+    response.delete_cookie(
+        REFRESH_TOKEN_COOKIE_NAME,
+        path='/api/v2/auth',
+        secure=_is_production_security_mode(),
+        httponly=True,
+        samesite='Lax',
+    )
+    return response
+
+
+def _get_refresh_token_from_request():
+    """Resolve refresh token from JSON body first, then HttpOnly cookie."""
+    data = request.get_json(silent=True) or {}
+    return data.get('refresh_token') or request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
+
+
+# --- CSRF Protection ---
+
+def issue_csrf_token():
+    """Generate and persist CSRF token for session-authenticated routes."""
+    token = secrets.token_urlsafe(32)
+    session['csrf_token'] = token
+    return token
+
+
 # --- CSRF Protection ---
 
 def check_csrf():
     """
-    Check Origin/Referer header for CSRF protection on state-changing requests.
-    Used in combination with SameSite=Lax cookies.
+    Check Origin/Referer and synchronizer token for CSRF protection.
+    Requires both:
+    1) Allowed Origin/Referer
+    2) Matching X-CSRF-Token header against session token
     """
     if request.method in ('GET', 'HEAD', 'OPTIONS'):
         return True  # Safe methods don't need CSRF check
@@ -114,20 +169,29 @@ def check_csrf():
     origin = request.headers.get('Origin')
     referer = request.headers.get('Referer')
 
-    # Check Origin header first (most reliable)
+    # Require an origin signal (Origin preferred, Referer fallback)
+    request_origin = None
     if origin:
-        return origin in allowed_origins
-
-    # Fall back to Referer header
-    if referer:
+        request_origin = origin
+    elif referer:
         from urllib.parse import urlparse
-        referer_origin = f"{urlparse(referer).scheme}://{urlparse(referer).netloc}"
-        return referer_origin in allowed_origins
+        parsed = urlparse(referer)
+        if not parsed.scheme or not parsed.netloc:
+            return False
+        request_origin = f"{parsed.scheme}://{parsed.netloc}"
+    else:
+        # Reject state-changing requests that omit both headers.
+        return False
 
-    # If neither header present, allow it (same-origin requests don't always send Origin)
-    # Combined with SameSite=Lax cookies, this provides good CSRF protection
-    # Cross-origin requests from browsers always send Origin header
-    return True
+    if request_origin not in allowed_origins:
+        return False
+
+    csrf_session_token = session.get('csrf_token')
+    csrf_header_token = request.headers.get('X-CSRF-Token')
+    if not csrf_session_token or not csrf_header_token:
+        return False
+
+    return secrets.compare_digest(csrf_session_token, csrf_header_token)
 
 # --- Decorators ---
 
@@ -550,12 +614,16 @@ def login():
         db.session.commit()
         log_auth_event('login', success=True, user_id=user.id, username=user.username)
         if user.password_change_required:
-            token = secrets.token_hex(32); user.change_token = token; db.session.commit()
+            token = secrets.token_hex(32)
+            user.change_token = token
+            user.change_token_expires = datetime.datetime.now(datetime.timezone.utc) + CHANGE_TOKEN_EXPIRES
+            db.session.commit()
             return jsonify({'password_change_required': True, 'user_id': user.id, 'change_token': token, 'role': user.role})  # nosec B105
         session['user_id'] = user.id; session['role'] = user.role
+        csrf_token = issue_csrf_token()
         dbs = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
         if dbs: session['db_name'] = dbs[0]['name']
-        return jsonify({'message': 'Login successful', 'role': user.role, 'databases': dbs})
+        return jsonify({'message': 'Login successful', 'role': user.role, 'databases': dbs, 'csrf_token': csrf_token})
     log_auth_event('login', success=False, username=username)
     return jsonify({'error': 'Invalid username or password'}), 401
 
@@ -570,16 +638,25 @@ def change_password():
     if not change_token or not new_password:
         return jsonify({'error': 'change_token and new_password are required'}), 400
 
-    if len(new_password) < 8:
-        return jsonify({'error': 'Password must be at least 8 characters'}), 400
+    is_valid, error = validate_password(new_password)
+    if not is_valid:
+        return jsonify({'error': error}), 400
 
     user = User.query.filter_by(change_token=change_token).first()
     if not user:
         return jsonify({'error': 'Invalid change token'}), 401
+    if user.change_token_expires:
+        expiry = (
+            user.change_token_expires.replace(tzinfo=datetime.timezone.utc)
+            if user.change_token_expires.tzinfo is None else user.change_token_expires
+        )
+        if expiry < datetime.datetime.now(datetime.timezone.utc):
+            return jsonify({'error': 'Change token expired'}), 401
 
     user.set_password(new_password)
     user.password_change_required = False
     user.change_token = None
+    user.change_token_expires = None
     db.session.commit()
 
     log_auth_event('password_change', success=True, user_id=user.id, username=user.username, first_login=True)
@@ -587,13 +664,15 @@ def change_password():
     # Set up session (like normal login)
     session['user_id'] = user.id
     session['role'] = user.role
+    csrf_token = issue_csrf_token()
     dbs = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
     if dbs:
         session['db_name'] = dbs[0]['name']
 
-    return jsonify({'message': 'Password changed successfully', 'role': user.role, 'databases': dbs})
+    return jsonify({'message': 'Password changed successfully', 'role': user.role, 'databases': dbs, 'csrf_token': csrf_token})
 
 @api_bp.route('/logout', methods=['POST'])
+@login_required
 def logout():
     session.clear(); return jsonify({'message': 'Logged out successfully'})
 
@@ -1905,6 +1984,7 @@ def jwt_login():
     if user.password_change_required:
         token = secrets.token_hex(32)
         user.change_token = token
+        user.change_token_expires = datetime.datetime.now(datetime.timezone.utc) + CHANGE_TOKEN_EXPIRES
         db.session.commit()
         return jsonify({
             'success': False,
@@ -1948,7 +2028,7 @@ def jwt_login():
     # Get accessible databases
     databases = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
 
-    return jsonify({
+    response = jsonify({
         'success': True,
         'data': {
             'access_token': access_token,
@@ -1963,12 +2043,12 @@ def jwt_login():
             'databases': databases
         }
     })
+    return _set_refresh_cookie(response, refresh_token)
 
 @api_v2_bp.route('/auth/refresh', methods=['POST'])
 def jwt_refresh():
     """Refresh access token using a valid refresh token."""
-    data = request.get_json()
-    refresh_token = data.get('refresh_token')
+    refresh_token = _get_refresh_token_from_request()
 
     if not refresh_token:
         return jsonify({'success': False, 'error': 'Refresh token required'}), 400
@@ -1981,23 +2061,26 @@ def jwt_refresh():
     if not user:
         return jsonify({'success': False, 'error': 'User not found'}), 401
 
-    # Create new access token
+    # Rotate refresh token on every refresh to limit replay window.
+    stored_token.revoked = True
     access_token = create_access_token(user.id, user.role)
+    new_refresh_token = create_refresh_token(user.id, stored_token.device_info)
 
-    return jsonify({
+    response = jsonify({
         'success': True,
         'data': {
             'access_token': access_token,
+            'refresh_token': new_refresh_token,
             'expires_in': int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds()),
             'token_type': 'Bearer'  # nosec B105
         }
     })
+    return _set_refresh_cookie(response, new_refresh_token)
 
 @api_v2_bp.route('/auth/logout', methods=['POST'])
 def jwt_logout():
     """Revoke refresh token (logout from device)."""
-    data = request.get_json()
-    refresh_token = data.get('refresh_token')
+    refresh_token = _get_refresh_token_from_request()
 
     if refresh_token:
         token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
@@ -2006,7 +2089,8 @@ def jwt_logout():
             stored_token.revoked = True
             db.session.commit()
 
-    return jsonify({'success': True, 'message': 'Logged out successfully'})
+    response = jsonify({'success': True, 'message': 'Logged out successfully'})
+    return _clear_refresh_cookie(response)
 
 @api_v2_bp.route('/auth/logout-all', methods=['POST'])
 @jwt_required
@@ -2014,7 +2098,8 @@ def jwt_logout_all():
     """Revoke all refresh tokens for the current user (logout from all devices)."""
     RefreshToken.query.filter_by(user_id=g.jwt_user_id, revoked=False).update({'revoked': True})
     db.session.commit()
-    return jsonify({'success': True, 'message': 'Logged out from all devices'})
+    response = jsonify({'success': True, 'message': 'Logged out from all devices'})
+    return _clear_refresh_cookie(response)
 
 
 # --- Registration & Password Reset Endpoints ---
@@ -4109,16 +4194,25 @@ def jwt_change_password():
     if not change_token or not new_password:
         return jsonify({'success': False, 'error': 'change_token and new_password are required'}), 400
 
-    if len(new_password) < 8:
-        return jsonify({'success': False, 'error': 'Password must be at least 8 characters'}), 400
+    is_valid, error = validate_password(new_password)
+    if not is_valid:
+        return jsonify({'success': False, 'error': error}), 400
 
     user = User.query.filter_by(change_token=change_token).first()
     if not user:
         return jsonify({'success': False, 'error': 'Invalid change token'}), 401
+    if user.change_token_expires:
+        expiry = (
+            user.change_token_expires.replace(tzinfo=datetime.timezone.utc)
+            if user.change_token_expires.tzinfo is None else user.change_token_expires
+        )
+        if expiry < datetime.datetime.now(datetime.timezone.utc):
+            return jsonify({'success': False, 'error': 'Change token expired'}), 401
 
     user.set_password(new_password)
     user.password_change_required = False
     user.change_token = None
+    user.change_token_expires = None
     db.session.commit()
 
     # Optionally auto-login after password change
@@ -4126,7 +4220,7 @@ def jwt_change_password():
     refresh_token = create_refresh_token(user.id, data.get('device_info'))
     databases = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
 
-    return jsonify({
+    response = jsonify({
         'success': True,
         'data': {
             'message': 'Password changed successfully',
@@ -4138,6 +4232,7 @@ def jwt_change_password():
             'databases': databases
         }
     })
+    return _set_refresh_cookie(response, refresh_token)
 
 # ============ OIDC / OAuth Routes ============
 
@@ -4531,6 +4626,18 @@ def oauth_callback(provider):
         logger.error(f"ID token verification failed for {provider}: {e}")
         return jsonify({'success': False, 'error': 'Failed to verify ID token'}), 502
 
+    email_verified_claim = claims.get('email_verified')
+    if claims.get('email') is not None:
+        is_email_verified = False
+        if isinstance(email_verified_claim, bool):
+            is_email_verified = email_verified_claim
+        elif isinstance(email_verified_claim, int):
+            is_email_verified = email_verified_claim == 1
+        elif isinstance(email_verified_claim, str):
+            is_email_verified = email_verified_claim.strip().lower() in ('true', '1', 'yes')
+        if not is_email_verified:
+            return jsonify({'success': False, 'error': 'Provider email is not verified'}), 401
+
     # Extract user info from claims
     provider_user_id = claims.get('sub')
     email = claims.get('email', '').strip().lower() if claims.get('email') else None  # HIGH-3: normalize email
@@ -4586,7 +4693,7 @@ def oauth_callback(provider):
     refresh_token = create_refresh_token(user.id, data.get('device_info'))
     databases = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
 
-    return jsonify({
+    response = jsonify({
         'success': True,
         'data': {
             'access_token': access_token,
@@ -4602,6 +4709,7 @@ def oauth_callback(provider):
             'databases': databases,
         }
     })
+    return _set_refresh_cookie(response, refresh_token)
 
 
 @api_v2_bp.route('/auth/oauth/accounts', methods=['GET'])
@@ -5379,7 +5487,7 @@ def twofa_verify():
     refresh_token = create_refresh_token(user.id, data.get('device_info'))
     databases = [{'id': d.id, 'name': d.name, 'display_name': d.display_name} for d in user.accessible_databases]
 
-    return jsonify({
+    response = jsonify({
         'success': True,
         'data': {
             'access_token': access_token,
@@ -5394,6 +5502,7 @@ def twofa_verify():
             'databases': databases,
         }
     })
+    return _set_refresh_cookie(response, refresh_token)
 
 
 # ============ API v2 Admin Endpoints ============

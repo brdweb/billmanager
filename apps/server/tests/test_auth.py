@@ -106,7 +106,9 @@ class TestJWTAuth:
         })
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert 'access_token' in data or 'access_token' in data.get('data', {})
+        assert 'access_token' in data.get('data', {})
+        assert 'refresh_token' in data.get('data', {})
+        assert data['data']['refresh_token'] != refresh_token
 
 
 class TestPasswordChange:
@@ -196,13 +198,22 @@ class TestLogout:
     def test_session_logout(self, client, admin_user):
         """Test session-based logout."""
         # Login first
-        client.post('/login', json={
+        login_response = client.post('/login', json={
             'username': 'testadmin',
             'password': 'testpassword123'
         })
+        login_data = json.loads(login_response.data)
+        csrf_token = login_data.get('csrf_token')
+        assert csrf_token
 
         # Logout
-        response = client.post('/logout')
+        response = client.post(
+            '/logout',
+            headers={
+                'Origin': 'http://localhost:5001',
+                'X-CSRF-Token': csrf_token,
+            },
+        )
         assert response.status_code == 200
 
     def test_jwt_logout(self, client, admin_user, admin_auth_headers):
@@ -213,8 +224,12 @@ class TestLogout:
             'password': 'testpassword123'
         })
         login_data = json.loads(login_response.data)
-        refresh_token = login_data.get('refresh_token')
-        access_token = login_data.get('access_token')
+        assert login_data.get('success') is True
+        assert 'data' in login_data
+        refresh_token = login_data['data'].get('refresh_token')
+        access_token = login_data['data'].get('access_token')
+        assert refresh_token
+        assert access_token
 
         # Logout with the token
         logout_headers = {

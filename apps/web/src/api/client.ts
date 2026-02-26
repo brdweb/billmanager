@@ -5,6 +5,7 @@ import { TokenStorage } from '../utils/tokenStorage';
 const api = axios.create({
   baseURL: '/api/v2',
   timeout: 10000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -89,6 +90,20 @@ function getErrorMessage(error: AxiosError): string {
   }
 }
 
+const tryRefreshAccessToken = async (): Promise<string | null> => {
+  try {
+    const response = await axios.post('/api/v2/auth/refresh', {}, { withCredentials: true });
+    if (response.data.success && response.data.data?.access_token) {
+      const nextAccessToken = response.data.data.access_token as string;
+      TokenStorage.setTokens(nextAccessToken);
+      return nextAccessToken;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
 // Response interceptor - handle errors and automatic token refresh
 api.interceptors.response.use(
   (response) => response,
@@ -103,31 +118,18 @@ api.interceptors.response.use(
     // Automatic token refresh on 401
     if (error.response?.status === 401 && !originalRequest?._retry) {
       originalRequest._retry = true;
-
-      const refreshToken = TokenStorage.getRefreshToken();
-      if (refreshToken) {
-        try {
-          const response = await axios.post('/api/v2/auth/refresh', {
-            refresh_token: refreshToken,
-          });
-
-          if (response.data.success && response.data.data?.access_token) {
-            // Update access token, keep same refresh token
-            TokenStorage.setTokens(response.data.data.access_token, refreshToken);
-
-            // Retry original request with new token
-            if (originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${response.data.data.access_token}`;
-            }
-            return api(originalRequest);
-          }
-        } catch (refreshError) {
-          // Token refresh failed - clear tokens and redirect to login
-          TokenStorage.clearTokens();
-          window.location.href = '/login';
-          return Promise.reject(refreshError);
+      const refreshedAccessToken = await tryRefreshAccessToken();
+      if (refreshedAccessToken) {
+        // Retry original request with new token
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${refreshedAccessToken}`;
         }
+        return api(originalRequest);
       }
+
+      // Token refresh failed - clear access token/database and redirect to login
+      TokenStorage.clearTokens();
+      window.location.href = '/login';
     }
 
     // Return user-friendly error
@@ -252,9 +254,9 @@ export interface MeResponse {
 export const login = async (username: string, password: string): Promise<LoginResponse> => {
   const response = await unwrap(api.post<ApiResponse<LoginResponse>>('/auth/login', { username, password }));
 
-  // Store JWT tokens in localStorage
-  if (response.access_token && response.refresh_token) {
-    TokenStorage.setTokens(response.access_token, response.refresh_token);
+  // Store access token in memory. Refresh token is kept in HttpOnly cookie by backend.
+  if (response.access_token) {
+    TokenStorage.setTokens(response.access_token);
 
     // Set first database as default
     if (response.databases && response.databases.length > 0) {
@@ -267,13 +269,15 @@ export const login = async (username: string, password: string): Promise<LoginRe
 
 export const logout = async (): Promise<void> => {
   try {
-    const refreshToken = TokenStorage.getRefreshToken();
-    if (refreshToken) {
-      await api.post('/auth/logout', { refresh_token: refreshToken });
-    }
+    await api.post('/auth/logout');
   } finally {
     TokenStorage.clearTokens();
   }
+};
+
+export const refreshSession = async (): Promise<boolean> => {
+  const refreshedAccessToken = await tryRefreshAccessToken();
+  return Boolean(refreshedAccessToken);
 };
 
 export const getMe = () =>
@@ -789,9 +793,9 @@ export const oauthCallback = async (provider: string, code: string, state: strin
 
   const result = apiResponse.data as OAuthCallbackResponse;
 
-  // Store tokens
-  if (result.access_token && result.refresh_token) {
-    TokenStorage.setTokens(result.access_token, result.refresh_token);
+  // Store access token in memory. Refresh token stays in HttpOnly cookie.
+  if (result.access_token) {
+    TokenStorage.setTokens(result.access_token);
     if (result.databases?.length > 0) {
       TokenStorage.setCurrentDatabase(result.databases[0].name);
     }
@@ -888,9 +892,9 @@ export const verify2FA = async (session_token: string, method: string, payload: 
     })
   );
 
-  // Store tokens
-  if (response.access_token && response.refresh_token) {
-    TokenStorage.setTokens(response.access_token, response.refresh_token);
+  // Store access token in memory. Refresh token stays in HttpOnly cookie.
+  if (response.access_token) {
+    TokenStorage.setTokens(response.access_token);
     if (response.databases?.length > 0) {
       TokenStorage.setCurrentDatabase(response.databases[0].name);
     }
@@ -920,9 +924,9 @@ export const loginWith2FA = async (username: string, password: string): Promise<
 
     const result = apiResponse.data as LoginResponse;
 
-    // Store tokens
-    if (result.access_token && result.refresh_token) {
-      TokenStorage.setTokens(result.access_token, result.refresh_token);
+    // Store access token in memory. Refresh token stays in HttpOnly cookie.
+    if (result.access_token) {
+      TokenStorage.setTokens(result.access_token);
       if (result.databases?.length > 0) {
         TokenStorage.setCurrentDatabase(result.databases[0].name);
       }

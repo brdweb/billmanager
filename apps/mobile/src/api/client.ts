@@ -19,11 +19,11 @@ const SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = {
 // For local development, use your machine's IP (not localhost)
 // Physical device (Expo Go): use your computer's local IP
 // Android emulator: 10.0.2.2 maps to host machine
-const API_BASE_URL = __DEV__
+const API_BASE_URL = ((globalThis as { __DEV__?: boolean }).__DEV__ ?? false)
   ? 'http://192.168.2.48:5001/api/v2'  // Your local IP for physical device testing
   : 'https://app.billmanager.app/api/v2';
 
-class BillManagerApi {
+export class BillManagerApi {
   private client: AxiosInstance;
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
@@ -69,6 +69,7 @@ class BillManagerApi {
               originalRequest.headers.Authorization = `Bearer ${this.accessToken}`;
               return this.client(originalRequest);
             }
+            this.onAuthError?.();
           } catch (refreshError) {
             // Refresh failed, trigger logout
             this.onAuthError?.();
@@ -153,14 +154,19 @@ class BillManagerApi {
     if (!this.refreshToken) return false;
 
     try {
-      const response = await axios.post<ApiResponse<{ access_token: string }>>(
+      const response = await axios.post<ApiResponse<{ access_token: string; refresh_token?: string }>>(
         `${API_BASE_URL}/auth/refresh`,
         { refresh_token: this.refreshToken }
       );
 
       if (response.data.success && response.data.data) {
-        this.accessToken = response.data.data.access_token;
+        const { access_token, refresh_token } = response.data.data;
+        this.accessToken = access_token;
         await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, this.accessToken, SECURE_STORE_OPTIONS);
+        if (refresh_token) {
+          this.refreshToken = refresh_token;
+          await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refresh_token, SECURE_STORE_OPTIONS);
+        }
         return true;
       }
       return false;

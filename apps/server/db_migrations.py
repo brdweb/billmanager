@@ -645,6 +645,28 @@ def migrate_20260210_05_add_auth_provider(db):
     logger.info("Added users.auth_provider column")
 
 
+def migrate_20260219_01_add_change_token_expiry(db):
+    """Add change_token_expires column to users for expiring first-login tokens."""
+    logger.info("Running migration: 20260219_01_add_change_token_expiry")
+
+    result = db.session.execute(text("""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name='users'
+        AND column_name='change_token_expires'
+    """))
+
+    if result.fetchone():
+        logger.info("change_token_expires column already exists")
+        return
+
+    db.session.execute(text('''
+        ALTER TABLE users ADD COLUMN change_token_expires TIMESTAMP
+    '''))
+    db.session.commit()
+    logger.info("Added users.change_token_expires column")
+
+
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -668,6 +690,7 @@ MIGRATIONS = [
     ('20260210_03', 'Create 2FA tables (twofa_config, twofa_challenges, webauthn_credentials)', migrate_20260210_03_create_twofa_tables),
     ('20260210_04', 'Make password_hash nullable for OIDC-only users', migrate_20260210_04_nullable_password_hash),
     ('20260210_05', 'Add auth_provider column to users', migrate_20260210_05_add_auth_provider),
+    ('20260219_01', 'Add change_token_expires to users for password change tokens', migrate_20260219_01_add_change_token_expiry),
 ]
 
 

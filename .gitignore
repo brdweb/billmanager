@@ -60,5 +60,9 @@ TESTING_STATUS.md
 # Store submission (sensitive internal docs)
 STORE-SUBMISSION.md
 
+# Local agent instructions / tool state
+AGENTS.md
+.playwright-mcp/
+
 # Root package-lock (monorepo uses per-app locks)
 /package-lock.json
