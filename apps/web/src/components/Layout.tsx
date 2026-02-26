@@ -16,7 +16,6 @@ import { useDisclosure, useWindowScroll, useMediaQuery } from '@mantine/hooks';
 import { IconSun, IconMoon, IconSettings, IconLogout, IconCreditCard, IconArrowUp } from '@tabler/icons-react';
 import { useAuth } from '../context/AuthContext';
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 interface LayoutProps {
   children: ReactNode;
@@ -31,7 +30,6 @@ export function Layout({ children, sidebar, onAdminClick, onBillingClick }: Layo
   const { isLoggedIn, isAdmin, databases, currentDb, selectDatabase, logout } = useAuth();
   const [scroll, scrollTo] = useWindowScroll();
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const navigate = useNavigate();
 
   const handleDatabaseChange = (value: string | null) => {
     if (value) {
@@ -103,15 +101,6 @@ export function Layout({ children, sidebar, onAdminClick, onBillingClick }: Layo
                       Admin
                     </Button>
                   )}
-                  <Button
-                    variant="light"
-                    color="blue"
-                    size="sm"
-                    leftSection={<IconSettings size={16} />}
-                    onClick={() => navigate('/settings')}
-                  >
-                    Settings
-                  </Button>
                   <Button
                     variant="subtle"
                     color="gray"

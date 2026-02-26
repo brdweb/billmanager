@@ -59,7 +59,7 @@ export function AuthCallback() {
       try {
         if (decoded.flow === 'link') {
           await api.oauthCallback(decoded.provider, code, state, false);
-          navigate('/settings', { replace: true });
+          navigate('/', { replace: true });
           return;
         }
 

@@ -28,7 +28,6 @@ import { Billing } from './pages/Billing';
 import { Dashboard } from './pages/Dashboard';
 import { CalendarPage } from './pages/CalendarPage';
 import { Analytics } from './pages/Analytics';
-import { Settings } from './pages/Settings';
 import { useAuth } from './context/AuthContext';
 import { useConfig } from './context/ConfigContext';
 import * as api from './api/client';
@@ -514,7 +513,6 @@ function App() {
             path="/analytics"
             element={<Analytics hasDatabase={!!currentDb} />}
           />
-          <Route path="/settings" element={<Settings />} />
           {billingEnabled && (
             <>
               <Route path="/billing" element={<Billing />} />
