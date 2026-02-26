@@ -667,6 +667,49 @@ def migrate_20260219_01_add_change_token_expiry(db):
     logger.info("Added users.change_token_expires column")
 
 
+
+
+def migrate_20260226_01_ensure_share_audit_log_indexes(db):
+    """Ensure share_audit_log has performance indexes.
+
+    Some deployments may already have the share_audit_log table (e.g. created
+    by SQLAlchemy metadata or an earlier partial migration) but be missing the
+    indexes used by audit log queries.
+    """
+    logger.info("Running migration: 20260226_01_ensure_share_audit_log_indexes")
+
+    inspector = inspect(db.engine)
+    if 'share_audit_log' not in inspector.get_table_names():
+        logger.info("share_audit_log table does not exist; nothing to index")
+        return
+
+    result = db.session.execute(text("""
+        SELECT indexname
+        FROM pg_indexes
+        WHERE tablename = 'share_audit_log'
+    """))
+    existing_indexes = {row[0] for row in result.fetchall()}
+
+    index_statements = {
+        'idx_share_audit_log_share_id': 'CREATE INDEX idx_share_audit_log_share_id ON share_audit_log(share_id)',
+        'idx_share_audit_log_bill_id': 'CREATE INDEX idx_share_audit_log_bill_id ON share_audit_log(bill_id)',
+        'idx_share_audit_log_actor': 'CREATE INDEX idx_share_audit_log_actor ON share_audit_log(actor_user_id)',
+        'idx_share_audit_log_created_at': 'CREATE INDEX idx_share_audit_log_created_at ON share_audit_log(created_at DESC)',
+    }
+
+    created_any = False
+    for name, stmt in index_statements.items():
+        if name in existing_indexes:
+            continue
+        db.session.execute(text(stmt))
+        logger.info(f"Created index {name}")
+        created_any = True
+
+    if created_any:
+        db.session.commit()
+        logger.info("Ensured share_audit_log indexes")
+    else:
+        logger.info("All share_audit_log indexes already exist")
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -691,6 +734,7 @@ MIGRATIONS = [
     ('20260210_04', 'Make password_hash nullable for OIDC-only users', migrate_20260210_04_nullable_password_hash),
     ('20260210_05', 'Add auth_provider column to users', migrate_20260210_05_add_auth_provider),
     ('20260219_01', 'Add change_token_expires to users for password change tokens', migrate_20260219_01_add_change_token_expiry),
+    ('20260226_01', 'Ensure share_audit_log performance indexes exist', migrate_20260226_01_ensure_share_audit_log_indexes),
 ]
 
 

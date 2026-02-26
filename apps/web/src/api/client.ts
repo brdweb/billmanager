@@ -13,6 +13,8 @@ const api = axios.create({
   },
 });
 
+let refreshInFlight: Promise<string | null> | null = null;
+
 // Request interceptor - add JWT token and database header
 api.interceptors.request.use(
   (config) => {
@@ -91,17 +93,27 @@ function getErrorMessage(error: AxiosError): string {
 }
 
 const tryRefreshAccessToken = async (): Promise<string | null> => {
-  try {
-    const response = await axios.post('/api/v2/auth/refresh', {}, { withCredentials: true });
-    if (response.data.success && response.data.data?.access_token) {
-      const nextAccessToken = response.data.data.access_token as string;
-      TokenStorage.setTokens(nextAccessToken);
-      return nextAccessToken;
-    }
-    return null;
-  } catch {
-    return null;
+  if (refreshInFlight) {
+    return refreshInFlight;
   }
+
+  refreshInFlight = (async () => {
+    try {
+      const response = await axios.post('/api/v2/auth/refresh', {}, { withCredentials: true });
+      if (response.data.success && response.data.data?.access_token) {
+        const nextAccessToken = response.data.data.access_token as string;
+        TokenStorage.setTokens(nextAccessToken);
+        return nextAccessToken;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
 };
 
 // Response interceptor - handle errors and automatic token refresh
@@ -109,14 +121,16 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+    const url = originalRequest?.url || '';
+    const isAuthRequest = url.includes('/auth/login') || url.includes('/auth/refresh');
 
     // Log errors in development
     if (import.meta.env.DEV) {
       console.error('API Error:', error.config?.method?.toUpperCase(), error.config?.url, error.response?.status);
     }
 
-    // Automatic token refresh on 401
-    if (error.response?.status === 401 && !originalRequest?._retry) {
+    // Automatic token refresh on 401 (skip auth endpoints)
+    if (error.response?.status === 401 && !originalRequest?._retry && !isAuthRequest) {
       originalRequest._retry = true;
       const refreshedAccessToken = await tryRefreshAccessToken();
       if (refreshedAccessToken) {
