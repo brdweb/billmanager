@@ -179,6 +179,7 @@ export interface User {
   role: 'admin' | 'user';
   email?: string | null;
   is_account_owner?: boolean;
+  has_password?: boolean;
 }
 
 export interface Database {
@@ -296,6 +297,9 @@ export const refreshSession = async (): Promise<boolean> => {
 
 export const getMe = () =>
   unwrap(api.get<ApiResponse<MeResponse>>('/me'));
+
+export const deleteMyAccount = (payload: { password?: string; confirm?: boolean }) =>
+  unwrap(api.delete<ApiResponse<{ message: string }>>('/account', { data: payload }));
 
 export const changePassword = (
   user_id: number,
@@ -789,7 +793,7 @@ export interface OAuthCallbackResponse {
   databases: Database[];
 }
 
-export const oauthCallback = async (provider: string, code: string, state: string): Promise<OAuthCallbackResponse> => {
+export const oauthCallback = async (provider: string, code: string, state: string, persistSession = true): Promise<OAuthCallbackResponse> => {
   const response = await api.post<ApiResponse<OAuthCallbackResponse>>(
     `/auth/oauth/${provider}/callback`,
     { code, state }
@@ -808,7 +812,7 @@ export const oauthCallback = async (provider: string, code: string, state: strin
   const result = apiResponse.data as OAuthCallbackResponse;
 
   // Store access token in memory. Refresh token stays in HttpOnly cookie.
-  if (result.access_token) {
+  if (persistSession && result.access_token) {
     TokenStorage.setTokens(result.access_token);
     if (result.databases?.length > 0) {
       TokenStorage.setCurrentDatabase(result.databases[0].name);

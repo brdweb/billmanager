@@ -17,9 +17,9 @@ from flask_migrate import Migrate
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
-from sqlalchemy import func, extract, desc
+from sqlalchemy import func, extract, desc, or_
 
-from models import db, User, Database, Bill, Payment, RefreshToken, Subscription, UserInvite, UserDevice, BillShare, ShareAuditLog, OAuthAccount, TwoFAConfig, TwoFAChallenge, WebAuthnCredential
+from models import db, User, Database, Bill, Payment, RefreshToken, Subscription, UserInvite, UserDevice, BillShare, ShareAuditLog, OAuthAccount, TwoFAConfig, TwoFAChallenge, WebAuthnCredential, user_database_access
 from migration import migrate_sqlite_to_pg
 from db_migrations import run_pending_migrations
 from services.email import send_verification_email, send_password_reset_email, send_welcome_email, send_invite_email
@@ -2738,12 +2738,123 @@ def jwt_me():
                 'username': user.username,
                 'email': user.email,
                 'role': user.role,
-                'is_account_owner': user.is_account_owner if is_saas() else (user.role == 'admin')
+                'is_account_owner': user.is_account_owner if is_saas() else (user.role == 'admin'),
+                'has_password': bool(user.password_hash)
             },
             'databases': databases,
             'current_db': g.jwt_db_name
         }
     })
+
+@api_v2_bp.route('/account', methods=['DELETE'])
+@jwt_required
+def jwt_delete_account():
+    """Delete the current account owner and all account data."""
+    current_user = db.session.get(User, g.jwt_user_id)
+    if not current_user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    if not current_user.is_account_owner:
+        return jsonify({'success': False, 'error': 'Only account owners can delete the account'}), 403
+
+    data = request.get_json(force=True, silent=True) or {}
+    password = data.get('password', '')
+    confirm = data.get('confirm', False)
+
+    if current_user.password_hash:
+        if not password:
+            return jsonify({'success': False, 'error': 'Password is required'}), 400
+        if not current_user.check_password(password):
+            return jsonify({'success': False, 'error': 'Invalid password'}), 401
+    elif confirm is not True:
+        return jsonify({'success': False, 'error': 'Confirmation required'}), 400
+
+    account_users = User.query.filter(
+        or_(User.id == current_user.id, User.created_by_id == current_user.id)
+    ).all()
+    account_user_ids = [u.id for u in account_users]
+
+    owned_databases = Database.query.filter_by(owner_id=current_user.id).all()
+    owned_database_ids = [d.id for d in owned_databases]
+
+    bill_ids = []
+    if owned_database_ids:
+        bill_ids = [
+            row[0]
+            for row in db.session.query(Bill.id).filter(Bill.database_id.in_(owned_database_ids)).all()
+        ]
+
+    if account_user_ids:
+        db.session.execute(
+            user_database_access.delete().where(
+                user_database_access.c.user_id.in_(account_user_ids)
+            )
+        )
+
+        UserInvite.query.filter(UserInvite.invited_by_id.in_(account_user_ids)).delete(
+            synchronize_session=False
+        )
+        RefreshToken.query.filter(RefreshToken.user_id.in_(account_user_ids)).delete(
+            synchronize_session=False
+        )
+        UserDevice.query.filter(UserDevice.user_id.in_(account_user_ids)).delete(
+            synchronize_session=False
+        )
+        Subscription.query.filter(Subscription.user_id.in_(account_user_ids)).delete(
+            synchronize_session=False
+        )
+        OAuthAccount.query.filter(OAuthAccount.user_id.in_(account_user_ids)).delete(
+            synchronize_session=False
+        )
+        TwoFAChallenge.query.filter(TwoFAChallenge.user_id.in_(account_user_ids)).delete(
+            synchronize_session=False
+        )
+        TwoFAConfig.query.filter(TwoFAConfig.user_id.in_(account_user_ids)).delete(
+            synchronize_session=False
+        )
+        WebAuthnCredential.query.filter(
+            WebAuthnCredential.user_id.in_(account_user_ids)
+        ).delete(synchronize_session=False)
+
+        BillShare.query.filter(
+            or_(
+                BillShare.owner_user_id.in_(account_user_ids),
+                BillShare.shared_with_user_id.in_(account_user_ids),
+            )
+        ).delete(synchronize_session=False)
+
+        ShareAuditLog.query.filter(
+            or_(
+                ShareAuditLog.actor_user_id.in_(account_user_ids),
+                ShareAuditLog.affected_user_id.in_(account_user_ids),
+            )
+        ).delete(synchronize_session=False)
+
+    if bill_ids:
+        ShareAuditLog.query.filter(ShareAuditLog.bill_id.in_(bill_ids)).delete(
+            synchronize_session=False
+        )
+        BillShare.query.filter(BillShare.bill_id.in_(bill_ids)).delete(
+            synchronize_session=False
+        )
+
+    if owned_database_ids:
+        db.session.execute(
+            user_database_access.delete().where(
+                user_database_access.c.database_id.in_(owned_database_ids)
+            )
+        )
+
+    for database in owned_databases:
+        db.session.delete(database)
+
+    for user in sorted(account_users, key=lambda u: 1 if u.id == current_user.id else 0):
+        db.session.delete(user)
+
+    db.session.commit()
+
+    return jsonify({'success': True, 'data': {'message': 'Account deleted'}})
+
 
 @api_v2_bp.route('/bills', methods=['GET'])
 @limiter.limit("60 per minute")
