@@ -6923,7 +6923,10 @@ def twofa_verify():
             return jsonify({"success": False, "error": "Passkeys are not enabled"}), 400
 
         from webauthn import verify_authentication_response
-        from webauthn.helpers.structs import AuthenticationCredential
+        from webauthn.helpers.structs import (
+            AuthenticationCredential,
+            AuthenticatorAssertionResponse,
+        )
         import base64
 
         expected_challenge = base64.urlsafe_b64decode(challenge.otp_code_hash + "==")
@@ -6940,9 +6943,50 @@ def twofa_verify():
             return jsonify({"success": False, "error": "Unrecognized credential"}), 400
 
         try:
-            auth_credential = AuthenticationCredential.parse_raw(
-                json.dumps(credential_data)
-            )
+            if not isinstance(credential_data, dict):
+                raise ValueError("invalid credential payload")
+
+            payload_json = json.dumps(credential_data)
+            if hasattr(AuthenticationCredential, "parse_raw"):
+                auth_credential = AuthenticationCredential.parse_raw(payload_json)
+            elif hasattr(AuthenticationCredential, "model_validate_json"):
+                auth_credential = AuthenticationCredential.model_validate_json(
+                    payload_json
+                )
+            else:
+
+                def _decode_b64url(value):
+                    if not value:
+                        return b""
+                    padded = value + "=" * ((4 - (len(value) % 4)) % 4)
+                    return base64.urlsafe_b64decode(padded)
+
+                response_data = credential_data.get("response", {})
+                if not isinstance(response_data, dict):
+                    raise ValueError("invalid credential response payload")
+
+                assertion_response = AuthenticatorAssertionResponse(
+                    client_data_json=_decode_b64url(
+                        response_data.get("clientDataJSON")
+                    ),
+                    authenticator_data=_decode_b64url(
+                        response_data.get("authenticatorData")
+                    ),
+                    signature=_decode_b64url(response_data.get("signature")),
+                    user_handle=(
+                        _decode_b64url(response_data.get("userHandle"))
+                        if response_data.get("userHandle")
+                        else None
+                    ),
+                )
+
+                auth_credential = AuthenticationCredential(
+                    id=credential_data.get("id", ""),
+                    raw_id=_decode_b64url(credential_data.get("rawId")),
+                    type=credential_data.get("type", "public-key"),
+                    response=assertion_response,
+                )
+
             verification = verify_authentication_response(
                 credential=auth_credential,
                 expected_challenge=expected_challenge,
