@@ -53,7 +53,7 @@ export const releaseNotes: ReleaseNote[] = [
       {
         heading: 'New Features',
         items: [
-          'Social Login (OIDC) - Sign in with Google, Apple, Microsoft, or any OpenID Connect provider',
+          'Social Login (OIDC) - Sign in with Google or Apple',
           'Two-Factor Authentication - Email OTP and passkey (WebAuthn) support',
           'Recovery codes for 2FA backup access',
           'Linked Accounts management - connect and disconnect OAuth providers',
@@ -63,7 +63,7 @@ export const releaseNotes: ReleaseNote[] = [
       {
         heading: 'Security',
         items: [
-          'ID token signature verification for all OIDC providers',
+          'ID token signature verification for supported social login providers',
           'Cryptographically secure OTP generation',
           'OAuth state token replay protection',
           'Brute-force protection on 2FA verification',

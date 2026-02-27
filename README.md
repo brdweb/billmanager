@@ -8,11 +8,11 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ## 🎉 What's New in v4.0.0
 
-**Social Login & Two-Factor Authentication** - Sign in with Google, Apple, Microsoft, or any OIDC provider. Protect your account with email OTP or passkey-based two-factor authentication.
+**Social Login & Two-Factor Authentication** - Sign in with Google or Apple. Protect your account with email OTP or passkey-based two-factor authentication.
 
 ### Highlights
 
-- **Social Login (OIDC)** - Connect Google, Apple, Microsoft, or any OpenID Connect provider for one-click sign-in
+- **Social Login (OIDC)** - Connect Google or Apple for one-click sign-in
 - **Two-Factor Authentication** - Email OTP and passkey (WebAuthn) support for account security
 - **Recovery Codes** - Backup access codes in case you lose your 2FA device
 - **Linked Accounts** - Manage connected OAuth providers from your Security Settings
@@ -152,6 +152,20 @@ postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
 | `APP_URL` | Application URL for email links | `http://localhost:5000` |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | Uses `APP_URL` or localhost |
 | `DEPLOYMENT_MODE` | `self-hosted` or `saas` | `self-hosted` |
+| `ENABLE_2FA` | Enable two-factor authentication flows | `false` |
+| `ENABLE_PASSKEYS` | Enable passkey (WebAuthn) support | `false` |
+| `WEBAUTHN_RP_ID` | WebAuthn relying party ID (domain only) | Derived from `APP_URL` |
+| `WEBAUTHN_RP_NAME` | WebAuthn relying party display name | `BillManager` |
+| `WEBAUTHN_ORIGIN` | WebAuthn origin (must match app origin) | `APP_URL` |
+| `OAUTH_AUTO_REGISTER` | Auto-create users during social sign-in | `false` |
+| `OAUTH_GOOGLE_ENABLED` | Enable Google sign-in | `false` |
+| `OAUTH_GOOGLE_CLIENT_ID` | Google OAuth client ID | None |
+| `OAUTH_GOOGLE_CLIENT_SECRET` | Google OAuth client secret | None |
+| `OAUTH_APPLE_ENABLED` | Enable Apple sign-in | `false` |
+| `OAUTH_APPLE_CLIENT_ID` | Apple Services ID (client ID) | None |
+| `OAUTH_APPLE_TEAM_ID` | Apple Developer Team ID | None |
+| `OAUTH_APPLE_KEY_ID` | Apple Sign in with Apple key ID | None |
+| `OAUTH_APPLE_PRIVATE_KEY` | Apple private key (`.p8`, multiline or `\n` escaped) | None |
 
 **Security Note:** In production, `JWT_SECRET_KEY` or `FLASK_SECRET_KEY` **must** be explicitly set. The application will refuse to start without it. Generate secure keys with: `openssl rand -hex 32`
 
@@ -164,6 +178,12 @@ BillManager uses a three-tier priority system for CORS origins:
 3. **Localhost defaults** - For development without configuration
 
 This ensures secure self-hosted deployments while remaining flexible for development.
+
+#### 2FA and Social Login Notes
+
+- For passkeys in production, set `ENABLE_2FA=true`, `ENABLE_PASSKEYS=true`, `WEBAUTHN_RP_ID`, and `WEBAUTHN_ORIGIN`.
+- For Apple sign-in, `OAUTH_APPLE_PRIVATE_KEY` may be provided as a single line with `\n` escapes.
+- OAuth callback URL for Google/Apple should be: `https://<your-domain>/auth/callback`.
 
 For complete configuration options, see the [Self-Hosted Installation Guide](https://docs.billmanager.app/category/self-hosted).
 
