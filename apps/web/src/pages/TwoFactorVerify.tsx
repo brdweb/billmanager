@@ -36,6 +36,23 @@ export function TwoFactorVerify() {
   const [codeSent, setCodeSent] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
 
+  const base64urlToArrayBuffer = (value: string): ArrayBuffer => {
+    const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return bytes.buffer as ArrayBuffer;
+  };
+
+  const arrayBufferToBase64url = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  };
+
   if (!pending2FA) {
     return null;
   }
@@ -73,6 +90,49 @@ export function TwoFactorVerify() {
           return;
         }
         payload = { recovery_code: recoveryCode.trim() };
+      } else if (method === 'passkey') {
+        if (!window.PublicKeyCredential || !navigator.credentials) {
+          setError('Passkeys are not supported by this browser/device');
+          setLoading(false);
+          return;
+        }
+
+        const { options } = await api.getPasskeyAuthOptions(pending2FA.sessionToken);
+        const requestOptions = options as Record<string, unknown>;
+        const allowCredentials = (requestOptions.allowCredentials as Array<Record<string, unknown>> | undefined) || [];
+
+        const assertion = (await navigator.credentials.get({
+          publicKey: {
+            ...(requestOptions as unknown as PublicKeyCredentialRequestOptions),
+            challenge: base64urlToArrayBuffer(requestOptions.challenge as string),
+            allowCredentials: allowCredentials.map((cred) => ({
+              ...(cred as unknown as PublicKeyCredentialDescriptor),
+              id: base64urlToArrayBuffer(cred.id as string),
+            })),
+          },
+        })) as PublicKeyCredential | null;
+
+        if (!assertion) {
+          setError('No passkey credential selected');
+          setLoading(false);
+          return;
+        }
+
+        const response = assertion.response as AuthenticatorAssertionResponse;
+        payload = {
+          credential: {
+            id: assertion.id,
+            rawId: arrayBufferToBase64url(assertion.rawId),
+            type: assertion.type,
+            response: {
+              clientDataJSON: arrayBufferToBase64url(response.clientDataJSON),
+              authenticatorData: arrayBufferToBase64url(response.authenticatorData),
+              signature: arrayBufferToBase64url(response.signature),
+              userHandle: response.userHandle ? arrayBufferToBase64url(response.userHandle) : null,
+            },
+            clientExtensionResults: assertion.getClientExtensionResults(),
+          },
+        };
       }
 
       const result = await complete2FA(method, payload);
