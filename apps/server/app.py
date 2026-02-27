@@ -6438,7 +6438,20 @@ def twofa_passkey_register():
         elif hasattr(RegistrationCredential, "model_validate_json"):
             registration = RegistrationCredential.model_validate_json(payload_json)
         else:
-            registration = RegistrationCredential(**credential_payload)
+            # Older webauthn versions use snake_case constructor args.
+            registration = RegistrationCredential(
+                id=credential_payload.get("id"),
+                raw_id=credential_payload.get("rawId"),
+                type=credential_payload.get("type"),
+                response={
+                    "client_data_json": credential_payload.get("response", {}).get(
+                        "clientDataJSON"
+                    ),
+                    "attestation_object": credential_payload.get("response", {}).get(
+                        "attestationObject"
+                    ),
+                },
+            )
 
         verification = verify_registration_response(
             credential=registration,
