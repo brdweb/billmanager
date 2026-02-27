@@ -46,7 +46,7 @@
   "devDependencies": {
     "@types/react": "~19.1.0",
     "typescript": "~5.9.2",
-    "vitest": "^1.6.1"
+    "vitest": "^4.0.18"
   },
   "private": true
 }
