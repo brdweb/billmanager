@@ -4473,6 +4473,41 @@ def _verify_oauth_state(state_token):
         return None
 
 
+def _generate_apple_client_secret():
+    """Generate Apple's JWT-based client_secret for token exchange."""
+    cfg = OAUTH_PROVIDERS.get('apple', {})
+    team_id = cfg.get('team_id')
+    key_id = cfg.get('key_id')
+    client_id = cfg.get('client_id')
+    private_key = cfg.get('private_key')
+
+    if not team_id or not key_id or not client_id or not private_key:
+        return None
+
+    # Allow env var keys stored with escaped newlines.
+    private_key = private_key.replace('\\n', '\n')
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    payload = {
+        'iss': team_id,
+        'iat': int(now.timestamp()),
+        'exp': int((now + datetime.timedelta(minutes=10)).timestamp()),
+        'aud': 'https://appleid.apple.com',
+        'sub': client_id,
+    }
+
+    try:
+        return jwt.encode(
+            payload,
+            private_key,
+            algorithm='ES256',
+            headers={'kid': key_id, 'alg': 'ES256'},
+        )
+    except Exception as e:
+        logger.error(f'Failed to generate Apple client_secret: {e}')
+        return None
+
+
 def _resolve_oauth_user(provider, provider_user_id, email, profile_data=None):
     """Resolve or create a user from OIDC claims.
 
@@ -4706,8 +4741,12 @@ def oauth_callback(provider):
         'code_verifier': code_verifier,
     }
 
-    # Apple uses client_secret differently (JWT-based), but for now use standard flow
-    if cfg.get('client_secret'):
+    if provider == 'apple':
+        apple_client_secret = _generate_apple_client_secret()
+        if not apple_client_secret:
+            return jsonify({'success': False, 'error': 'Apple OAuth is not fully configured'}), 502
+        token_data['client_secret'] = apple_client_secret
+    elif cfg.get('client_secret'):
         token_data['client_secret'] = cfg['client_secret']
 
     try:
@@ -5220,7 +5259,27 @@ def twofa_passkey_register():
     expected_challenge = base64.urlsafe_b64decode(challenge.otp_code_hash + '==')
 
     try:
-        registration = RegistrationCredential.parse_raw(json.dumps(credential))
+        if not isinstance(credential, dict):
+            raise ValueError('invalid credential payload')
+
+        credential_payload = {
+            'id': credential.get('id'),
+            'rawId': credential.get('rawId'),
+            'type': credential.get('type'),
+            'response': {
+                'clientDataJSON': credential.get('response', {}).get('clientDataJSON') if isinstance(credential.get('response'), dict) else None,
+                'attestationObject': credential.get('response', {}).get('attestationObject') if isinstance(credential.get('response'), dict) else None,
+            },
+        }
+
+        payload_json = json.dumps(credential_payload)
+        if hasattr(RegistrationCredential, 'parse_raw'):
+            registration = RegistrationCredential.parse_raw(payload_json)
+        elif hasattr(RegistrationCredential, 'model_validate_json'):
+            registration = RegistrationCredential.model_validate_json(payload_json)
+        else:
+            registration = RegistrationCredential(**credential_payload)
+
         verification = verify_registration_response(
             credential=registration,
             expected_challenge=expected_challenge,
@@ -5236,6 +5295,8 @@ def twofa_passkey_register():
             message = 'Passkey RP ID mismatch. Check WEBAUTHN_RP_ID.'
         elif 'challenge' in error_text:
             message = 'Passkey challenge expired. Please try again.'
+        elif 'validation' in error_text or 'field required' in error_text or 'invalid credential payload' in error_text:
+            message = 'Passkey payload was invalid. Try updating browser/password-manager and retry.'
         else:
             message = 'Passkey registration failed'
         return jsonify({'success': False, 'error': message}), 400
