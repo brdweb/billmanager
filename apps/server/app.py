@@ -6387,7 +6387,10 @@ def twofa_passkey_register():
         return jsonify({"success": False, "error": "Passkeys are not enabled"}), 400
 
     from webauthn import verify_registration_response
-    from webauthn.helpers.structs import RegistrationCredential
+    from webauthn.helpers.structs import (
+        AuthenticatorAttestationResponse,
+        RegistrationCredential,
+    )
     import base64
 
     data = request.get_json(force=True, silent=True) or {}
@@ -6445,18 +6448,23 @@ def twofa_passkey_register():
                 padded = value + "=" * ((4 - (len(value) % 4)) % 4)
                 return base64.urlsafe_b64decode(padded)
 
+            attestation_response = AuthenticatorAttestationResponse(
+                client_data_json=_decode_b64url(
+                    credential_payload.get("response", {}).get("clientDataJSON")
+                ),
+                attestation_object=_decode_b64url(
+                    credential_payload.get("response", {}).get("attestationObject")
+                ),
+                transports=(credential.get("response", {}).get("transports") or [])
+                if isinstance(credential.get("response"), dict)
+                else [],
+            )
+
             registration = RegistrationCredential(
                 id=credential_payload.get("id"),
                 raw_id=_decode_b64url(credential_payload.get("rawId")),
                 type=credential_payload.get("type"),
-                response={
-                    "client_data_json": _decode_b64url(
-                        credential_payload.get("response", {}).get("clientDataJSON")
-                    ),
-                    "attestation_object": _decode_b64url(
-                        credential_payload.get("response", {}).get("attestationObject")
-                    ),
-                },
+                response=attestation_response,
             )
 
         verification = verify_registration_response(
