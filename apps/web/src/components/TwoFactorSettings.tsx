@@ -325,7 +325,7 @@ export function TwoFactorSettings() {
             {status?.passkeys && status.passkeys.length > 0 && (
               <Stack gap="xs" mt="sm">
                 {status.passkeys.map((passkey) => (
-                  <Group key={passkey.id} justify="space-between" p="xs" style={{ borderRadius: 4, background: 'var(--mantine-color-gray-0)' }}>
+                  <Group key={passkey.id} justify="space-between" p="xs" style={{ borderRadius: 4, background: 'var(--mantine-color-default)' }}>
                     <div>
                       <Text size="sm" fw={500}>{passkey.device_name}</Text>
                       <Text size="xs" c="dimmed">
