@@ -10,6 +10,8 @@ This module should be added to your production BillManager instance to:
 
 import os
 import logging
+import time
+import secrets
 import requests
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
@@ -19,6 +21,76 @@ logger = logging.getLogger(__name__)
 
 # Create blueprint for telemetry receiver
 telemetry_receiver_bp = Blueprint('telemetry_receiver', __name__)
+
+# Security controls
+TELEMETRY_RECEIVER_REQUIRE_AUTH = os.environ.get('TELEMETRY_RECEIVER_REQUIRE_AUTH', 'true').lower() == 'true'
+TELEMETRY_RECEIVER_API_KEY = os.environ.get('TELEMETRY_RECEIVER_API_KEY')
+TELEMETRY_MAX_PAYLOAD_BYTES = int(os.environ.get('TELEMETRY_MAX_PAYLOAD_BYTES', '16384'))
+TELEMETRY_INGEST_RATE_PER_MINUTE = int(os.environ.get('TELEMETRY_INGEST_RATE_PER_MINUTE', '60'))
+TELEMETRY_STATS_RATE_PER_MINUTE = int(os.environ.get('TELEMETRY_STATS_RATE_PER_MINUTE', '30'))
+
+_rate_window_seconds = 60
+_request_buckets: dict[str, list[float]] = {}
+
+
+def _rate_limit(bucket_key: str, limit_per_minute: int) -> bool:
+    """Simple in-memory sliding-window limiter."""
+    now = time.time()
+    bucket = _request_buckets.get(bucket_key, [])
+    bucket = [ts for ts in bucket if now - ts < _rate_window_seconds]
+    if len(bucket) >= limit_per_minute:
+        _request_buckets[bucket_key] = bucket
+        return False
+    bucket.append(now)
+    _request_buckets[bucket_key] = bucket
+    return True
+
+
+def _is_admin_jwt() -> bool:
+    """Validate Authorization bearer token and require admin role."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return False
+    token = auth_header.split(' ', 1)[1].strip()
+    if not token:
+        return False
+
+    try:
+        from app import verify_access_token
+        payload = verify_access_token(token)
+    except Exception:
+        return False
+
+    return bool(payload and payload.get('role') == 'admin')
+
+
+def _is_valid_api_key() -> bool:
+    supplied = request.headers.get('X-Telemetry-Api-Key', '')
+    if not TELEMETRY_RECEIVER_API_KEY:
+        return False
+    return secrets.compare_digest(supplied, TELEMETRY_RECEIVER_API_KEY)
+
+
+def _require_receiver_auth():
+    """Return (response, status) tuple when auth fails, else None."""
+    if not TELEMETRY_RECEIVER_REQUIRE_AUTH:
+        return None
+
+    if not TELEMETRY_RECEIVER_API_KEY and not request.headers.get('Authorization'):
+        logger.error("Telemetry receiver auth is enabled but no API key/JWT was provided")
+        return jsonify({'error': 'Telemetry receiver authentication is not configured'}), 503
+
+    if _is_valid_api_key() or _is_admin_jwt():
+        return None
+    return jsonify({'error': 'Authentication required'}), 401
+
+
+def _require_rate_limit(route_name: str, limit_per_minute: int):
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+    bucket_key = f'{route_name}:{client_ip}'
+    if _rate_limit(bucket_key, limit_per_minute):
+        return None
+    return jsonify({'error': 'Rate limit exceeded'}), 429
 
 
 @telemetry_receiver_bp.route('/api/telemetry', methods=['POST'])
@@ -31,12 +103,27 @@ def receive_telemetry():
     from models import db, TelemetrySubmission
 
     try:
+        # Request size guard to reduce abuse and accidental oversized payloads.
+        content_length = request.content_length or 0
+        if content_length > TELEMETRY_MAX_PAYLOAD_BYTES:
+            return jsonify({'error': 'Payload too large'}), 413
+
+        rate_limited = _require_rate_limit('telemetry_ingest', TELEMETRY_INGEST_RATE_PER_MINUTE)
+        if rate_limited:
+            return rate_limited
+
+        auth_error = _require_receiver_auth()
+        if auth_error:
+            return auth_error
+
         data = request.get_json()
 
         if not data or 'instance_id' not in data:
             return jsonify({'error': 'Invalid telemetry data'}), 400
 
         instance_id = data.get('instance_id')
+        if not isinstance(instance_id, str) or not instance_id.strip() or len(instance_id) > 128:
+            return jsonify({'error': 'Invalid telemetry data'}), 400
         deployment_mode = data.get('deployment_mode', 'unknown')
         version = data.get('version', 'unknown')
 
@@ -139,10 +226,18 @@ def get_telemetry_stats():
 
     Requires admin authentication.
     """
-    from models import TelemetrySubmission
+    from models import db, TelemetrySubmission
     from sqlalchemy import func
 
     try:
+        rate_limited = _require_rate_limit('telemetry_stats', TELEMETRY_STATS_RATE_PER_MINUTE)
+        if rate_limited:
+            return rate_limited
+
+        auth_error = _require_receiver_auth()
+        if auth_error:
+            return auth_error
+
         # Get total unique instances
         total_instances = db.session.query(
             func.count(func.distinct(TelemetrySubmission.instance_id))

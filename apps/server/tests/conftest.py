@@ -9,6 +9,10 @@ Provides:
 """
 import os
 import sys
+import json
+import hashlib
+import secrets
+import datetime
 import pytest
 
 # Add parent directory to path for imports
@@ -20,9 +24,14 @@ if 'DATABASE_URL' not in os.environ:
     os.environ['DATABASE_URL'] = f'postgresql://billsuser:billspass@{_test_db_host}:5432/bills_test'
 os.environ['FLASK_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 os.environ['FLASK_ENV'] = 'testing'
+os.environ['RATE_LIMIT_ENABLED'] = 'false'
 
 from app import create_app, create_access_token, JWT_SECRET_KEY
-from models import db, User, Database, Bill, Payment
+from models import (
+    db, User, Database, Bill, Payment,
+    OAuthAccount, TwoFAConfig, TwoFAChallenge, WebAuthnCredential,
+)
+from werkzeug.security import generate_password_hash
 
 
 @pytest.fixture(scope='session')
@@ -160,3 +169,104 @@ def auth_headers_with_db(admin_auth_headers, test_database):
     headers = admin_auth_headers.copy()
     headers['X-Database'] = test_database.name
     return headers
+
+
+# ============ OIDC / 2FA Fixtures ============
+
+@pytest.fixture(scope='function')
+def oauth_user(app, db_session):
+    """Create a user who registered via OIDC (no password)."""
+    user = User(
+        username='oauthuser',
+        role='admin',
+        email='oauthuser@test.com',
+        password_hash=None,
+        auth_provider='google',
+        password_change_required=False,
+        email_verified_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+@pytest.fixture(scope='function')
+def oauth_user_headers(app, oauth_user):
+    """Generate JWT auth headers for the OIDC-only user."""
+    token = create_access_token(oauth_user.id, oauth_user.role)
+    return {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+
+
+@pytest.fixture(scope='function')
+def oauth_account(app, db_session, admin_user):
+    """Create an OAuthAccount linked to admin_user."""
+    account = OAuthAccount(
+        user_id=admin_user.id,
+        provider='google',
+        provider_user_id='google-12345',
+        provider_email='admin@test.com',
+        profile_data=json.dumps({'name': 'Test Admin'}),
+    )
+    db_session.add(account)
+    db_session.commit()
+    db_session.refresh(account)
+    return account
+
+
+@pytest.fixture(scope='function')
+def twofa_enabled_user(app, db_session, admin_user):
+    """Enable email OTP 2FA for admin_user and return the config."""
+    config = TwoFAConfig(
+        user_id=admin_user.id,
+        email_otp_enabled=True,
+        recovery_codes_hash=json.dumps([
+            generate_password_hash('AAAA1111'),
+            generate_password_hash('BBBB2222'),
+        ]),
+    )
+    db_session.add(config)
+    db_session.commit()
+    db_session.refresh(config)
+    return config
+
+
+@pytest.fixture(scope='function')
+def twofa_challenge(app, db_session, admin_user, twofa_enabled_user):
+    """Create an active 2FA challenge for admin_user."""
+    session_token = 'test-2fa-session-token'
+    session_hash = hashlib.sha256(session_token.encode()).hexdigest()
+
+    challenge = TwoFAChallenge(
+        user_id=admin_user.id,
+        token_hash=session_hash,
+        challenge_type='pending',
+        expires_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + datetime.timedelta(hours=1),
+    )
+    db_session.add(challenge)
+    db_session.commit()
+    db_session.refresh(challenge)
+    return challenge, session_token
+
+
+@pytest.fixture(scope='function')
+def twofa_challenge_with_otp(app, db_session, admin_user, twofa_enabled_user):
+    """Create a 2FA challenge with an OTP code set."""
+    session_token = 'test-2fa-otp-session'
+    session_hash = hashlib.sha256(session_token.encode()).hexdigest()
+    otp_code = '123456'
+
+    challenge = TwoFAChallenge(
+        user_id=admin_user.id,
+        token_hash=session_hash,
+        challenge_type='email_otp',
+        otp_code_hash=generate_password_hash(otp_code),
+        expires_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + datetime.timedelta(hours=1),
+    )
+    db_session.add(challenge)
+    db_session.commit()
+    db_session.refresh(challenge)
+    return challenge, session_token, otp_code

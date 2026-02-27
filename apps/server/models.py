@@ -16,10 +16,12 @@ class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
+    password_hash = db.Column(db.String(256), nullable=True)  # Nullable for OIDC-only users
+    auth_provider = db.Column(db.String(20), default='local')  # local, google, apple, microsoft, oidc
     role = db.Column(db.String(20), default='user')
     password_change_required = db.Column(db.Boolean, default=False)
     change_token = db.Column(db.String(64), nullable=True)
+    change_token_expires = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # SaaS multi-tenancy: track which admin created this user (null for self-registered admins)
@@ -70,6 +72,9 @@ class User(db.Model):
         - New bcrypt/pbkdf2 hashes (werkzeug format)
         - Legacy SHA-256 hashes (for migration)
         """
+        # OIDC-only users have no password
+        if not self.password_hash:
+            return False
         # Check if this is a legacy SHA-256 hash (64 hex chars, no prefix)
         if len(self.password_hash) == 64 and not self.password_hash.startswith(('pbkdf2:', 'scrypt:')):
             # Legacy SHA-256 verification - intentionally kept for migration
@@ -613,3 +618,87 @@ class TelemetrySubmission(db.Model):
     __table_args__ = (
         db.Index('idx_instance_received', 'instance_id', 'received_at'),
     )
+
+
+class OAuthAccount(db.Model):
+    """Links OIDC provider accounts to BillManager users."""
+    __tablename__ = 'oauth_accounts'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    provider = db.Column(db.String(20), nullable=False)  # google, apple, microsoft, oidc
+    provider_user_id = db.Column(db.String(255), nullable=False)  # sub claim from ID token
+    provider_email = db.Column(db.String(255), nullable=True)
+    profile_data = db.Column(db.Text, nullable=True)  # JSON string
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user = db.relationship('User', backref=db.backref('oauth_accounts', lazy=True, cascade='all, delete-orphan'))
+
+    __table_args__ = (
+        db.UniqueConstraint('provider', 'provider_user_id', name='uq_oauth_provider_user'),
+    )
+
+
+class TwoFAConfig(db.Model):
+    """Per-user 2FA configuration."""
+    __tablename__ = 'twofa_config'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
+    email_otp_enabled = db.Column(db.Boolean, default=False)
+    passkey_enabled = db.Column(db.Boolean, default=False)
+    recovery_codes_hash = db.Column(db.Text, nullable=True)  # JSON array of bcrypt hashes
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user = db.relationship('User', backref=db.backref('twofa_config', uselist=False, cascade='all, delete-orphan'))
+
+    @property
+    def is_enabled(self):
+        return self.email_otp_enabled or self.passkey_enabled
+
+
+class TwoFAChallenge(db.Model):
+    """Short-lived session tokens for 2FA verification."""
+    __tablename__ = 'twofa_challenges'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    token_hash = db.Column(db.String(64), nullable=False, unique=True)  # SHA-256 hash
+    challenge_type = db.Column(db.String(20), nullable=False)  # email_otp, passkey
+    otp_code_hash = db.Column(db.String(256), nullable=True)  # bcrypt hash of email OTP code
+    attempts = db.Column(db.Integer, default=0)
+    max_attempts = db.Column(db.Integer, default=5)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user = db.relationship('User', backref=db.backref('twofa_challenges', lazy=True, cascade='all, delete-orphan'))
+
+    @property
+    def is_expired(self):
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        expires = self.expires_at.replace(tzinfo=None) if self.expires_at.tzinfo else self.expires_at
+        return now > expires
+
+    @property
+    def is_valid(self):
+        return not self.is_expired and not self.used and self.attempts < self.max_attempts
+
+
+class WebAuthnCredential(db.Model):
+    """Stored passkeys for WebAuthn authentication."""
+    __tablename__ = 'webauthn_credentials'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    credential_id = db.Column(db.Text, nullable=False, unique=True)  # base64url encoded
+    public_key = db.Column(db.Text, nullable=False)  # base64url encoded
+    sign_count = db.Column(db.Integer, default=0)
+    device_name = db.Column(db.String(100), nullable=True)
+    transports = db.Column(db.Text, nullable=True)  # JSON array of transport hints
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    last_used_at = db.Column(db.DateTime, nullable=True)
+
+    # Relationships
+    user = db.relationship('User', backref=db.backref('webauthn_credentials', lazy=True, cascade='all, delete-orphan'))

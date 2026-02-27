@@ -5,12 +5,15 @@ import { TokenStorage } from '../utils/tokenStorage';
 const api = axios.create({
   baseURL: '/api/v2',
   timeout: 10000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-cache, no-store, must-revalidate',
     'Pragma': 'no-cache',
   },
 });
+
+let refreshInFlight: Promise<string | null> | null = null;
 
 // Request interceptor - add JWT token and database header
 api.interceptors.request.use(
@@ -89,45 +92,58 @@ function getErrorMessage(error: AxiosError): string {
   }
 }
 
+const tryRefreshAccessToken = async (): Promise<string | null> => {
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+
+  refreshInFlight = (async () => {
+    try {
+      const response = await axios.post('/api/v2/auth/refresh', {}, { withCredentials: true });
+      if (response.data.success && response.data.data?.access_token) {
+        const nextAccessToken = response.data.data.access_token as string;
+        TokenStorage.setTokens(nextAccessToken);
+        return nextAccessToken;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
+};
+
 // Response interceptor - handle errors and automatic token refresh
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+    const url = originalRequest?.url || '';
+    const isAuthRequest = url.includes('/auth/login') || url.includes('/auth/refresh');
 
     // Log errors in development
     if (import.meta.env.DEV) {
       console.error('API Error:', error.config?.method?.toUpperCase(), error.config?.url, error.response?.status);
     }
 
-    // Automatic token refresh on 401
-    if (error.response?.status === 401 && !originalRequest?._retry) {
+    // Automatic token refresh on 401 (skip auth endpoints)
+    if (error.response?.status === 401 && !originalRequest?._retry && !isAuthRequest) {
       originalRequest._retry = true;
-
-      const refreshToken = TokenStorage.getRefreshToken();
-      if (refreshToken) {
-        try {
-          const response = await axios.post('/api/v2/auth/refresh', {
-            refresh_token: refreshToken,
-          });
-
-          if (response.data.success && response.data.data?.access_token) {
-            // Update access token, keep same refresh token
-            TokenStorage.setTokens(response.data.data.access_token, refreshToken);
-
-            // Retry original request with new token
-            if (originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${response.data.data.access_token}`;
-            }
-            return api(originalRequest);
-          }
-        } catch (refreshError) {
-          // Token refresh failed - clear tokens and redirect to login
-          TokenStorage.clearTokens();
-          window.location.href = '/login';
-          return Promise.reject(refreshError);
+      const refreshedAccessToken = await tryRefreshAccessToken();
+      if (refreshedAccessToken) {
+        // Retry original request with new token
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${refreshedAccessToken}`;
         }
+        return api(originalRequest);
       }
+
+      // Token refresh failed - clear access token/database and redirect to login
+      TokenStorage.clearTokens();
+      window.location.href = '/login';
     }
 
     // Return user-friendly error
@@ -163,6 +179,7 @@ export interface User {
   role: 'admin' | 'user';
   email?: string | null;
   is_account_owner?: boolean;
+  has_password?: boolean;
 }
 
 export interface Database {
@@ -252,9 +269,9 @@ export interface MeResponse {
 export const login = async (username: string, password: string): Promise<LoginResponse> => {
   const response = await unwrap(api.post<ApiResponse<LoginResponse>>('/auth/login', { username, password }));
 
-  // Store JWT tokens in localStorage
-  if (response.access_token && response.refresh_token) {
-    TokenStorage.setTokens(response.access_token, response.refresh_token);
+  // Store access token in memory. Refresh token is kept in HttpOnly cookie by backend.
+  if (response.access_token) {
+    TokenStorage.setTokens(response.access_token);
 
     // Set first database as default
     if (response.databases && response.databases.length > 0) {
@@ -267,17 +284,22 @@ export const login = async (username: string, password: string): Promise<LoginRe
 
 export const logout = async (): Promise<void> => {
   try {
-    const refreshToken = TokenStorage.getRefreshToken();
-    if (refreshToken) {
-      await api.post('/auth/logout', { refresh_token: refreshToken });
-    }
+    await api.post('/auth/logout');
   } finally {
     TokenStorage.clearTokens();
   }
 };
 
+export const refreshSession = async (): Promise<boolean> => {
+  const refreshedAccessToken = await tryRefreshAccessToken();
+  return Boolean(refreshedAccessToken);
+};
+
 export const getMe = () =>
   unwrap(api.get<ApiResponse<MeResponse>>('/me'));
+
+export const deleteMyAccount = (payload: { password?: string; confirm?: boolean }) =>
+  unwrap(api.delete<ApiResponse<{ message: string }>>('/account', { data: payload }));
 
 export const changePassword = (
   user_id: number,
@@ -477,6 +499,9 @@ export interface AppConfig {
   registration_enabled: boolean;
   email_enabled: boolean;
   email_verification_required: boolean;
+  oauth_providers?: { id: string; display_name: string; icon: string }[];
+  twofa_enabled?: boolean;
+  passkeys_enabled?: boolean;
 }
 
 export interface AppConfigResponse {
@@ -737,5 +762,204 @@ export const getShareInviteDetails = (token: string) =>
 // Accept share invitation by token (requires login)
 export const acceptShareByToken = (token: string) =>
   unwrap(api.post<ApiResponse<{ message: string; share_id: number }>>('/share/accept-by-token', { token }));
+
+// ============ OIDC / OAuth API ============
+
+export interface OAuthProvider {
+  id: string;
+  display_name: string;
+  icon: string;
+}
+
+export interface OAuthAccount {
+  id: number;
+  provider: string;
+  provider_email: string | null;
+  created_at: string | null;
+}
+
+export const getOAuthProviders = () =>
+  unwrap(api.get<ApiResponse<OAuthProvider[]>>('/auth/oauth/providers'));
+
+export const getOAuthAuthorizeUrl = (provider: string, flow: 'login' | 'link' = 'login') =>
+  unwrap(api.get<ApiResponse<{ auth_url: string; state: string }>>(`/auth/oauth/${provider}/authorize?flow=${flow}`));
+
+export interface OAuthCallbackResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: string;
+  user: User & { is_new_user?: boolean };
+  databases: Database[];
+}
+
+export const oauthCallback = async (provider: string, code: string, state: string, persistSession = true): Promise<OAuthCallbackResponse> => {
+  const response = await api.post<ApiResponse<OAuthCallbackResponse>>(
+    `/auth/oauth/${provider}/callback`,
+    { code, state }
+  );
+
+  // Handle 2FA required (403 with twofa_required)
+  const apiResponse = response.data;
+  if (!apiResponse.success && (apiResponse as unknown as Record<string, unknown>).twofa_required) {
+    throw new TwoFARequiredError(apiResponse as unknown as TwoFARequiredResponse);
+  }
+
+  if (!apiResponse.success) {
+    throw new Error(apiResponse.error || 'OAuth callback failed');
+  }
+
+  const result = apiResponse.data as OAuthCallbackResponse;
+
+  // Store access token in memory. Refresh token stays in HttpOnly cookie.
+  if (persistSession && result.access_token) {
+    TokenStorage.setTokens(result.access_token);
+    if (result.databases?.length > 0) {
+      TokenStorage.setCurrentDatabase(result.databases[0].name);
+    }
+  }
+
+  return result;
+};
+
+export const getOAuthAccounts = () =>
+  unwrap(api.get<ApiResponse<OAuthAccount[]>>('/auth/oauth/accounts'));
+
+export const unlinkOAuthProvider = (provider: string) =>
+  unwrap(api.delete<ApiResponse<{ message: string }>>(`/auth/oauth/${provider}`));
+
+// ============ Two-Factor Authentication API ============
+
+export interface TwoFAStatus {
+  enabled: boolean;
+  email_otp_enabled: boolean;
+  passkey_enabled: boolean;
+  passkeys: Array<{
+    id: number;
+    device_name: string;
+    created_at: string | null;
+    last_used_at: string | null;
+  }>;
+  has_recovery_codes: boolean;
+}
+
+export interface TwoFARequiredResponse {
+  success: false;
+  twofa_required: true;
+  twofa_session_token: string;
+  twofa_methods: string[];
+}
+
+export class TwoFARequiredError extends Error {
+  public response: TwoFARequiredResponse;
+  constructor(response: TwoFARequiredResponse) {
+    super('2FA verification required');
+    this.name = 'TwoFARequiredError';
+    this.response = response;
+  }
+}
+
+export const get2FAStatus = () =>
+  unwrap(api.get<ApiResponse<TwoFAStatus>>('/auth/2fa/status'));
+
+export const setup2FAEmail = () =>
+  unwrap(api.post<ApiResponse<{ message: string; setup_token: string }>>('/auth/2fa/setup/email'));
+
+export const confirm2FAEmail = (setup_token: string, code: string) =>
+  unwrap(api.post<ApiResponse<{ message: string; recovery_codes: string[] | null }>>('/auth/2fa/setup/email/confirm', { setup_token, code }));
+
+export const getRecoveryCodes = () =>
+  unwrap(api.get<ApiResponse<{ recovery_codes: string[] }>>('/auth/2fa/recovery-codes'));
+
+export const getPasskeyRegistrationOptions = () =>
+  unwrap(api.post<ApiResponse<{ options: Record<string, unknown>; registration_token: string }>>('/auth/2fa/setup/passkey/options'));
+
+export const registerPasskey = (registration_token: string, credential: Record<string, unknown>, device_name: string) =>
+  unwrap(api.post<ApiResponse<{ message: string; credential_id: number; device_name: string; recovery_codes: string[] | null }>>('/auth/2fa/setup/passkey/register', { registration_token, credential, device_name }));
+
+export const listPasskeys = () =>
+  unwrap(api.get<ApiResponse<Array<{ id: number; device_name: string; created_at: string | null; last_used_at: string | null }>>>('/auth/2fa/setup/passkeys'));
+
+export const deletePasskey = (passkeyId: number) =>
+  unwrap(api.delete<ApiResponse<{ message: string }>>(`/auth/2fa/setup/passkey/${passkeyId}`));
+
+export const disable2FA = (password: string) =>
+  unwrap(api.post<ApiResponse<{ message: string }>>('/auth/2fa/disable', { password }));
+
+export const request2FAChallenge = (session_token: string, method: string) =>
+  unwrap(api.post<ApiResponse<{ message: string }>>('/auth/2fa/challenge', { session_token, method }));
+
+export const getPasskeyAuthOptions = (session_token: string) =>
+  unwrap(api.post<ApiResponse<{ options: Record<string, unknown> }>>('/auth/2fa/verify/passkey/options', { session_token }));
+
+export interface TwoFAVerifyResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: string;
+  user: User;
+  databases: Database[];
+}
+
+export const verify2FA = async (session_token: string, method: string, payload: Record<string, unknown>): Promise<TwoFAVerifyResponse> => {
+  const response = await unwrap(
+    api.post<ApiResponse<TwoFAVerifyResponse>>('/auth/2fa/verify', {
+      session_token,
+      method,
+      ...payload,
+    })
+  );
+
+  // Store access token in memory. Refresh token stays in HttpOnly cookie.
+  if (response.access_token) {
+    TokenStorage.setTokens(response.access_token);
+    if (response.databases?.length > 0) {
+      TokenStorage.setCurrentDatabase(response.databases[0].name);
+    }
+  }
+
+  return response;
+};
+
+// Override login to handle 2FA required response
+const originalLogin = login;
+export { originalLogin };
+
+// Wrap the existing login to detect 2FA
+export const loginWith2FA = async (username: string, password: string): Promise<LoginResponse | TwoFARequiredResponse> => {
+  try {
+    const response = await api.post<ApiResponse<LoginResponse>>('/auth/login', { username, password });
+    const apiResponse = response.data;
+
+    // Check for 2FA required (comes as 403 with specific fields)
+    if (!apiResponse.success && (apiResponse as unknown as Record<string, unknown>).twofa_required) {
+      return apiResponse as unknown as TwoFARequiredResponse;
+    }
+
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.error || 'Login failed');
+    }
+
+    const result = apiResponse.data as LoginResponse;
+
+    // Store access token in memory. Refresh token stays in HttpOnly cookie.
+    if (result.access_token) {
+      TokenStorage.setTokens(result.access_token);
+      if (result.databases?.length > 0) {
+        TokenStorage.setCurrentDatabase(result.databases[0].name);
+      }
+    }
+
+    return result;
+  } catch (error: unknown) {
+    // Axios interceptor converts 403 to error, check if it's a 2FA response
+    const axiosErr = error as { originalError?: { response?: { data?: Record<string, unknown> } } };
+    const responseData = axiosErr.originalError?.response?.data;
+    if (responseData && responseData.twofa_required) {
+      return responseData as unknown as TwoFARequiredResponse;
+    }
+    throw error;
+  }
+};
 
 export default api;

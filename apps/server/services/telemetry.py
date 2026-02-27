@@ -369,14 +369,19 @@ class TelemetryCollector:
         try:
             logger.info(f"Sending telemetry to {self.telemetry_url}")
 
+            headers = {
+                'Content-Type': 'application/json',
+                'User-Agent': f'BillManager/{metrics.get("version", "unknown")}',
+            }
+            api_key = os.environ.get('TELEMETRY_API_KEY')
+            if api_key:
+                headers['X-Telemetry-Api-Key'] = api_key
+
             response = requests.post(
                 self.telemetry_url,
                 json=metrics,
                 timeout=10,
-                headers={
-                    'Content-Type': 'application/json',
-                    'User-Agent': f'BillManager/{metrics.get("version", "unknown")}',
-                }
+                headers=headers
             )
 
             if response.status_code == 200:

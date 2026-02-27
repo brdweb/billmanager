@@ -38,6 +38,10 @@ marketing-plan.md
 # Test files
 test_*.py
 
+# Coverage outputs
+.coverage
+coverage.xml
+
 # Marketing site is in separate repo (git@git.brdweb.com:brdweb/billmanager-marketing)
 marketing/
 
@@ -56,6 +60,13 @@ setup_kuma.py
 
 # Testing status (local only)
 TESTING_STATUS.md
+
+# Store submission (sensitive internal docs)
+STORE-SUBMISSION.md
+
+# Local agent instructions / tool state
+AGENTS.md
+.playwright-mcp/
 
 # Root package-lock (monorepo uses per-app locks)
 /package-lock.json

@@ -40,8 +40,20 @@ BIND_HOST="0.0.0.0"
 # Detect LAN IP for reporting
 LAN_IP=$(hostname -I | awk '{print $1}')
 
+# Prevent concurrent runs (Phase 6 pytest wipes the test DB which breaks Playwright)
+LOCKFILE="/tmp/billmanager-test-e2e.lock"
+if [ -f "$LOCKFILE" ]; then
+    OLD_PID=$(cat "$LOCKFILE" 2>/dev/null)
+    if kill -0 "$OLD_PID" 2>/dev/null; then
+        echo -e "${RED}Another test-e2e.sh is running (PID: $OLD_PID). Kill it first or wait.${NC}"
+        exit 1
+    fi
+fi
+echo $$ > "$LOCKFILE"
+
 # Cleanup function
 cleanup() {
+    rm -f "$LOCKFILE"
     echo -e "\n${YELLOW}Cleaning up test processes...${NC}"
 
     # Kill Flask backend
@@ -56,9 +68,11 @@ cleanup() {
         echo "Stopped Vite frontend (PID: $VITE_PID)"
     fi
 
-    # Kill any remaining processes on our ports
+    # Kill any remaining processes on our ports (include nearby ports Vite might auto-increment to)
     lsof -ti:$FLASK_PORT | xargs kill -9 2>/dev/null || true
-    lsof -ti:$VITE_PORT | xargs kill -9 2>/dev/null || true
+    for port in $VITE_PORT $((VITE_PORT+1)) $((VITE_PORT+2)) $((VITE_PORT+3)); do
+        lsof -ti:$port | xargs kill -9 2>/dev/null || true
+    done
 }
 
 # Set trap to cleanup on exit
@@ -450,10 +464,16 @@ cat >> "$REPORT_FILE" << EOF
 
 EOF
 
-# Start Vite dev server bound to 0.0.0.0 for LAN access
+# Ensure Vite port is free before starting (kill stale processes from previous runs)
+for port in $VITE_PORT $((VITE_PORT+1)) $((VITE_PORT+2)) $((VITE_PORT+3)); do
+    lsof -ti:$port | xargs kill -9 2>/dev/null || true
+done
+sleep 1
+
+# Start Vite dev server bound to 0.0.0.0 for LAN access (--strictPort prevents auto-incrementing)
 echo -e "${YELLOW}Starting Vite dev server on $BIND_HOST:$VITE_PORT...${NC}"
 cd "$WEB_DIR"
-npx vite --host $BIND_HOST --port $VITE_PORT > "$TEST_OUTPUT_DIR/vite.log" 2>&1 &
+npx vite --host $BIND_HOST --port $VITE_PORT --strictPort > "$TEST_OUTPUT_DIR/vite.log" 2>&1 &
 VITE_PID=$!
 echo "Vite PID: $VITE_PID"
 
@@ -487,48 +507,53 @@ mkdir -p "$WEB_DIR/tests/e2e"
 # Run Playwright tests
 echo -e "${YELLOW}Running comprehensive Playwright test suite...${NC}"
 echo "Test suites: auth, bills, payments, shared-bills, admin, navigation, ui-ux,"
-echo "             dashboard, calendar, analytics, sidebar-nav"
+echo "             dashboard, calendar, analytics, sidebar-nav,"
+echo "             oauth-ui, security-settings, two-factor"
 echo ""
 cd "$WEB_DIR"
 
-if npx playwright test --reporter=list 2>&1 | tee "$TEST_OUTPUT_DIR/playwright.log"; then
+npx playwright test --reporter=list > "$TEST_OUTPUT_DIR/playwright.log" 2>&1
+PW_EXIT=$?
+
+if [ $PW_EXIT -eq 0 ]; then
     echo -e "${GREEN}Playwright tests completed${NC}"
-
-    # Parse test results from Playwright summary line (e.g., "5 skipped\n42 passed")
-    PASSED=$(grep -oP '\d+(?= passed)' "$TEST_OUTPUT_DIR/playwright.log" | tail -1)
-    FAILED=$(grep -oP '\d+(?= failed)' "$TEST_OUTPUT_DIR/playwright.log" | tail -1)
-    SKIPPED=$(grep -oP '\d+(?= skipped)' "$TEST_OUTPUT_DIR/playwright.log" | tail -1)
-
-    # Default to 0 if not found
-    PASSED=${PASSED:-0}
-    FAILED=${FAILED:-0}
-    SKIPPED=${SKIPPED:-0}
-
-    echo "- Playwright tests passed: $PASSED" >> "$REPORT_FILE"
-    if [ "$FAILED" -gt 0 ] 2>/dev/null; then
-        echo "- FAIL: Playwright tests failed: $FAILED" >> "$REPORT_FILE"
-    fi
-    if [ "$SKIPPED" -gt 0 ] 2>/dev/null; then
-        echo "- WARN: Playwright tests skipped: $SKIPPED (expected - conditional tests)" >> "$REPORT_FILE"
-    fi
-
-    echo "" >> "$REPORT_FILE"
-    echo "**Test Coverage**:" >> "$REPORT_FILE"
-    echo "- Authentication flows (login, logout, session persistence)" >> "$REPORT_FILE"
-    echo "- Bill management (CRUD operations, search, sort)" >> "$REPORT_FILE"
-    echo "- Payment management (recording, editing, history)" >> "$REPORT_FILE"
-    echo "- Shared bills (sharing, accepting, editing splits)" >> "$REPORT_FILE"
-    echo "- Admin features (users, databases, invitations)" >> "$REPORT_FILE"
-    echo "- Navigation and database isolation" >> "$REPORT_FILE"
-    echo "- UI/UX (forms, validation, modals, accessibility)" >> "$REPORT_FILE"
-    echo "- **Dashboard page (stat cards, upcoming bills, overdue alerts)**" >> "$REPORT_FILE"
-    echo "- **Calendar page (month navigation, view toggles, day details)**" >> "$REPORT_FILE"
-    echo "- **Analytics page (pie chart, YoY comparison, yearly data)**" >> "$REPORT_FILE"
-    echo "- **Sidebar navigation (all links, active state, page flow)**" >> "$REPORT_FILE"
 else
-    echo -e "${RED}Playwright tests failed${NC}"
-    echo "- FAIL: Playwright test suite failed - see playwright.log" >> "$REPORT_FILE"
+    echo -e "${RED}Playwright tests had failures (exit code: $PW_EXIT)${NC}"
 fi
+
+# Parse test results from Playwright summary line (e.g., "5 skipped\n42 passed")
+PASSED=$(grep -oP '\d+(?= passed)' "$TEST_OUTPUT_DIR/playwright.log" | tail -1)
+FAILED=$(grep -oP '\d+(?= failed)' "$TEST_OUTPUT_DIR/playwright.log" | tail -1)
+SKIPPED=$(grep -oP '\d+(?= skipped)' "$TEST_OUTPUT_DIR/playwright.log" | tail -1)
+
+# Default to 0 if not found
+PASSED=${PASSED:-0}
+FAILED=${FAILED:-0}
+SKIPPED=${SKIPPED:-0}
+
+echo "  Passed: $PASSED | Failed: $FAILED | Skipped: $SKIPPED"
+
+echo "- Playwright tests passed: $PASSED" >> "$REPORT_FILE"
+if [ "$FAILED" -gt 0 ] 2>/dev/null; then
+    echo "- FAIL: Playwright tests failed: $FAILED" >> "$REPORT_FILE"
+fi
+if [ "$SKIPPED" -gt 0 ] 2>/dev/null; then
+    echo "- WARN: Playwright tests skipped: $SKIPPED (expected - conditional tests)" >> "$REPORT_FILE"
+fi
+
+echo "" >> "$REPORT_FILE"
+echo "**Test Coverage**:" >> "$REPORT_FILE"
+echo "- Authentication flows (login, logout, session persistence)" >> "$REPORT_FILE"
+echo "- Bill management (CRUD operations, search, sort)" >> "$REPORT_FILE"
+echo "- Payment management (recording, editing, history)" >> "$REPORT_FILE"
+echo "- Shared bills (sharing, accepting, editing splits)" >> "$REPORT_FILE"
+echo "- Admin features (users, databases, invitations)" >> "$REPORT_FILE"
+echo "- Navigation and database isolation" >> "$REPORT_FILE"
+echo "- UI/UX (forms, validation, modals, accessibility)" >> "$REPORT_FILE"
+echo "- **Dashboard page (stat cards, upcoming bills, overdue alerts)**" >> "$REPORT_FILE"
+echo "- **Calendar page (month navigation, view toggles, day details)**" >> "$REPORT_FILE"
+echo "- **Analytics page (pie chart, YoY comparison, yearly data)**" >> "$REPORT_FILE"
+echo "- **Sidebar navigation (all links, active state, page flow)**" >> "$REPORT_FILE"
 
 echo ""
 
@@ -751,6 +776,130 @@ fi
 echo ""
 
 # ============================================================================
+# PHASE 6: OIDC + 2FA BACKEND TESTS (pytest)
+# ============================================================================
+
+echo -e "${BLUE}Phase 6: OIDC + 2FA Backend Tests (pytest)${NC}"
+echo -e "${BLUE}============================================${NC}\n"
+
+cat >> "$REPORT_FILE" << EOF
+
+### Phase 6: OIDC + 2FA Backend Tests
+
+EOF
+
+# Run the new OIDC/2FA pytest test files against the already-running Flask
+echo -n "Running: pytest test_config.py test_migrations.py test_oauth.py test_2fa.py... "
+cd "$SERVER_DIR"
+PYTEST_OUTPUT=$(ENABLE_2FA=true ENABLE_PASSKEYS=true DATABASE_URL="$DATABASE_URL" \
+    python3 -m pytest tests/test_config.py tests/test_migrations.py tests/test_oauth.py tests/test_2fa.py \
+    -v --tb=short 2>&1) || true
+
+PYTEST_PASSED=$(echo "$PYTEST_OUTPUT" | grep -oP '\d+ passed' | head -1 | grep -oP '\d+' || echo "0")
+PYTEST_FAILED=$(echo "$PYTEST_OUTPUT" | grep -oP '\d+ failed' | head -1 | grep -oP '\d+' || echo "0")
+PYTEST_ERRORS=$(echo "$PYTEST_OUTPUT" | grep -oP '\d+ error' | head -1 | grep -oP '\d+' || echo "0")
+
+if [ "$PYTEST_FAILED" = "0" ] && [ "$PYTEST_ERRORS" = "0" ] && [ "$PYTEST_PASSED" != "0" ]; then
+    echo -e "${GREEN}PASS ($PYTEST_PASSED passed)${NC}"
+    echo "- PASS: OIDC/2FA pytest suite: $PYTEST_PASSED passed, $PYTEST_FAILED failed" >> "$REPORT_FILE"
+else
+    echo -e "${RED}FAIL ($PYTEST_PASSED passed, $PYTEST_FAILED failed, $PYTEST_ERRORS errors)${NC}"
+    echo "- FAIL: OIDC/2FA pytest suite: $PYTEST_PASSED passed, $PYTEST_FAILED failed, $PYTEST_ERRORS errors" >> "$REPORT_FILE"
+    # Save pytest output for debugging
+    echo "$PYTEST_OUTPUT" > "$TEST_OUTPUT_DIR/pytest-oidc-2fa.log"
+    echo "  See $TEST_OUTPUT_DIR/pytest-oidc-2fa.log for details"
+fi
+
+# Test OIDC/2FA API endpoints against running Flask
+echo -n "Testing: Public config includes 2FA flags... "
+CONFIG_RESP=$(curl -s http://localhost:$FLASK_PORT/api/v2/config)
+CONFIG_CHECK=$(echo "$CONFIG_RESP" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+d = data.get('data', {})
+has_2fa = 'twofa_enabled' in d
+has_passkeys = 'passkeys_enabled' in d
+has_oauth = 'oauth_providers' in d
+print('OK' if (has_2fa and has_passkeys and has_oauth) else 'FAIL')
+" 2>/dev/null)
+if [ "$CONFIG_CHECK" = "OK" ]; then
+    echo -e "${GREEN}PASS${NC}"
+    echo "- PASS: Public config includes twofa_enabled, passkeys_enabled, oauth_providers" >> "$REPORT_FILE"
+else
+    echo -e "${RED}FAIL${NC}"
+    echo "- FAIL: Public config missing 2FA/OAuth fields" >> "$REPORT_FILE"
+fi
+
+echo -n "Testing: OAuth providers endpoint... "
+PROVIDERS_RESP=$(curl -s http://localhost:$FLASK_PORT/api/v2/auth/oauth/providers)
+PROVIDERS_CHECK=$(echo "$PROVIDERS_RESP" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print('OK' if data.get('success') == True and isinstance(data.get('data'), list) else 'FAIL')
+" 2>/dev/null)
+if [ "$PROVIDERS_CHECK" = "OK" ]; then
+    echo -e "${GREEN}PASS${NC}"
+    echo "- PASS: OAuth providers endpoint returns empty list (no providers configured)" >> "$REPORT_FILE"
+else
+    echo -e "${RED}FAIL${NC}"
+    echo "- FAIL: OAuth providers endpoint issue" >> "$REPORT_FILE"
+fi
+
+echo -n "Testing: 2FA status requires authentication... "
+TWOFA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$FLASK_PORT/api/v2/auth/2fa/status)
+if [ "$TWOFA_STATUS" = "401" ]; then
+    echo -e "${GREEN}PASS${NC}"
+    echo "- PASS: 2FA status endpoint requires authentication (401)" >> "$REPORT_FILE"
+else
+    echo -e "${RED}FAIL${NC}"
+    echo "- FAIL: 2FA status endpoint returned $TWOFA_STATUS instead of 401" >> "$REPORT_FILE"
+fi
+
+echo -n "Testing: OAuth callback rejects missing parameters... "
+CALLBACK_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"code":"test"}' \
+    http://localhost:$FLASK_PORT/api/v2/auth/oauth/google/callback)
+if [ "$CALLBACK_STATUS" = "400" ]; then
+    echo -e "${GREEN}PASS${NC}"
+    echo "- PASS: OAuth callback rejects missing state parameter (400)" >> "$REPORT_FILE"
+else
+    echo -e "${RED}FAIL${NC}"
+    echo "- FAIL: OAuth callback returned $CALLBACK_STATUS instead of 400" >> "$REPORT_FILE"
+fi
+
+# Verify new tables exist via the running database
+echo -n "Testing: OIDC/2FA migration tables exist... "
+TABLE_CHECK=$(python3 -c "
+import psycopg
+conn = psycopg.connect('$DATABASE_URL')
+cur = conn.cursor()
+cur.execute(\"\"\"
+    SELECT table_name FROM information_schema.tables
+    WHERE table_schema = 'public'
+    AND table_name IN ('oauth_accounts', 'twofa_config', 'twofa_challenges', 'webauthn_credentials')
+    ORDER BY table_name
+\"\"\")
+tables = [row[0] for row in cur.fetchall()]
+expected = ['oauth_accounts', 'twofa_challenges', 'twofa_config', 'webauthn_credentials']
+print('OK' if tables == expected else 'FAIL')
+conn.close()
+" 2>/dev/null)
+if [ "$TABLE_CHECK" = "OK" ]; then
+    echo -e "${GREEN}PASS${NC}"
+    echo "- PASS: All 4 OIDC/2FA tables exist (oauth_accounts, twofa_config, twofa_challenges, webauthn_credentials)" >> "$REPORT_FILE"
+else
+    echo -e "${RED}FAIL${NC}"
+    echo "- FAIL: OIDC/2FA migration tables missing" >> "$REPORT_FILE"
+fi
+
+echo ""
+
+# Note: Phase 7 (OIDC/2FA Playwright tests) was removed because Phase 3 already runs ALL
+# Playwright specs including oauth-ui, security-settings, and two-factor. Those tests
+# check the config endpoint and skip appropriately when 2FA/OIDC features are not enabled.
+
+# ============================================================================
 # GENERATE FINAL REPORT
 # ============================================================================
 
@@ -788,6 +937,18 @@ cat >> "$REPORT_FILE" << EOF
 - Stats yearly endpoint verified
 - Stats monthly-comparison endpoint verified
 - All-buckets mode verified
+
+**OIDC + 2FA Backend:**
+- pytest suite (config, migrations, OAuth, 2FA)
+- Public config includes 2FA/OAuth flags
+- OAuth providers endpoint functional
+- 2FA endpoints require authentication
+- Migration tables verified
+
+**Playwright (OIDC + 2FA specs included in Phase 3):**
+- OAuth UI rendering tests
+- Security settings page tests
+- Two-factor flow tests (skip when 2FA not enabled)
 
 ---
 
@@ -829,6 +990,7 @@ Login: admin / admin
 - **Build Log:** $TEST_OUTPUT_DIR/build.log
 - **Playwright Log:** $TEST_OUTPUT_DIR/playwright.log
 - **Playwright HTML Report:** $TEST_OUTPUT_DIR/playwright-report/index.html
+- **OIDC/2FA Pytest Log:** $TEST_OUTPUT_DIR/pytest-oidc-2fa.log (if failures)
 
 ---
 

@@ -1,12 +1,21 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import * as api from '../api/client';
 
+export interface OAuthProviderInfo {
+  id: string;
+  display_name: string;
+  icon: string;
+}
+
 export interface AppConfig {
   deployment_mode: 'saas' | 'self-hosted';
   billing_enabled: boolean;
   registration_enabled: boolean;
   email_enabled: boolean;
   email_verification_required: boolean;
+  oauth_providers?: OAuthProviderInfo[];
+  twofa_enabled?: boolean;
+  passkeys_enabled?: boolean;
 }
 
 interface ConfigContextType {
@@ -27,6 +36,9 @@ const defaultConfig: AppConfig = {
   registration_enabled: false,
   email_enabled: false,
   email_verification_required: false,
+  oauth_providers: [],
+  twofa_enabled: false,
+  passkeys_enabled: false,
 };
 
 const ConfigContext = createContext<ConfigContextType>({

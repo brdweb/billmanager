@@ -23,7 +23,7 @@ test.describe('Dashboard Page', () => {
       await expect(statSection).toBeVisible({ timeout: 10000 });
     } else {
       // At minimum, dashboard should show some numeric content
-      const hasNumbers = await page.locator('text=/\\$[\\d,]+|\\d+ bill/i').first().isVisible().catch(() => false);
+      const hasNumbers = await page.locator('text=/\\$[\\d,]+(?:\\.\\d{2})?|\\d+\\s*bills?/i').first().isVisible().catch(() => false);
       expect(hasNumbers).toBeTruthy();
     }
   });

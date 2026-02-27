@@ -26,6 +26,8 @@ import {
 } from '@tabler/icons-react';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
+import { SocialLoginButtons } from '../components/SocialLoginButtons';
+import { TwoFactorVerify } from './TwoFactorVerify';
 import * as api from '../api/client';
 
 function getPasswordStrength(password: string): number {
@@ -48,8 +50,9 @@ function getPasswordColor(strength: number): string {
 
 export function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, pending2FA } = useAuth();
   const { config } = useConfig();
+
   const [activeTab, setActiveTab] = useState<string | null>('login');
 
   // Check if registration is enabled (defaults to false if config not loaded)
@@ -72,6 +75,11 @@ export function Login() {
 
   const passwordStrength = getPasswordStrength(signupPassword);
 
+  // Show 2FA verification page if pending (must be after all hooks)
+  if (pending2FA) {
+    return <TwoFactorVerify />;
+  }
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -85,10 +93,11 @@ export function Login() {
     try {
       const result = await login(loginUsername, loginPassword);
       if (result.success) {
-        // Don't navigate if password change is required - modal will show on this page
-        if (!result.requirePasswordChange) {
+        // Don't navigate if password change or 2FA is required
+        if (!result.requirePasswordChange && !result.require2FA) {
           navigate('/');
         }
+        // If require2FA, the component will re-render with pending2FA and show TwoFactorVerify
       } else {
         setLoginError('Invalid credentials');
       }
@@ -247,6 +256,13 @@ export function Login() {
                   <Button type="submit" fullWidth loading={loginLoading} size="md">
                     Sign In
                   </Button>
+
+                  {config?.oauth_providers && config.oauth_providers.length > 0 && (
+                    <SocialLoginButtons
+                      providers={config.oauth_providers}
+                      onError={setLoginError}
+                    />
+                  )}
                 </Stack>
               </form>
             </Tabs.Panel>

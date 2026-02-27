@@ -1,39 +1,30 @@
-// Token storage utility for JWT authentication
-// Manages access tokens, refresh tokens, and current database selection
+// Token storage utility for JWT authentication.
+// Keeps access token in memory and database selection in localStorage.
 
-const ACCESS_TOKEN_KEY = 'billmanager_access_token';
-const REFRESH_TOKEN_KEY = 'billmanager_refresh_token';
 const CURRENT_DATABASE_KEY = 'billmanager_current_database';
+let accessTokenMemory: string | null = null;
 
 export const TokenStorage = {
   /**
-   * Store both access and refresh tokens
+   * Store access token in memory only.
+   * Refresh tokens are stored in secure HttpOnly cookies by the server.
    */
-  setTokens(accessToken: string, refreshToken: string): void {
-    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  setTokens(accessToken: string): void {
+    accessTokenMemory = accessToken;
   },
 
   /**
    * Get the current access token
    */
   getAccessToken(): string | null {
-    return localStorage.getItem(ACCESS_TOKEN_KEY);
-  },
-
-  /**
-   * Get the current refresh token
-   */
-  getRefreshToken(): string | null {
-    return localStorage.getItem(REFRESH_TOKEN_KEY);
+    return accessTokenMemory;
   },
 
   /**
    * Clear all tokens (logout)
    */
   clearTokens(): void {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    accessTokenMemory = null;
     localStorage.removeItem(CURRENT_DATABASE_KEY);
   },
 

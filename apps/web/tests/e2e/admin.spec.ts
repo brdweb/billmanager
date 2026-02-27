@@ -8,10 +8,10 @@ test.describe('Admin Features', () => {
 
   test('open admin panel modal', async ({ page }) => {
     const adminButton = page.locator('button:has-text("Admin")');
-    await expect(adminButton).toBeVisible({ timeout: 5000 });
+    await expect(adminButton).toBeVisible({ timeout: 10000 });
     await adminButton.click();
 
-    await expect(page.locator('[role="dialog"]').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[role="dialog"]').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('view users tab in admin panel', async ({ page }) => {

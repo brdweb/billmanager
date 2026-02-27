@@ -6,25 +6,17 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v3.8.1
+## 🎉 What's New in v4.0.0
 
-**Dashboard & Analytics Overhaul** - New Dashboard, Calendar, and Analytics pages with spending trends, interactive stat cards, and improved navigation.
+**Social Login & Two-Factor Authentication** - Sign in with Google, Apple, Microsoft, or any OIDC provider. Protect your account with email OTP or passkey-based two-factor authentication.
 
 ### Highlights
 
-- **Dashboard Page** - At-a-glance stat cards (Total Bills, Due This Week, Overdue, Monthly Total) with clickable navigation
-- **Calendar Page** - Multi-month calendar view with bill due date indicators
-- **Analytics Page** - Spending trends charts, account pie chart, year-over-year comparison, and yearly summary with labeled totals
-- **Filter Indicators** - Clear visual banner on Bills page when filters are active
-- **Improved Navigation** - Sidebar calendar and Upcoming Bills filters navigate directly to filtered Bills view
-- **Payment History** - Dedicated sidebar nav link and default 30-day date range
-
-### Bug Fixes
-
-- Fixed editing payments from All Payments page not saving changes
-- Fixed deleting payments not refreshing the list
-- Fixed yearly summary background too bright in dark mode
-- Fixed "Today" button text clipped on Calendar page
+- **Social Login (OIDC)** - Connect Google, Apple, Microsoft, or any OpenID Connect provider for one-click sign-in
+- **Two-Factor Authentication** - Email OTP and passkey (WebAuthn) support for account security
+- **Recovery Codes** - Backup access codes in case you lose your 2FA device
+- **Linked Accounts** - Manage connected OAuth providers from your Security Settings
+- **Security Hardened** - ID token signature verification, state replay protection, cryptographic OTP generation
 
 ---
 

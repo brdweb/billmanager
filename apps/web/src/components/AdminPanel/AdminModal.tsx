@@ -1,8 +1,12 @@
 import { useState } from 'react';
-import { Modal, Tabs } from '@mantine/core';
-import { IconUsers, IconFolders } from '@tabler/icons-react';
+import { Modal, Stack, Tabs } from '@mantine/core';
+import { IconUsers, IconFolders, IconShieldLock } from '@tabler/icons-react';
 import { UsersTab } from './UsersTab';
 import { DatabasesTab } from './DatabasesTab';
+import { TwoFactorSettings } from '../TwoFactorSettings';
+import { LinkedAccounts } from '../LinkedAccounts';
+import { AccountDangerZone } from '../AccountDangerZone';
+import { useConfig } from '../../context/ConfigContext';
 
 interface AdminModalProps {
   opened: boolean;
@@ -11,6 +15,8 @@ interface AdminModalProps {
 
 export function AdminModal({ opened, onClose }: AdminModalProps) {
   const [activeTab, setActiveTab] = useState<string | null>('users');
+  const { config } = useConfig();
+  const showSecurity = config?.twofa_enabled || (config?.oauth_providers && config.oauth_providers.length > 0);
 
   return (
     <Modal
@@ -28,6 +34,11 @@ export function AdminModal({ opened, onClose }: AdminModalProps) {
           <Tabs.Tab value="databases" leftSection={<IconFolders size={16} />}>
             Bill Groups
           </Tabs.Tab>
+          {showSecurity && (
+            <Tabs.Tab value="security" leftSection={<IconShieldLock size={16} />}>
+              Security
+            </Tabs.Tab>
+          )}
         </Tabs.List>
 
         <Tabs.Panel value="users" pt="md">
@@ -37,6 +48,16 @@ export function AdminModal({ opened, onClose }: AdminModalProps) {
         <Tabs.Panel value="databases" pt="md">
           <DatabasesTab />
         </Tabs.Panel>
+
+        {showSecurity && (
+          <Tabs.Panel value="security" pt="md">
+            <Stack gap="xl">
+              <TwoFactorSettings />
+              <LinkedAccounts />
+              <AccountDangerZone />
+            </Stack>
+          </Tabs.Panel>
+        )}
       </Tabs>
     </Modal>
   );
