@@ -6822,6 +6822,7 @@ def twofa_passkey_auth_options():
 
     from webauthn import generate_authentication_options, options_to_json
     from webauthn.helpers.structs import (
+        AuthenticatorTransport,
         PublicKeyCredentialDescriptor,
         UserVerificationRequirement,
     )
@@ -6841,10 +6842,18 @@ def twofa_passkey_auth_options():
 
     allow_creds = []
     for c in creds:
+        raw_transports = json.loads(c.transports) if c.transports else []
+        normalized_transports = []
+        for transport in raw_transports:
+            try:
+                normalized_transports.append(AuthenticatorTransport(transport))
+            except Exception:
+                continue
+
         allow_creds.append(
             PublicKeyCredentialDescriptor(
                 id=base64.urlsafe_b64decode(c.credential_id + "=="),
-                transports=json.loads(c.transports) if c.transports else [],
+                transports=normalized_transports,
             )
         )
 
