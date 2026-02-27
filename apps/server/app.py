@@ -6439,16 +6439,22 @@ def twofa_passkey_register():
             registration = RegistrationCredential.model_validate_json(payload_json)
         else:
             # Older webauthn versions use snake_case constructor args.
+            def _decode_b64url(value):
+                if not value:
+                    return b""
+                padded = value + "=" * ((4 - (len(value) % 4)) % 4)
+                return base64.urlsafe_b64decode(padded)
+
             registration = RegistrationCredential(
                 id=credential_payload.get("id"),
-                raw_id=credential_payload.get("rawId"),
+                raw_id=_decode_b64url(credential_payload.get("rawId")),
                 type=credential_payload.get("type"),
                 response={
-                    "client_data_json": credential_payload.get("response", {}).get(
-                        "clientDataJSON"
+                    "client_data_json": _decode_b64url(
+                        credential_payload.get("response", {}).get("clientDataJSON")
                     ),
-                    "attestation_object": credential_payload.get("response", {}).get(
-                        "attestationObject"
+                    "attestation_object": _decode_b64url(
+                        credential_payload.get("response", {}).get("attestationObject")
                     ),
                 },
             )
