@@ -18,6 +18,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from sqlalchemy import func, extract, desc, or_
+from sqlalchemy.exc import IntegrityError
 
 from models import db, User, Database, Bill, Payment, RefreshToken, Subscription, UserInvite, UserDevice, BillShare, ShareAuditLog, OAuthAccount, TwoFAConfig, TwoFAChallenge, WebAuthnCredential, user_database_access
 from migration import migrate_sqlite_to_pg
@@ -5228,7 +5229,16 @@ def twofa_passkey_register():
         )
     except Exception as e:
         logger.error(f"Passkey registration verification failed: {e}")
-        return jsonify({'success': False, 'error': 'Passkey registration failed'}), 400
+        error_text = str(e).lower()
+        if 'origin' in error_text:
+            message = 'Passkey origin mismatch. Check WEBAUTHN_ORIGIN.'
+        elif 'rp id' in error_text or 'rp_id' in error_text:
+            message = 'Passkey RP ID mismatch. Check WEBAUTHN_RP_ID.'
+        elif 'challenge' in error_text:
+            message = 'Passkey challenge expired. Please try again.'
+        else:
+            message = 'Passkey registration failed'
+        return jsonify({'success': False, 'error': message}), 400
 
     # Store the credential
     cred_id_b64 = base64.urlsafe_b64encode(verification.credential_id).rstrip(b'=').decode()
@@ -5253,7 +5263,11 @@ def twofa_passkey_register():
 
     # Mark challenge as used
     challenge.used = True
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'This passkey is already registered'}), 409
 
     # Generate recovery codes if not already present
     recovery_codes = None
