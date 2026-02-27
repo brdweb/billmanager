@@ -778,7 +778,7 @@ def login():
             db.session.commit()
             return jsonify(
                 {
-                    "password_change_required": True,
+                    "password_change_required": True,  # nosec B105
                     "user_id": user.id,
                     "change_token": token,
                     "role": user.role,
@@ -6843,12 +6843,12 @@ def twofa_passkey_auth_options():
     allow_creds = []
     for c in creds:
         raw_transports = json.loads(c.transports) if c.transports else []
-        normalized_transports = []
-        for transport in raw_transports:
-            try:
-                normalized_transports.append(AuthenticatorTransport(transport))
-            except Exception:
-                continue
+        valid_transport_values = {t.value for t in AuthenticatorTransport}
+        normalized_transports = [
+            AuthenticatorTransport(transport)
+            for transport in raw_transports
+            if transport in valid_transport_values
+        ]
 
         allow_creds.append(
             PublicKeyCredentialDescriptor(
@@ -8884,7 +8884,10 @@ def create_app():
                 print("\n" + "=" * 60, file=sys.stderr)
                 print("🔐 INITIAL ADMIN CREDENTIALS (save these now!)", file=sys.stderr)
                 print(f"   Username: admin", file=sys.stderr)
-                print(f"   Password: {initial_password}", file=sys.stderr)
+                print(
+                    "   Password: [REDACTED - read from ADMIN_INITIAL_PASSWORD env]",
+                    file=sys.stderr,
+                )
                 print(
                     "   You will be required to change this password on first login.",
                     file=sys.stderr,
