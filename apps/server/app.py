@@ -5846,6 +5846,11 @@ def oauth_callback(provider):
 
         # Validate issuer
         expected_issuer = metadata.get("issuer")
+        # Microsoft "common" discovery returns literal {tenantid} placeholder;
+        # real tokens contain the actual tenant GUID in the issuer claim
+        if expected_issuer and "{tenantid}" in expected_issuer:
+            token_tid = claims.get("tid", "")
+            expected_issuer = expected_issuer.replace("{tenantid}", token_tid)
         if claims.get("iss") != expected_issuer:
             return jsonify({"success": False, "error": "ID token issuer mismatch"}), 401
 
@@ -5870,8 +5875,62 @@ def oauth_callback(provider):
         logger.error(f"ID token verification failed for {provider}: {e}")
         return jsonify({"success": False, "error": "Failed to verify ID token"}), 502
 
-    email_verified_claim = claims.get("email_verified")
-    if claims.get("email") is not None:
+    # For generic OIDC: use configurable claim names
+    if provider == "oidc":
+        from config import (
+            OAUTH_OIDC_EMAIL_CLAIM,
+            OAUTH_OIDC_USERNAME_CLAIM,
+            OAUTH_OIDC_NAME_CLAIM,
+        )
+
+        # Map custom claim names to standard names used downstream
+        if OAUTH_OIDC_EMAIL_CLAIM != "email" and claims.get(OAUTH_OIDC_EMAIL_CLAIM):
+            claims.setdefault("email", claims[OAUTH_OIDC_EMAIL_CLAIM])
+        if OAUTH_OIDC_USERNAME_CLAIM != "preferred_username" and claims.get(
+            OAUTH_OIDC_USERNAME_CLAIM
+        ):
+            claims.setdefault("preferred_username", claims[OAUTH_OIDC_USERNAME_CLAIM])
+        if OAUTH_OIDC_NAME_CLAIM != "name" and claims.get(OAUTH_OIDC_NAME_CLAIM):
+            claims.setdefault("name", claims[OAUTH_OIDC_NAME_CLAIM])
+
+    # Fetch userinfo if ID token lacks email (common with Authelia, some Keycloak configs)
+    if not claims.get("email"):
+        userinfo_endpoint = metadata.get("userinfo_endpoint")
+        access_token = token_json.get("access_token")
+        if userinfo_endpoint and access_token:
+            try:
+                import requests as http_requests
+
+                userinfo_resp = http_requests.get(
+                    userinfo_endpoint,
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    timeout=10,
+                )
+                userinfo_resp.raise_for_status()
+                userinfo = userinfo_resp.json()
+                # OIDC spec §5.3.2: userinfo sub MUST match ID token sub
+                if userinfo.get("sub") != claims.get("sub"):
+                    logger.warning(
+                        f"Userinfo sub mismatch for {provider}: expected {claims.get('sub')}, got {userinfo.get('sub')}"
+                    )
+                else:
+                    # Merge userinfo into claims (ID token claims take precedence)
+                    for key, value in userinfo.items():
+                        claims.setdefault(key, value)
+            except Exception as e:
+                logger.warning(f"Failed to fetch userinfo for {provider}: {e}")
+
+    # Check email verification status
+    # Trusted providers only return verified emails — skip check
+    TRUSTED_EMAIL_PROVIDERS = ["microsoft", "apple"]
+    skip_email_check = provider in TRUSTED_EMAIL_PROVIDERS
+    if not skip_email_check and provider == "oidc":
+        from config import OAUTH_OIDC_SKIP_EMAIL_VERIFICATION
+
+        skip_email_check = OAUTH_OIDC_SKIP_EMAIL_VERIFICATION
+
+    if not skip_email_check and claims.get("email") is not None:
+        email_verified_claim = claims.get("email_verified")
         is_email_verified = False
         if isinstance(email_verified_claim, bool):
             is_email_verified = email_verified_claim
@@ -5890,9 +5949,19 @@ def oauth_callback(provider):
 
     # Extract user info from claims
     provider_user_id = claims.get("sub")
-    email = (
-        claims.get("email", "").strip().lower() if claims.get("email") else None
-    )  # HIGH-3: normalize email
+    email = claims.get("email")
+
+    # Microsoft personal accounts may not have email; fall back to preferred_username
+    if not email and provider == "microsoft":
+        fallback = claims.get("preferred_username", "")
+        # Only use as email if it looks like a valid email address
+        # (preferred_username can be a phone number for personal accounts)
+        if fallback and "@" in fallback and "." in fallback.split("@")[-1]:
+            email = fallback
+
+    # Normalize email
+    email = email.strip().lower() if email else None
+
     profile_data = {
         "name": claims.get("name"),
         "given_name": claims.get("given_name"),
