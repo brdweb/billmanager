@@ -191,6 +191,16 @@ OAUTH_AUTO_REGISTER = (
     == "true"
 )
 
+# Generic OIDC claim mapping (only applies to provider="oidc")
+OAUTH_OIDC_EMAIL_CLAIM = os.environ.get("OAUTH_OIDC_EMAIL_CLAIM", "email")
+OAUTH_OIDC_USERNAME_CLAIM = os.environ.get(
+    "OAUTH_OIDC_USERNAME_CLAIM", "preferred_username"
+)
+OAUTH_OIDC_NAME_CLAIM = os.environ.get("OAUTH_OIDC_NAME_CLAIM", "name")
+OAUTH_OIDC_SKIP_EMAIL_VERIFICATION = (
+    os.environ.get("OAUTH_OIDC_SKIP_EMAIL_VERIFICATION", "false").lower() == "true"
+)
+
 ENABLE_2FA = os.environ.get("ENABLE_2FA", "false").lower() == "true"
 ENABLE_PASSKEYS = os.environ.get("ENABLE_PASSKEYS", "false").lower() == "true"
 
