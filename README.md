@@ -8,11 +8,11 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ## 🎉 What's New in v4.0.0
 
-**Social Login & Two-Factor Authentication** - Sign in with Google or Apple. Protect your account with email OTP or passkey-based two-factor authentication.
+**Social Login & Two-Factor Authentication** - Sign in with Google, Apple, Microsoft, or your own OIDC provider. Protect your account with email OTP or passkey-based two-factor authentication.
 
 ### Highlights
 
-- **Social Login (OIDC)** - Connect Google or Apple for one-click sign-in
+- **Social Login (OIDC)** - Connect Google, Apple, Microsoft, or custom OIDC providers for one-click sign-in
 - **Two-Factor Authentication** - Email OTP and passkey (WebAuthn) support for account security
 - **Recovery Codes** - Backup access codes in case you lose your 2FA device
 - **Linked Accounts** - Manage connected OAuth providers from your Security Settings
@@ -166,6 +166,21 @@ postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
 | `OAUTH_APPLE_TEAM_ID` | Apple Developer Team ID | None |
 | `OAUTH_APPLE_KEY_ID` | Apple Sign in with Apple key ID | None |
 | `OAUTH_APPLE_PRIVATE_KEY` | Apple private key (`.p8`, multiline or `\n` escaped) | None |
+| `OAUTH_MICROSOFT_ENABLED` | Enable Microsoft sign-in | `false` |
+| `OAUTH_MICROSOFT_CLIENT_ID` | Microsoft OAuth client ID (Azure AD app registration) | None |
+| `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft OAuth client secret | None |
+| `OAUTH_MICROSOFT_TENANT_ID` | Azure AD tenant ID (`common` for multi-tenant, or specific tenant GUID) | `common` |
+| `OAUTH_OIDC_ENABLED` | Enable generic OIDC sign-in (for Authentik, Authelia, Keycloak, etc.) | `false` |
+| `OAUTH_OIDC_CLIENT_ID` | OIDC provider client ID | None |
+| `OAUTH_OIDC_CLIENT_SECRET` | OIDC provider client secret | None |
+| `OAUTH_OIDC_DISCOVERY_URL` | OIDC provider discovery URL (`.well-known/openid-configuration`) | None |
+| `OAUTH_OIDC_DISPLAY_NAME` | Display name shown on login button | `SSO` |
+| `OAUTH_OIDC_ICON` | Icon name for login button (Tabler icon without `Icon` prefix) | `lock` |
+| `OAUTH_OIDC_SCOPES` | OAuth scopes to request | `openid email profile` |
+| `OAUTH_OIDC_EMAIL_CLAIM` | Claim name for user's email address | `email` |
+| `OAUTH_OIDC_USERNAME_CLAIM` | Claim name for username | `preferred_username` |
+| `OAUTH_OIDC_NAME_CLAIM` | Claim name for display name | `name` |
+| `OAUTH_OIDC_SKIP_EMAIL_VERIFICATION` | Skip email verification check (for providers that don't include `email_verified`) | `false` |
 
 **Security Note:** In production, `JWT_SECRET_KEY` or `FLASK_SECRET_KEY` **must** be explicitly set. The application will refuse to start without it. Generate secure keys with: `openssl rand -hex 32`
 
@@ -184,6 +199,10 @@ This ensures secure self-hosted deployments while remaining flexible for develop
 - For passkeys in production, set `ENABLE_2FA=true`, `ENABLE_PASSKEYS=true`, `WEBAUTHN_RP_ID`, and `WEBAUTHN_ORIGIN`.
 - For Apple sign-in, `OAUTH_APPLE_PRIVATE_KEY` may be provided as a single line with `\n` escapes.
 - OAuth callback URL for Google/Apple should be: `https://<your-domain>/auth/callback`.
+- For Microsoft sign-in, register an app in Azure AD and set redirect URI to: `https://<your-domain>/auth/callback`
+- For generic OIDC, set `OAUTH_OIDC_DISCOVERY_URL` to your provider's `.well-known/openid-configuration` URL
+- Self-hosted OIDC providers (Authentik, Authelia) may need `OAUTH_OIDC_SKIP_EMAIL_VERIFICATION=true` if they don't include `email_verified` in tokens
+- Custom claim mapping (`OAUTH_OIDC_EMAIL_CLAIM`, etc.) is available when your OIDC provider uses non-standard claim names
 
 For complete configuration options, see the [Self-Hosted Installation Guide](https://docs.billmanager.app/category/self-hosted).
 
