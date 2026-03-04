@@ -10,10 +10,10 @@ test.describe('Sidebar Navigation', () => {
   });
 
   test('sidebar shows all navigation links', async ({ page }) => {
-    const dashboardLink = page.getByText('Dashboard', { exact: true });
-    const billsLink = page.getByText('Bills', { exact: true });
-    const calendarLink = page.getByText('Calendar', { exact: true });
-    const analyticsLink = page.getByText('Analytics', { exact: true });
+    const dashboardLink = page.locator('[class*="NavLink"]').filter({ hasText: 'Dashboard' }).first();
+    const billsLink = page.locator('[class*="NavLink"]').filter({ hasText: 'Bills' }).first();
+    const calendarLink = page.locator('[class*="NavLink"]').filter({ hasText: 'Calendar' }).first();
+    const analyticsLink = page.locator('[class*="NavLink"]').filter({ hasText: 'Analytics' }).first();
 
     await expect(dashboardLink).toBeVisible({ timeout: 10000 });
     await expect(billsLink).toBeVisible();

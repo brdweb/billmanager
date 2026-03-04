@@ -53,7 +53,10 @@ export const releaseNotes: ReleaseNote[] = [
       {
         heading: 'New Features',
         items: [
-          'Social Login (OIDC) - Sign in with Google or Apple',
+          'Social Login (OIDC) - Sign in with Google, Apple, Microsoft, or any OIDC provider',
+          'Microsoft login with Azure AD multi-tenant support',
+          'Generic OIDC/SSO integration for self-hosted deployments (Keycloak, Authentik, Okta, etc.)',
+          'Configurable claim mapping for custom OIDC providers',
           'Two-Factor Authentication - Email OTP and passkey (WebAuthn) support',
           'Recovery codes for 2FA backup access',
           'Linked Accounts management - connect and disconnect OAuth providers',

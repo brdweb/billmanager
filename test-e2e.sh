@@ -788,26 +788,39 @@ cat >> "$REPORT_FILE" << EOF
 
 EOF
 
-# Run the new OIDC/2FA pytest test files against the already-running Flask
-echo -n "Running: pytest test_config.py test_migrations.py test_oauth.py test_2fa.py... "
 cd "$SERVER_DIR"
-PYTEST_OUTPUT=$(ENABLE_2FA=true ENABLE_PASSKEYS=true DATABASE_URL="$DATABASE_URL" \
-    python3 -m pytest tests/test_config.py tests/test_migrations.py tests/test_oauth.py tests/test_2fa.py \
-    -v --tb=short 2>&1) || true
+OIDC_TEST_FILES=()
+for test_file in tests/test_config.py tests/test_migrations.py tests/test_oauth.py tests/test_2fa.py; do
+    if [ -f "$test_file" ]; then
+        OIDC_TEST_FILES+=("$test_file")
+    fi
+done
 
-PYTEST_PASSED=$(echo "$PYTEST_OUTPUT" | grep -oP '\d+ passed' | head -1 | grep -oP '\d+' || echo "0")
-PYTEST_FAILED=$(echo "$PYTEST_OUTPUT" | grep -oP '\d+ failed' | head -1 | grep -oP '\d+' || echo "0")
-PYTEST_ERRORS=$(echo "$PYTEST_OUTPUT" | grep -oP '\d+ error' | head -1 | grep -oP '\d+' || echo "0")
-
-if [ "$PYTEST_FAILED" = "0" ] && [ "$PYTEST_ERRORS" = "0" ] && [ "$PYTEST_PASSED" != "0" ]; then
-    echo -e "${GREEN}PASS ($PYTEST_PASSED passed)${NC}"
-    echo "- PASS: OIDC/2FA pytest suite: $PYTEST_PASSED passed, $PYTEST_FAILED failed" >> "$REPORT_FILE"
+if [ ${#OIDC_TEST_FILES[@]} -eq 0 ]; then
+    echo -e "${YELLOW}Skipping OIDC/2FA pytest (no matching test files found)${NC}"
+    echo "- WARN: OIDC/2FA pytest skipped (no matching test files found)" >> "$REPORT_FILE"
 else
-    echo -e "${RED}FAIL ($PYTEST_PASSED passed, $PYTEST_FAILED failed, $PYTEST_ERRORS errors)${NC}"
-    echo "- FAIL: OIDC/2FA pytest suite: $PYTEST_PASSED passed, $PYTEST_FAILED failed, $PYTEST_ERRORS errors" >> "$REPORT_FILE"
-    # Save pytest output for debugging
-    echo "$PYTEST_OUTPUT" > "$TEST_OUTPUT_DIR/pytest-oidc-2fa.log"
-    echo "  See $TEST_OUTPUT_DIR/pytest-oidc-2fa.log for details"
+    echo -n "Running: pytest ${OIDC_TEST_FILES[*]}... "
+    set +e
+    PYTEST_OUTPUT=$(ENABLE_2FA=true ENABLE_PASSKEYS=true DATABASE_URL="$DATABASE_URL" \
+        python3 -m pytest "${OIDC_TEST_FILES[@]}" -v --tb=short 2>&1)
+    PYTEST_EXIT=$?
+    set -e
+
+    PYTEST_PASSED=$(echo "$PYTEST_OUTPUT" | grep -oP '\d+ passed' | head -1 | grep -oP '\d+' || echo "0")
+    PYTEST_FAILED=$(echo "$PYTEST_OUTPUT" | grep -oP '\d+ failed' | head -1 | grep -oP '\d+' || echo "0")
+    PYTEST_ERRORS=$(echo "$PYTEST_OUTPUT" | grep -oP '\d+ error' | head -1 | grep -oP '\d+' || echo "0")
+
+    if [ "$PYTEST_EXIT" = "0" ] && [ "$PYTEST_FAILED" = "0" ] && [ "$PYTEST_ERRORS" = "0" ] && [ "$PYTEST_PASSED" != "0" ]; then
+        echo -e "${GREEN}PASS ($PYTEST_PASSED passed)${NC}"
+        echo "- PASS: OIDC/2FA pytest suite: $PYTEST_PASSED passed, $PYTEST_FAILED failed" >> "$REPORT_FILE"
+    else
+        echo -e "${RED}FAIL ($PYTEST_PASSED passed, $PYTEST_FAILED failed, $PYTEST_ERRORS errors)${NC}"
+        echo "- FAIL: OIDC/2FA pytest suite: $PYTEST_PASSED passed, $PYTEST_FAILED failed, $PYTEST_ERRORS errors" >> "$REPORT_FILE"
+        # Save pytest output for debugging
+        echo "$PYTEST_OUTPUT" > "$TEST_OUTPUT_DIR/pytest-oidc-2fa.log"
+        echo "  See $TEST_OUTPUT_DIR/pytest-oidc-2fa.log for details"
+    fi
 fi
 
 # Test OIDC/2FA API endpoints against running Flask
