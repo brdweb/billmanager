@@ -794,17 +794,24 @@ export interface OAuthCallbackResponse {
 }
 
 export const oauthCallback = async (provider: string, code: string, state: string, persistSession = true): Promise<OAuthCallbackResponse> => {
-  const response = await api.post<ApiResponse<OAuthCallbackResponse>>(
-    `/auth/oauth/${provider}/callback`,
-    { code, state }
-  );
-
-  // Handle 2FA required (403 with twofa_required)
-  const apiResponse = response.data;
-  if (!apiResponse.success && (apiResponse as unknown as Record<string, unknown>).twofa_required) {
-    throw new TwoFARequiredError(apiResponse as unknown as TwoFARequiredResponse);
+  let response;
+  try {
+    response = await api.post<ApiResponse<OAuthCallbackResponse>>(
+      `/auth/oauth/${provider}/callback`,
+      { code, state }
+    );
+  } catch (error: unknown) {
+    // Axios interceptor converts 403 to ApiError before we can check the response.
+    // Extract the original response data to detect 2FA challenges.
+    const axiosErr = error as { originalError?: { response?: { data?: Record<string, unknown> } } };
+    const responseData = axiosErr.originalError?.response?.data;
+    if (responseData && responseData.twofa_required) {
+      throw new TwoFARequiredError(responseData as unknown as TwoFARequiredResponse);
+    }
+    throw error;
   }
 
+  const apiResponse = response.data;
   if (!apiResponse.success) {
     throw new Error(apiResponse.error || 'OAuth callback failed');
   }
