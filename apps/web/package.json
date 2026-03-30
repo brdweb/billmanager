@@ -4,8 +4,6 @@
   "version": "4.0.1",
   "type": "module",
   "overrides": {
-    "ajv": "^8.18.0",
-    "brace-expansion": "^5.0.5",
     "dompurify": "^3.3.3",
     "flatted": "^3.4.2",
     "picomatch": "^4.0.4",
