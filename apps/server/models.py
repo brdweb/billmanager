@@ -2,9 +2,31 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
+from sqlalchemy import or_
 from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
+
+
+def _hash_token_value(token):
+    """Hash one-time tokens before storing them at rest."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _token_lookup_filter(column, token):
+    """Match either a legacy raw token or the hashed-at-rest form."""
+    token_hash = _hash_token_value(token)
+    return or_(column == token, column == token_hash)
+
+
+def _token_matches(stored_token, provided_token):
+    """Accept legacy raw tokens during the transition to hashed storage."""
+    if not stored_token or not provided_token:
+        return False
+    provided_hash = _hash_token_value(provided_token)
+    return secrets.compare_digest(stored_token, provided_token) or secrets.compare_digest(
+        stored_token, provided_hash
+    )
 
 # Association table for User-Database access (Tenancy)
 user_database_access = db.Table('user_database_access',
@@ -89,22 +111,30 @@ class User(db.Model):
 
     def generate_email_verification_token(self):
         """Generate a secure token for email verification (24 hour expiry)"""
-        self.email_verification_token = secrets.token_urlsafe(32)
+        token = secrets.token_urlsafe(32)
+        self.email_verification_token = _hash_token_value(token)
         self.email_verification_expires = datetime.now(timezone.utc) + timedelta(hours=24)
-        return self.email_verification_token
+        return token
 
     def generate_password_reset_token(self):
         """Generate a secure token for password reset (1 hour expiry)"""
-        self.password_reset_token = secrets.token_urlsafe(32)
+        token = secrets.token_urlsafe(32)
+        self.password_reset_token = _hash_token_value(token)
         self.password_reset_expires = datetime.now(timezone.utc) + timedelta(hours=1)
-        return self.password_reset_token
+        return token
+
+    def generate_change_token(self, expires_in):
+        """Generate a secure token for mandatory password change flows."""
+        token = secrets.token_hex(32)
+        self.change_token = _hash_token_value(token)
+        self.change_token_expires = datetime.now(timezone.utc) + expires_in
+        return token
 
     def verify_email_token(self, token):
         """Verify the email verification token using constant-time comparison"""
         if not self.email_verification_token or not self.email_verification_expires:
             return False
-        # Use secrets.compare_digest for timing-safe comparison
-        if not secrets.compare_digest(self.email_verification_token, token):
+        if not _token_matches(self.email_verification_token, token):
             return False
         # Normalize comparison (database may return naive datetimes)
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -117,8 +147,7 @@ class User(db.Model):
         """Verify the password reset token using constant-time comparison"""
         if not self.password_reset_token or not self.password_reset_expires:
             return False
-        # Use secrets.compare_digest for timing-safe comparison
-        if not secrets.compare_digest(self.password_reset_token, token):
+        if not _token_matches(self.password_reset_token, token):
             return False
         # Normalize comparison (database may return naive datetimes)
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -126,6 +155,30 @@ class User(db.Model):
         if now > expires:
             return False
         return True
+
+    def verify_change_token(self, token):
+        """Verify a password-change token using constant-time comparison."""
+        if not self.change_token or not self.change_token_expires:
+            return False
+        if not _token_matches(self.change_token, token):
+            return False
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        expires = self.change_token_expires.replace(tzinfo=None) if self.change_token_expires.tzinfo else self.change_token_expires
+        if now > expires:
+            return False
+        return True
+
+    @classmethod
+    def find_by_email_verification_token(cls, token):
+        return cls.query.filter(_token_lookup_filter(cls.email_verification_token, token)).first()
+
+    @classmethod
+    def find_by_password_reset_token(cls, token):
+        return cls.query.filter(_token_lookup_filter(cls.password_reset_token, token)).first()
+
+    @classmethod
+    def find_by_change_token(cls, token):
+        return cls.query.filter(_token_lookup_filter(cls.change_token, token)).first()
 
     @property
     def is_email_verified(self):
@@ -268,6 +321,18 @@ class UserInvite(db.Model):
 
     # Relationship
     invited_by = db.relationship('User', backref=db.backref('sent_invites', lazy=True))
+
+    def set_token(self, token=None):
+        raw_token = token or secrets.token_urlsafe(32)
+        self.token = _hash_token_value(raw_token)
+        return raw_token
+
+    def verify_token(self, token):
+        return _token_matches(self.token, token)
+
+    @classmethod
+    def find_by_token(cls, token):
+        return cls.query.filter(_token_lookup_filter(cls.token, token)).first()
 
     @property
     def is_expired(self):
@@ -493,6 +558,18 @@ class BillShare(db.Model):
             # Convert Decimal to float for comparison
             return min(float(self.split_value), self.bill.amount)
         return self.bill.amount
+
+    def set_invite_token(self, token=None):
+        raw_token = token or secrets.token_urlsafe(32)
+        self.invite_token = _hash_token_value(raw_token)
+        return raw_token
+
+    def verify_invite_token(self, token):
+        return _token_matches(self.invite_token, token)
+
+    @classmethod
+    def find_by_invite_token(cls, token):
+        return cls.query.filter(_token_lookup_filter(cls.invite_token, token)).first()
 
     @classmethod
     def cleanup_expired_shares(cls):

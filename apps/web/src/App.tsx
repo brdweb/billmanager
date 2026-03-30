@@ -427,12 +427,12 @@ function App() {
                     v{currentVersion}
                   </Anchor>
                   {' '}- Licensed under{' '}
-                  <Anchor href="https://osaasy.dev/" target="_blank" size="xs">
+                  <Anchor href="https://osaasy.dev/" target="_blank" rel="noopener noreferrer" size="xs">
                     O'Saasy
                   </Anchor>
                 </Text>
                 <Text size="xs" ta="center">
-                  <Anchor href="https://docs.billmanager.app" target="_blank" size="xs">
+                  <Anchor href="https://docs.billmanager.app" target="_blank" rel="noopener noreferrer" size="xs">
                     Need Help?
                   </Anchor>
                 </Text>

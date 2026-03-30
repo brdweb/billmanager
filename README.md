@@ -6,7 +6,7 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.0.1
+## 🎉 What's New in v4.0.2
 
 **Social Login & Two-Factor Authentication** - Sign in with Google, Apple, Microsoft, or your own OIDC provider. Protect your account with email OTP or passkey-based two-factor authentication.
 

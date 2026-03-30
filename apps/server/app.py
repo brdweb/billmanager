@@ -774,11 +774,7 @@ def login():
         db.session.commit()
         log_auth_event("login", success=True, user_id=user.id, username=user.username)
         if user.password_change_required:
-            token = secrets.token_hex(32)
-            user.change_token = token
-            user.change_token_expires = (
-                datetime.datetime.now(datetime.timezone.utc) + CHANGE_TOKEN_EXPIRES
-            )
+            token = user.generate_change_token(CHANGE_TOKEN_EXPIRES)
             db.session.commit()
             return jsonify(
                 {
@@ -824,17 +820,11 @@ def change_password():
     if not is_valid:
         return jsonify({"error": error}), 400
 
-    user = User.query.filter_by(change_token=change_token).first()
+    user = User.find_by_change_token(change_token)
     if not user:
         return jsonify({"error": "Invalid change token"}), 401
-    if user.change_token_expires:
-        expiry = (
-            user.change_token_expires.replace(tzinfo=datetime.timezone.utc)
-            if user.change_token_expires.tzinfo is None
-            else user.change_token_expires
-        )
-        if expiry < datetime.datetime.now(datetime.timezone.utc):
-            return jsonify({"error": "Change token expired"}), 401
+    if not user.verify_change_token(change_token):
+        return jsonify({"error": "Change token expired"}), 401
 
     user.set_password(new_password)
     user.password_change_required = False
@@ -1233,16 +1223,13 @@ def invite_user():
                 ), 403
 
     # Create invitation
-    import secrets
-
-    token = secrets.token_urlsafe(32)
     invite = UserInvite(
         email=email,
-        token=token,
         role=role,
         invited_by_id=current_user_id,
         expires_at=datetime.datetime.now(datetime.timezone.utc) + timedelta(days=7),
     )
+    token = invite.set_token()
     # Store database IDs in a simple format (we'll use them when accepting)
     invite.database_ids = (
         ",".join(str(id) for id in database_ids) if database_ids else ""
@@ -1317,8 +1304,10 @@ def accept_invite():
         return jsonify({"error": "Token, username, and password are required"}), 400
 
     # Find the invitation
-    invite = UserInvite.query.filter_by(token=token).first()
+    invite = UserInvite.find_by_token(token)
     if not invite:
+        return jsonify({"error": "Invalid invitation token"}), 400
+    if not invite.verify_token(token):
         return jsonify({"error": "Invalid invitation token"}), 400
     if invite.is_accepted:
         return jsonify({"error": "Invitation has already been accepted"}), 400
@@ -1369,8 +1358,10 @@ def get_invite_info():
     if not token:
         return jsonify({"error": "Token is required"}), 400
 
-    invite = UserInvite.query.filter_by(token=token).first()
+    invite = UserInvite.find_by_token(token)
     if not invite:
+        return jsonify({"error": "Invalid invitation token"}), 404
+    if not invite.verify_token(token):
         return jsonify({"error": "Invalid invitation token"}), 404
     if invite.is_accepted:
         return jsonify({"error": "Invitation has already been accepted"}), 400
@@ -1874,7 +1865,7 @@ def share_bill(bill_id):
     # Determine identifier type
     if is_saas() and "@" in identifier:
         identifier_type = "email"
-        invite_token = secrets.token_urlsafe(32)
+        invite_token = None
         expires_at = datetime.datetime.now(datetime.timezone.utc) + timedelta(days=7)
         # Case-insensitive email lookup
         from sqlalchemy import func
@@ -1919,13 +1910,14 @@ def share_bill(bill_id):
         shared_with_user_id=shared_with_user_id,
         shared_with_identifier=identifier,
         identifier_type=identifier_type,
-        invite_token=invite_token,
         status=status,
         split_type=split_type,
         split_value=split_value,
         accepted_at=accepted_at,
         expires_at=expires_at,
     )
+    if identifier_type == "email":
+        invite_token = share.set_invite_token()
 
     try:
         db.session.add(share)
@@ -2252,8 +2244,10 @@ def decline_share(share_id):
 @limiter.limit("20 per minute")
 def get_share_invite_details(token):
     """Get share invitation details by token (public endpoint)."""
-    share = BillShare.query.filter_by(invite_token=token).first()
+    share = BillShare.find_by_invite_token(token)
     if not share:
+        return jsonify({"error": "Invalid invitation"}), 404
+    if not share.verify_invite_token(token):
         return jsonify({"error": "Invalid invitation"}), 404
 
     if share.status != "pending":
@@ -2288,8 +2282,10 @@ def accept_share_by_token():
     if not data or not data.get("token"):
         return jsonify({"error": "Token required"}), 400
 
-    share = BillShare.query.filter_by(invite_token=data["token"]).first()
+    share = BillShare.find_by_invite_token(data["token"])
     if not share:
+        return jsonify({"error": "Invalid invitation"}), 404
+    if not share.verify_invite_token(data["token"]):
         return jsonify({"error": "Invalid invitation"}), 404
 
     if share.status != "pending":
@@ -2528,7 +2524,7 @@ def process_auto_payments():
 def get_version():
     return jsonify(
         {
-            "version": "4.0.1",
+            "version": "4.0.2",
             "license": "O'Saasy",
             "license_url": "https://osaasy.dev/",
             "features": [
@@ -2587,11 +2583,7 @@ def jwt_login():
 
     # Handle password change requirement
     if user.password_change_required:
-        token = secrets.token_hex(32)
-        user.change_token = token
-        user.change_token_expires = (
-            datetime.datetime.now(datetime.timezone.utc) + CHANGE_TOKEN_EXPIRES
-        )
+        token = user.generate_change_token(CHANGE_TOKEN_EXPIRES)
         db.session.commit()
         return jsonify(
             {
@@ -2848,7 +2840,7 @@ def verify_email():
         return jsonify({"success": False, "error": "Token required"}), 400
 
     # Find user with this token
-    user = User.query.filter_by(email_verification_token=token).first()
+    user = User.find_by_email_verification_token(token)
     if not user:
         return jsonify({"success": False, "error": "Invalid or expired token"}), 400
 
@@ -2975,7 +2967,7 @@ def reset_password():
         ), 400
 
     # Find user with this token
-    user = User.query.filter_by(password_reset_token=token).first()
+    user = User.find_by_password_reset_token(token)
     if not user:
         return jsonify({"success": False, "error": "Invalid or expired token"}), 400
 
@@ -4336,7 +4328,7 @@ def jwt_share_bill(bill_id):
     if "@" in identifier:
         # Email-based sharing (works in both SaaS and self-hosted modes)
         identifier_type = "email"
-        invite_token = secrets.token_urlsafe(32) if is_saas() else None
+        invite_token = None
         expires_at = (
             datetime.datetime.now(datetime.timezone.utc) + timedelta(days=7)
             if is_saas()
@@ -4376,13 +4368,14 @@ def jwt_share_bill(bill_id):
         shared_with_user_id=shared_with_user_id,
         shared_with_identifier=identifier,
         identifier_type=identifier_type,
-        invite_token=invite_token,
         status=status,
         split_type=split_type,
         split_value=split_value,
         accepted_at=accepted_at,
         expires_at=expires_at,
     )
+    if identifier_type == "email" and is_saas():
+        invite_token = share.set_invite_token()
 
     try:
         db.session.add(share)
@@ -4708,8 +4701,10 @@ def jwt_get_share_info():
     if not token:
         return jsonify({"success": False, "error": "Token required"}), 400
 
-    share = BillShare.query.filter_by(invite_token=token).first()
+    share = BillShare.find_by_invite_token(token)
     if not share:
+        return jsonify({"success": False, "error": "Invalid invitation"}), 404
+    if not share.verify_invite_token(token):
         return jsonify({"success": False, "error": "Invalid invitation"}), 404
 
     if share.status != "pending":
@@ -4747,8 +4742,10 @@ def jwt_accept_share_by_token():
     if not data or not data.get("token"):
         return jsonify({"success": False, "error": "Token required"}), 400
 
-    share = BillShare.query.filter_by(invite_token=data["token"]).first()
+    share = BillShare.find_by_invite_token(data["token"])
     if not share:
+        return jsonify({"success": False, "error": "Invalid invitation"}), 404
+    if not share.verify_invite_token(data["token"]):
         return jsonify({"success": False, "error": "Invalid invitation"}), 404
 
     if share.status != "pending":
@@ -5332,17 +5329,11 @@ def jwt_change_password():
     if not is_valid:
         return jsonify({"success": False, "error": error}), 400
 
-    user = User.query.filter_by(change_token=change_token).first()
+    user = User.find_by_change_token(change_token)
     if not user:
         return jsonify({"success": False, "error": "Invalid change token"}), 401
-    if user.change_token_expires:
-        expiry = (
-            user.change_token_expires.replace(tzinfo=datetime.timezone.utc)
-            if user.change_token_expires.tzinfo is None
-            else user.change_token_expires
-        )
-        if expiry < datetime.datetime.now(datetime.timezone.utc):
-            return jsonify({"success": False, "error": "Change token expired"}), 401
+    if not user.verify_change_token(change_token):
+        return jsonify({"success": False, "error": "Change token expired"}), 401
 
     user.set_password(new_password)
     user.password_change_required = False
@@ -7451,14 +7442,13 @@ def jwt_create_invitation():
                     }
                 ), 403
 
-    token = secrets.token_urlsafe(32)
     invite = UserInvite(
         email=email,
-        token=token,
         role=role,
         invited_by_id=current_user_id,
         expires_at=datetime.datetime.now(datetime.timezone.utc) + timedelta(days=7),
     )
+    token = invite.set_token()
     invite.database_ids = (
         ",".join(str(id) for id in database_ids) if database_ids else ""
     )
@@ -7714,7 +7704,7 @@ def jwt_get_version():
         {
             "success": True,
             "data": {
-                "version": "4.0.1",
+                "version": "4.0.2",
                 "api_version": "v2",
                 "license": "O'Saasy",
                 "license_url": "https://osaasy.dev/",

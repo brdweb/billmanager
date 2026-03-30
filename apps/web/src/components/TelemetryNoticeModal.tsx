@@ -100,6 +100,7 @@ export function TelemetryNoticeModal({ opened, onClose }: TelemetryNoticeModalPr
           <Anchor
             href="https://github.com/brdweb/billmanager/blob/main/TELEMETRY.md"
             target="_blank"
+            rel="noopener noreferrer"
             size="xs"
           >
             TELEMETRY.md

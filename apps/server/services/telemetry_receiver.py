@@ -28,6 +28,9 @@ TELEMETRY_RECEIVER_API_KEY = os.environ.get('TELEMETRY_RECEIVER_API_KEY')
 TELEMETRY_MAX_PAYLOAD_BYTES = int(os.environ.get('TELEMETRY_MAX_PAYLOAD_BYTES', '16384'))
 TELEMETRY_INGEST_RATE_PER_MINUTE = int(os.environ.get('TELEMETRY_INGEST_RATE_PER_MINUTE', '60'))
 TELEMETRY_STATS_RATE_PER_MINUTE = int(os.environ.get('TELEMETRY_STATS_RATE_PER_MINUTE', '30'))
+TELEMETRY_TRUSTED_PROXY_IPS = {
+    ip.strip() for ip in os.environ.get('TELEMETRY_TRUSTED_PROXY_IPS', '').split(',') if ip.strip()
+}
 
 _rate_window_seconds = 60
 _request_buckets: dict[str, list[float]] = {}
@@ -86,11 +89,22 @@ def _require_receiver_auth():
 
 
 def _require_rate_limit(route_name: str, limit_per_minute: int):
-    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+    client_ip = _get_rate_limit_ip()
     bucket_key = f'{route_name}:{client_ip}'
     if _rate_limit(bucket_key, limit_per_minute):
         return None
     return jsonify({'error': 'Rate limit exceeded'}), 429
+
+
+def _get_rate_limit_ip() -> str:
+    """Use X-Forwarded-For only when the direct peer is a trusted proxy."""
+    remote_addr = (request.remote_addr or 'unknown').strip()
+    if remote_addr in TELEMETRY_TRUSTED_PROXY_IPS:
+        forwarded_for = request.headers.get('X-Forwarded-For', '')
+        forwarded_ip = forwarded_for.split(',')[0].strip()
+        if forwarded_ip:
+            return forwarded_ip
+    return remote_addr
 
 
 @telemetry_receiver_bp.route('/api/telemetry', methods=['POST'])

@@ -46,9 +46,9 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '4.0.1',
-    date: '2026-03-04',
-    title: 'Microsoft Login, Generic OIDC, and Release Stability',
+    version: '4.0.2',
+    date: '2026-03-30',
+    title: 'Security Hardening and Release Stability',
     sections: [
       {
         heading: 'New Features',
