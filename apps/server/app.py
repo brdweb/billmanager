@@ -5922,9 +5922,7 @@ def oauth_callback(provider):
                 userinfo = userinfo_resp.json()
                 # OIDC spec §5.3.2: userinfo sub MUST match ID token sub
                 if userinfo.get("sub") != claims.get("sub"):
-                    logger.warning(
-                        f"Userinfo sub mismatch for {provider}: expected {claims.get('sub')}, got {userinfo.get('sub')}"
-                    )
+                    logger.warning("Userinfo sub mismatch for %s", provider)
                 else:
                     # Merge userinfo into claims (ID token claims take precedence)
                     for key, value in userinfo.items():
