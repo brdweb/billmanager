@@ -5918,7 +5918,12 @@ def oauth_callback(provider):
                     for key, value in userinfo.items():
                         claims.setdefault(key, value)
             except Exception as e:
-                logger.warning(f"Failed to fetch userinfo for {provider}: {e}")
+                # Avoid logging provider responses or token-adjacent details from failed userinfo fetches.
+                logger.warning(
+                    "Failed to fetch userinfo for %s (%s)",
+                    provider,
+                    type(e).__name__,
+                )
 
     # Check email verification status
     # Trusted providers only return verified emails — skip check
