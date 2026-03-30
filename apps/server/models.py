@@ -1,5 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta, timezone
+import hashlib
 import secrets
 from sqlalchemy import or_
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -9,9 +10,19 @@ db = SQLAlchemy()
 
 def _hash_token_value(token):
     """Hash one-time tokens before storing them at rest."""
-    from hashlib import sha256
+    return hashlib.sha256(token.encode()).hexdigest()
 
-    return sha256(token.encode()).hexdigest()
+
+def _hash_password_reset_token(token):
+    """Derive a deterministic, expensive hash for password reset tokens."""
+    return hashlib.scrypt(
+        token.encode(),
+        salt=b"billmanager-password-reset-token",
+        n=2**14,
+        r=8,
+        p=1,
+        dklen=32,
+    ).hex()
 
 
 def _token_lookup_filter(column, token):
@@ -106,7 +117,7 @@ class User(db.Model):
     def generate_password_reset_token(self):
         """Generate a secure token for password reset (1 hour expiry)"""
         token = secrets.token_urlsafe(32)
-        self.password_reset_token = _hash_token_value(token)
+        self.password_reset_token = _hash_password_reset_token(token)
         self.password_reset_expires = datetime.now(timezone.utc) + timedelta(hours=1)
         return token
 
@@ -134,7 +145,10 @@ class User(db.Model):
         """Verify the password reset token using constant-time comparison"""
         if not self.password_reset_token or not self.password_reset_expires:
             return False
-        if not _token_matches(self.password_reset_token, token):
+        password_reset_hash = _hash_password_reset_token(token)
+        if not secrets.compare_digest(self.password_reset_token, token) and not secrets.compare_digest(
+            self.password_reset_token, password_reset_hash
+        ):
             return False
         # Normalize comparison (database may return naive datetimes)
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -161,7 +175,10 @@ class User(db.Model):
 
     @classmethod
     def find_by_password_reset_token(cls, token):
-        return cls.query.filter(_token_lookup_filter(cls.password_reset_token, token)).first()
+        token_hash = _hash_password_reset_token(token)
+        return cls.query.filter(
+            or_(cls.password_reset_token == token, cls.password_reset_token == token_hash)
+        ).first()
 
     @classmethod
     def find_by_change_token(cls, token):
