@@ -108,7 +108,7 @@ EMAIL_ENABLED = bool(os.environ.get("RESEND_API_KEY"))
 # =============================================================================
 # Each provider is individually toggled via env vars. All off by default.
 
-OAUTH_PROVIDERS = {
+_OAUTH_PROVIDER_CONFIGS = {
     "google": {
         "enabled": os.environ.get("OAUTH_GOOGLE_ENABLED", "false").lower() == "true",
         "client_id": os.environ.get("OAUTH_GOOGLE_CLIENT_ID"),
@@ -152,10 +152,28 @@ OAUTH_PROVIDERS = {
 }
 
 # Build Microsoft discovery URL dynamically
-_ms_tenant = OAUTH_PROVIDERS["microsoft"]["tenant_id"]
-OAUTH_PROVIDERS["microsoft"]["discovery_url"] = (
+_ms_tenant = _OAUTH_PROVIDER_CONFIGS["microsoft"]["tenant_id"]
+_OAUTH_PROVIDER_CONFIGS["microsoft"]["discovery_url"] = (
     f"https://login.microsoftonline.com/{_ms_tenant}/v2.0/.well-known/openid-configuration"
 )
+
+
+OAUTH_PROVIDER_PUBLIC_INFO = {
+    provider: {
+        "display_name": cfg["display_name"],
+        "icon": cfg["icon"],
+    }
+    for provider, cfg in _OAUTH_PROVIDER_CONFIGS.items()
+}
+
+# Backwards-compatible alias for tests and legacy internal callers.
+OAUTH_PROVIDERS = _OAUTH_PROVIDER_CONFIGS
+
+
+def get_oauth_provider_config(provider):
+    """Return a copy of the full provider config for internal server-side use."""
+    cfg = _OAUTH_PROVIDER_CONFIGS.get(provider)
+    return dict(cfg) if cfg else None
 
 
 def get_enabled_oauth_providers():
@@ -167,7 +185,7 @@ def get_enabled_oauth_providers():
         "microsoft": ["client_id", "client_secret"],
         "oidc": ["client_id", "client_secret", "discovery_url"],
     }
-    for provider, cfg in OAUTH_PROVIDERS.items():
+    for provider, cfg in _OAUTH_PROVIDER_CONFIGS.items():
         if not cfg.get("enabled"):
             continue
         missing = [f for f in required_fields.get(provider, []) if not cfg.get(f)]
@@ -222,8 +240,8 @@ def get_public_config():
         "oauth_providers": [
             {
                 "id": p,
-                "display_name": OAUTH_PROVIDERS[p]["display_name"],
-                "icon": OAUTH_PROVIDERS[p]["icon"],
+                "display_name": OAUTH_PROVIDER_PUBLIC_INFO[p]["display_name"],
+                "icon": OAUTH_PROVIDER_PUBLIC_INFO[p]["icon"],
             }
             for p in enabled_providers
         ],

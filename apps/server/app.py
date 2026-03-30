@@ -83,7 +83,8 @@ from config import (
     is_saas,
     is_self_hosted,
     get_public_config,
-    OAUTH_PROVIDERS,
+    OAUTH_PROVIDER_PUBLIC_INFO,
+    get_oauth_provider_config,
     get_enabled_oauth_providers,
     OAUTH_AUTO_REGISTER,
     ENABLE_2FA,
@@ -102,6 +103,9 @@ from validation import (
     validate_bill_name,
     validate_database_name,
 )
+
+# Backwards-compatible export for tests that patch provider config in-place.
+OAUTH_PROVIDERS = __import__("config").OAUTH_PROVIDERS
 
 # --- JWT Configuration ---
 # In production, JWT_SECRET_KEY must be explicitly set
@@ -5396,7 +5400,7 @@ def _get_oidc_metadata(provider_key):
     if cached and (time.time() - cached[1]) < _OIDC_CACHE_TTL:
         return cached[0]
 
-    cfg = OAUTH_PROVIDERS.get(provider_key)
+    cfg = get_oauth_provider_config(provider_key)
     if not cfg or not cfg.get("discovery_url"):
         return None
 
@@ -5506,7 +5510,7 @@ def _verify_oauth_state(state_token):
 
 def _generate_apple_client_secret():
     """Generate Apple's JWT-based client_secret for token exchange."""
-    cfg = OAUTH_PROVIDERS.get("apple", {})
+    cfg = get_oauth_provider_config("apple") or {}
     team_id = cfg.get("team_id")
     key_id = cfg.get("key_id")
     client_id = cfg.get("client_id")
@@ -5651,7 +5655,7 @@ def oauth_list_providers():
     enabled = get_enabled_oauth_providers()
     providers = []
     for p in enabled:
-        cfg = OAUTH_PROVIDERS[p]
+        cfg = OAUTH_PROVIDER_PUBLIC_INFO[p]
         providers.append(
             {
                 "id": p,
@@ -5688,7 +5692,11 @@ def oauth_authorize(provider):
             return jsonify({"success": False, "error": "Invalid or expired token"}), 401
         link_user_id = payload["user_id"]
 
-    cfg = OAUTH_PROVIDERS[provider]
+    cfg = get_oauth_provider_config(provider)
+    if not cfg:
+        return jsonify(
+            {"success": False, "error": "Provider configuration unavailable"}
+        ), 502
     metadata = _get_oidc_metadata(provider)
     if not metadata:
         return jsonify(
@@ -5774,7 +5782,11 @@ def oauth_callback(provider):
         return jsonify({"success": False, "error": "State provider mismatch"}), 400
 
     code_verifier = state_payload.get("code_verifier")
-    cfg = OAUTH_PROVIDERS[provider]
+    cfg = get_oauth_provider_config(provider)
+    if not cfg:
+        return jsonify(
+            {"success": False, "error": "Provider configuration unavailable"}
+        ), 502
     metadata = _get_oidc_metadata(provider)
     if not metadata:
         return jsonify(
