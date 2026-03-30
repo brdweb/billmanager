@@ -1,6 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta, timezone
-import hashlib
 import secrets
 from sqlalchemy import or_
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -10,7 +9,9 @@ db = SQLAlchemy()
 
 def _hash_token_value(token):
     """Hash one-time tokens before storing them at rest."""
-    return hashlib.sha256(token.encode()).hexdigest()
+    from hashlib import sha256
+
+    return sha256(token.encode()).hexdigest()
 
 
 def _token_lookup_filter(column, token):
@@ -89,24 +90,10 @@ class User(db.Model):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
-        """
-        Verify password. Supports both:
-        - New bcrypt/pbkdf2 hashes (werkzeug format)
-        - Legacy SHA-256 hashes (for migration)
-        """
+        """Verify password against the current Werkzeug password hash."""
         # OIDC-only users have no password
         if not self.password_hash:
             return False
-        # Check if this is a legacy SHA-256 hash (64 hex chars, no prefix)
-        if len(self.password_hash) == 64 and not self.password_hash.startswith(('pbkdf2:', 'scrypt:')):
-            # Legacy SHA-256 verification - intentionally kept for migration
-            # lgtm[py/weak-sensitive-data-hashing] - This is migration code for old passwords
-            if self.password_hash == hashlib.sha256(password.encode()).hexdigest():  # nosec B324
-                # Auto-migrate to secure hash on successful login
-                self.set_password(password)
-                return True
-            return False
-        # Modern werkzeug hash verification
         return check_password_hash(self.password_hash, password)
 
     def generate_email_verification_token(self):
