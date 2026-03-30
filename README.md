@@ -46,6 +46,33 @@ Learn more at [osaasy.dev](https://osaasy.dev/)
 - Docker and Docker Compose installed
 - Web browser
 
+### Developer Workflow
+
+For local development in WSL or Linux, the repo now includes a small task runner:
+
+```bash
+make bootstrap
+make dev-up
+make test
+```
+
+What these commands do:
+
+- `make bootstrap` creates `.venv`, installs backend Python dependencies, and runs `npm ci` in `apps/web` and `apps/mobile`
+- `make dev-up` builds and starts the local Docker stack from `docker-compose.dev.yml`
+- `make test` runs backend, web, and mobile tests
+- `make verify` runs the full test suite plus backend security checks
+
+Useful day-to-day commands:
+
+```bash
+make dev-ps
+make dev-logs
+make dev-down
+make test-db-up
+make test-db-down
+```
+
 ### Run the Application
 
 1. **Create a `docker-compose.yml` file** with the following content:
