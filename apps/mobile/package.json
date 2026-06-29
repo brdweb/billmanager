@@ -21,9 +21,9 @@
     "@react-navigation/bottom-tabs": "^7.9.0",
     "@react-navigation/native": "^7.1.26",
     "@react-navigation/native-stack": "^7.9.0",
-    "axios": "^1.13.5",
+    "axios": "^1.16.0",
     "babel-preset-expo": "^54.0.9",
-    "expo": "~54.0.30",
+    "expo": "~56.0.12",
     "expo-device": "~8.0.10",
     "expo-notifications": "~0.32.15",
     "expo-secure-store": "~15.0.8",
@@ -46,7 +46,7 @@
   "devDependencies": {
     "@types/react": "~19.1.0",
     "typescript": "~5.9.2",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.0"
   },
   "private": true
 }
