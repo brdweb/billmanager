@@ -12,22 +12,8 @@ export default defineConfig({
       manifest: false, // We use our own manifest.json in public/
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
-          {
-            // Cache API requests with network-first strategy
-            urlPattern: /^https?:\/\/.*\/(api|login|logout|me|bills|payments|databases|users)\/?.*$/,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 60, // 1 hour
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
           {
             // Cache images
             urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
