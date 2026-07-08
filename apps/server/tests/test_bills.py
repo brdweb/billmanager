@@ -386,6 +386,21 @@ class TestBillReminderAlerts:
                                    'reminder_days': [2]
                                })
         assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data['error'] == 'Invalid reminder_days value'
+        assert 'one of' not in data['error']
+
+    def test_invalid_reminder_days_update_rejected_without_exception_detail(
+        self, client, auth_headers_with_db, test_bill
+    ):
+        """Test invalid reminder update errors do not expose exception details."""
+        response = client.put(f'/api/v2/bills/{test_bill.id}',
+                              headers=auth_headers_with_db,
+                              json={'reminder_days': ['not-a-number']})
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data['error'] == 'Invalid reminder_days value'
+        assert 'whole numbers' not in data['error']
 
     def test_upcoming_alerts_include_overdue_and_configured_windows(self, client, auth_headers_with_db):
         """Test reminder alert endpoint honors reminder windows."""

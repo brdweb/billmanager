@@ -564,6 +564,7 @@ def parse_month_range(month):
 
 DEFAULT_REMINDER_DAYS = [0, 1, 3, 7]
 ALLOWED_REMINDER_DAYS = [0, 1, 3, 7, 14, 30]
+INVALID_REMINDER_DAYS_ERROR = "Invalid reminder_days value"
 
 
 def parse_reminder_days(value):
@@ -4073,8 +4074,8 @@ def jwt_create_bill():
 
     try:
         reminder_days = serialize_reminder_days(data.get("reminder_days"))
-    except ValueError as exc:
-        return jsonify({"success": False, "error": str(exc)}), 400
+    except ValueError:
+        return jsonify({"success": False, "error": INVALID_REMINDER_DAYS_ERROR}), 400
 
     new_bill = Bill(
         database_id=target_db.id,
@@ -4226,8 +4227,8 @@ def jwt_update_bill(bill_id):
     if "reminder_days" in data:
         try:
             bill.reminder_days = serialize_reminder_days(data["reminder_days"])
-        except ValueError as exc:
-            return jsonify({"success": False, "error": str(exc)}), 400
+        except ValueError:
+            return jsonify({"success": False, "error": INVALID_REMINDER_DAYS_ERROR}), 400
 
     db.session.commit()
     return jsonify({"success": True, "data": {"message": "Bill updated"}})
