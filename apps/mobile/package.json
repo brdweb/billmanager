@@ -3,8 +3,11 @@
   "version": "1.0.0-alpha",
   "main": "index.ts",
   "overrides": {
-    "tmp": "0.2.4",
+    "@babel/core": "^7.29.6",
+    "lodash": "^4.18.1",
     "markdown-it": "^14.1.0",
+    "tmp": "^0.2.6",
+    "uuid": "^11.1.1",
     "undici": "^7.18.2"
   },
   "scripts": {
