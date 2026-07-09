@@ -17,7 +17,9 @@
       "bundleIdentifier": "com.brdweb.billmanager",
       "buildNumber": "1",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -38,7 +40,8 @@
         {
           "color": "#e94560"
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "extra": {
       "eas": {
