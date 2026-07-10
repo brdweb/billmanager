@@ -7,11 +7,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "billmanager",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1a1a2e"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.brdweb.billmanager",
@@ -27,7 +22,6 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a1a2e"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.brdweb.billmanagermobile"
     },
     "web": {
@@ -41,7 +35,16 @@
           "color": "#e94560"
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#1a1a2e",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ]
     ],
     "extra": {
       "eas": {

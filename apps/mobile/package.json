@@ -33,6 +33,7 @@
     "expo-device": "~57.0.0",
     "expo-notifications": "~57.0.3",
     "expo-secure-store": "~57.0.0",
+    "expo-splash-screen": "~57.0.2",
     "expo-status-bar": "~57.0.0",
     "lucide-react-native": "^0.562.0",
     "nativewind": "^4.2.1",
