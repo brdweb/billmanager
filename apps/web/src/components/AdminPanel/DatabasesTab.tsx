@@ -13,6 +13,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconTrash, IconPlus, IconEdit, IconCheck, IconX } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import type { Database } from '../../api/client';
 import {
   getDatabases,
@@ -25,6 +26,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 
 export function DatabasesTab() {
+  const { t } = useTranslation();
   const [databases, setDatabases] = useState<Database[]>([]);
   const [loading, setLoading] = useState(true);
   const { refreshAuth } = useAuth();
@@ -51,9 +53,9 @@ export function DatabasesTab() {
       const response = await getDatabases();
       setDatabases(Array.isArray(response) ? response : []);
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to load bill groups';
+      const message = error instanceof ApiError ? error.message : t('admin.databases.errors.loadFailed');
       notifications.show({
-        title: 'Error loading bill groups',
+        title: t('admin.databases.errors.loadFailedTitle'),
         message,
         color: 'red',
       });
@@ -66,8 +68,8 @@ export function DatabasesTab() {
   const handleAddDatabase = async () => {
     if (!newName || !newDisplayName) {
       notifications.show({
-        title: 'Validation error',
-        message: 'Group name and display name are required',
+        title: t('admin.databases.errors.validationTitle'),
+        message: t('admin.databases.errors.nameAndDisplayRequired'),
         color: 'red',
       });
       return;
@@ -76,8 +78,8 @@ export function DatabasesTab() {
     // Validate name format
     if (!/^[a-zA-Z0-9_-]+$/.test(newName)) {
       notifications.show({
-        title: 'Validation error',
-        message: 'Group name can only contain letters, numbers, underscores, and hyphens',
+        title: t('admin.databases.errors.validationTitle'),
+        message: t('admin.databases.errors.nameFormat'),
         color: 'red',
       });
       return;
@@ -87,7 +89,7 @@ export function DatabasesTab() {
     try {
       await createDatabase(newName, newDisplayName, newDescription);
       notifications.show({
-        message: 'Bill group created successfully',
+        message: t('admin.databases.success.created'),
         color: 'green',
       });
       await fetchDatabases();
@@ -96,9 +98,9 @@ export function DatabasesTab() {
       setNewDisplayName('');
       setNewDescription('');
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to create bill group';
+      const message = error instanceof ApiError ? error.message : t('admin.databases.errors.createFailed');
       notifications.show({
-        title: 'Failed to create bill group',
+        title: t('admin.databases.errors.createFailed'),
         message,
         color: 'red',
       });
@@ -122,8 +124,8 @@ export function DatabasesTab() {
   const handleSaveEdit = async () => {
     if (!editingId || !editDisplayName.trim()) {
       notifications.show({
-        title: 'Validation error',
-        message: 'Display name cannot be empty',
+        title: t('admin.databases.errors.validationTitle'),
+        message: t('admin.databases.errors.displayNameEmpty'),
         color: 'red',
       });
       return;
@@ -133,16 +135,16 @@ export function DatabasesTab() {
     try {
       await updateDatabase(editingId, editDisplayName, editDescription);
       notifications.show({
-        message: 'Bill group updated successfully',
+        message: t('admin.databases.success.updated'),
         color: 'green',
       });
       await fetchDatabases();
       await refreshAuth();
       handleCancelEdit();
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to update bill group';
+      const message = error instanceof ApiError ? error.message : t('admin.databases.errors.updateFailed');
       notifications.show({
-        title: 'Failed to update bill group',
+        title: t('admin.databases.errors.updateFailed'),
         message,
         color: 'red',
       });
@@ -157,26 +159,26 @@ export function DatabasesTab() {
       const accessRes = await getDatabaseAccess(db.id!);
       const usersWithAccess = accessRes ?? [];
 
-      let message = `Are you sure you want to delete "${db.display_name}"?\n\nThis will permanently delete all bills and payments in this group.`;
+      let message = t('admin.databases.deleteConfirm', { name: db.display_name });
 
       if (usersWithAccess.length > 0) {
         const userNames = usersWithAccess.map((u) => u.username).join(', ');
-        message = `WARNING: "${db.display_name}" has ${usersWithAccess.length} user(s) with access: ${userNames}\n\nDeleting will:\n- Permanently delete all bills and payments in this group\n- Remove access for all users\n\nContinue?`;
+        message = t('admin.databases.deleteConfirmWithUsers', { name: db.display_name, count: usersWithAccess.length, users: userNames });
       }
 
       if (!confirm(message)) return;
 
       await deleteDatabase(db.id!);
       notifications.show({
-        message: 'Bill group deleted successfully',
+        message: t('admin.databases.success.deleted'),
         color: 'green',
       });
       await fetchDatabases();
       await refreshAuth(); // Refresh user's database list
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to delete bill group';
+      const message = error instanceof ApiError ? error.message : t('admin.databases.errors.deleteFailed');
       notifications.show({
-        title: 'Failed to delete bill group',
+        title: t('admin.databases.errors.deleteFailed'),
         message,
         color: 'red',
       });
@@ -196,10 +198,10 @@ export function DatabasesTab() {
       <Table striped highlightOnHover>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Name</Table.Th>
-            <Table.Th>Display Name</Table.Th>
-            <Table.Th>Description</Table.Th>
-            <Table.Th>Actions</Table.Th>
+            <Table.Th>{t('common.table.name')}</Table.Th>
+            <Table.Th>{t('admin.databases.columns.displayName')}</Table.Th>
+            <Table.Th>{t('admin.databases.columns.description')}</Table.Th>
+            <Table.Th>{t('common.table.actions')}</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -216,7 +218,7 @@ export function DatabasesTab() {
                     size="sm"
                     value={editDisplayName}
                     onChange={(e) => setEditDisplayName(e.currentTarget.value)}
-                    placeholder="Display Name"
+                    placeholder={t('admin.databases.editDisplayNamePlaceholder')}
                   />
                 ) : (
                   <Text fw={500}>{db.display_name}</Text>
@@ -228,7 +230,7 @@ export function DatabasesTab() {
                     size="sm"
                     value={editDescription}
                     onChange={(e) => setEditDescription(e.currentTarget.value)}
-                    placeholder="Description (optional)"
+                    placeholder={t('admin.databases.editDescriptionPlaceholder')}
                   />
                 ) : (
                   <Text size="sm" c="dimmed">
@@ -245,7 +247,7 @@ export function DatabasesTab() {
                       onClick={handleSaveEdit}
                       loading={editLoading}
                       disabled={!editDisplayName.trim()}
-                      title="Save"
+                      title={t('common.actions.save')}
                     >
                       <IconCheck size={18} />
                     </ActionIcon>
@@ -254,7 +256,7 @@ export function DatabasesTab() {
                       color="gray"
                       onClick={handleCancelEdit}
                       disabled={editLoading}
-                      title="Cancel"
+                      title={t('common.actions.cancel')}
                     >
                       <IconX size={18} />
                     </ActionIcon>
@@ -265,7 +267,7 @@ export function DatabasesTab() {
                       variant="subtle"
                       color="blue"
                       onClick={() => handleStartEdit(db)}
-                      title="Edit"
+                      title={t('common.actions.edit')}
                     >
                       <IconEdit size={18} />
                     </ActionIcon>
@@ -273,7 +275,7 @@ export function DatabasesTab() {
                       variant="subtle"
                       color="red"
                       onClick={() => handleDeleteDatabase(db)}
-                      title="Delete"
+                      title={t('common.actions.delete')}
                     >
                       <IconTrash size={18} />
                     </ActionIcon>
@@ -287,28 +289,28 @@ export function DatabasesTab() {
 
       <Paper p="md" withBorder>
         <Stack gap="sm">
-          <Text fw={500}>Create New Bill Group</Text>
+          <Text fw={500}>{t('admin.databases.createTitle')}</Text>
           <Group grow>
             <TextInput
-              label="Group Name"
-              description="Used internally (letters, numbers, _, -)"
+              label={t('admin.databases.groupNameLabel')}
+              description={t('admin.databases.groupNameDescription')}
               value={newName}
               onChange={(e) => setNewName(e.currentTarget.value)}
-              placeholder="my_bills"
+              placeholder={t('admin.databases.groupNamePlaceholder')}
             />
             <TextInput
-              label="Display Name"
-              description="Shown to users"
+              label={t('admin.databases.displayNameLabel')}
+              description={t('admin.databases.displayNameDescription')}
               value={newDisplayName}
               onChange={(e) => setNewDisplayName(e.currentTarget.value)}
-              placeholder="My Bills"
+              placeholder={t('admin.databases.displayNamePlaceholder')}
             />
             <TextInput
-              label="Description"
-              description="Optional"
+              label={t('admin.databases.descriptionLabel')}
+              description={t('admin.databases.descriptionDescription')}
               value={newDescription}
               onChange={(e) => setNewDescription(e.currentTarget.value)}
-              placeholder="Description..."
+              placeholder={t('admin.databases.descriptionPlaceholder')}
             />
           </Group>
           <Button
@@ -317,7 +319,7 @@ export function DatabasesTab() {
             loading={addLoading}
             disabled={!newName || !newDisplayName}
           >
-            Create Bill Group
+            {t('admin.databases.createButton')}
           </Button>
         </Stack>
       </Paper>

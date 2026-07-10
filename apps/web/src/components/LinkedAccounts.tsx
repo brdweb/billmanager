@@ -19,6 +19,7 @@ import {
   IconAlertCircle,
   IconUnlink,
 } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useConfig } from '../context/ConfigContext';
 import * as api from '../api/client';
 
@@ -29,15 +30,15 @@ const providerIcons: Record<string, React.ReactNode> = {
   oidc: <IconLock size={20} />,
 };
 
-const providerNames: Record<string, string> = {
-  google: 'Google',
-  apple: 'Apple',
-  microsoft: 'Microsoft',
-  oidc: 'SSO',
-};
-
 export function LinkedAccounts() {
+  const { t } = useTranslation();
   const { config } = useConfig();
+  const providerNames: Record<string, string> = {
+    google: t('linkedAccounts.providers.google'),
+    apple: t('linkedAccounts.providers.apple'),
+    microsoft: t('linkedAccounts.providers.microsoft'),
+    oidc: t('linkedAccounts.providers.oidc'),
+  };
   const [accounts, setAccounts] = useState<api.OAuthAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -50,11 +51,11 @@ export function LinkedAccounts() {
       const result = await api.getOAuthAccounts();
       setAccounts(result);
     } catch {
-      setError('Failed to load linked accounts');
+      setError(t('linkedAccounts.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (hasProviders) {
@@ -76,7 +77,7 @@ export function LinkedAccounts() {
       await fetchAccounts();
     } catch (err: unknown) {
       const apiErr = err as { message?: string };
-      setError(apiErr.message || 'Failed to unlink account');
+      setError(apiErr.message || t('linkedAccounts.unlinkFailedDefault'));
     } finally {
       setUnlinking(null);
     }
@@ -87,7 +88,7 @@ export function LinkedAccounts() {
       const result = await api.getOAuthAuthorizeUrl(providerId, 'link');
       window.location.assign(result.auth_url);
     } catch {
-      setError('Failed to start linking process');
+      setError(t('linkedAccounts.linkFailed'));
     }
   };
 
@@ -101,11 +102,11 @@ export function LinkedAccounts() {
     <Stack gap="md">
       <Group>
         <IconLink size={24} />
-        <Title order={4}>Linked Accounts</Title>
+        <Title order={4}>{t('linkedAccounts.title')}</Title>
       </Group>
 
       <Text size="sm" c="dimmed">
-        Connect external accounts for faster sign-in.
+        {t('linkedAccounts.description')}
       </Text>
 
       {error && (
@@ -132,7 +133,7 @@ export function LinkedAccounts() {
               </Group>
               {linked ? (
                 <Group gap="xs">
-                  <Badge color="green" variant="light">Connected</Badge>
+                  <Badge color="green" variant="light">{t('linkedAccounts.connected')}</Badge>
                   <Button
                     size="xs"
                     variant="subtle"
@@ -141,7 +142,7 @@ export function LinkedAccounts() {
                     onClick={() => handleUnlink(provider.id)}
                     loading={unlinking === provider.id}
                   >
-                    Unlink
+                    {t('linkedAccounts.unlink')}
                   </Button>
                 </Group>
               ) : (
@@ -150,7 +151,7 @@ export function LinkedAccounts() {
                   variant="light"
                   onClick={() => handleLink(provider.id)}
                 >
-                  Connect
+                  {t('linkedAccounts.connect')}
                 </Button>
               )}
             </Group>

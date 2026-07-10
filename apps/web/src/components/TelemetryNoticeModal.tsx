@@ -1,6 +1,7 @@
 import { Modal, Stack, Text, Button, Group, List, Anchor } from '@mantine/core';
 import { useState } from 'react';
 import { notifications } from '@mantine/notifications';
+import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 import { ApiError } from '../api/client';
 
@@ -10,6 +11,7 @@ interface TelemetryNoticeModalProps {
 }
 
 export function TelemetryNoticeModal({ opened, onClose }: TelemetryNoticeModalProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
 
   const handleAccept = async () => {
@@ -17,14 +19,14 @@ export function TelemetryNoticeModal({ opened, onClose }: TelemetryNoticeModalPr
     try {
       await api.acceptTelemetry();
       notifications.show({
-        message: 'Thank you for helping improve BillManager!',
+        message: t('telemetryNoticeModal.acceptedMessage'),
         color: 'green',
       });
       onClose();
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to save preference';
+      const message = error instanceof ApiError ? error.message : t('telemetryNoticeModal.saveFailedDefault');
       notifications.show({
-        title: 'Error',
+        title: t('telemetryNoticeModal.errorTitle'),
         message,
         color: 'red',
       });
@@ -38,14 +40,14 @@ export function TelemetryNoticeModal({ opened, onClose }: TelemetryNoticeModalPr
     try {
       await api.optOutTelemetry();
       notifications.show({
-        message: 'Telemetry disabled. No data will be collected.',
+        message: t('telemetryNoticeModal.optOutMessage'),
         color: 'blue',
       });
       onClose();
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to save preference';
+      const message = error instanceof ApiError ? error.message : t('telemetryNoticeModal.saveFailedDefault');
       notifications.show({
-        title: 'Error',
+        title: t('telemetryNoticeModal.errorTitle'),
         message,
         color: 'red',
       });
@@ -58,7 +60,7 @@ export function TelemetryNoticeModal({ opened, onClose }: TelemetryNoticeModalPr
     <Modal
       opened={opened}
       onClose={() => {}} // Prevent closing without choice
-      title="Anonymous Usage Statistics"
+      title={t('telemetryNoticeModal.title')}
       size="lg"
       closeOnClickOutside={false}
       closeOnEscape={false}
@@ -66,37 +68,35 @@ export function TelemetryNoticeModal({ opened, onClose }: TelemetryNoticeModalPr
     >
       <Stack gap="md">
         <Text size="sm">
-          BillManager collects <strong>anonymous usage statistics</strong> to help improve the product.
-          This data helps us understand which features are most valuable and guide development priorities.
+          {t('telemetryNoticeModal.introPrefix')} <strong>{t('telemetryNoticeModal.introBold')}</strong> {t('telemetryNoticeModal.introSuffix')}
         </Text>
 
         <div>
           <Text size="sm" fw={500} mb="xs">
-            What we collect:
+            {t('telemetryNoticeModal.whatWeCollect')}
           </Text>
           <List size="sm" spacing="xs">
-            <List.Item>Total users, bills, and databases (counts only)</List.Item>
-            <List.Item>Feature usage (auto-pay, variable bills, mobile devices)</List.Item>
-            <List.Item>Platform info (Python version, OS, database type)</List.Item>
-            <List.Item>Anonymous instance ID and app version</List.Item>
+            <List.Item>{t('telemetryNoticeModal.collectItem1')}</List.Item>
+            <List.Item>{t('telemetryNoticeModal.collectItem2')}</List.Item>
+            <List.Item>{t('telemetryNoticeModal.collectItem3')}</List.Item>
+            <List.Item>{t('telemetryNoticeModal.collectItem4')}</List.Item>
           </List>
         </div>
 
         <div>
           <Text size="sm" fw={500} mb="xs">
-            What we never collect:
+            {t('telemetryNoticeModal.whatWeNeverCollect')}
           </Text>
           <List size="sm" spacing="xs">
-            <List.Item>Personal information (names, emails, addresses)</List.Item>
-            <List.Item>Bill amounts or financial data</List.Item>
-            <List.Item>Bill names or descriptions</List.Item>
-            <List.Item>Payment history or dates</List.Item>
+            <List.Item>{t('telemetryNoticeModal.neverItem1')}</List.Item>
+            <List.Item>{t('telemetryNoticeModal.neverItem2')}</List.Item>
+            <List.Item>{t('telemetryNoticeModal.neverItem3')}</List.Item>
+            <List.Item>{t('telemetryNoticeModal.neverItem4')}</List.Item>
           </List>
         </div>
 
         <Text size="xs" c="dimmed">
-          You can change this preference at any time. All telemetry submissions are logged locally for transparency.
-          See{' '}
+          {t('telemetryNoticeModal.changePreferenceNotice')}{' '}
           <Anchor
             href="https://github.com/brdweb/billmanager/blob/main/TELEMETRY.md"
             target="_blank"
@@ -105,15 +105,15 @@ export function TelemetryNoticeModal({ opened, onClose }: TelemetryNoticeModalPr
           >
             TELEMETRY.md
           </Anchor>{' '}
-          for full details.
+          {t('telemetryNoticeModal.fullDetailsSuffix')}
         </Text>
 
         <Group justify="flex-end" gap="sm">
           <Button variant="subtle" onClick={handleOptOut} loading={loading} disabled={loading}>
-            Opt Out
+            {t('telemetryNoticeModal.optOut')}
           </Button>
           <Button onClick={handleAccept} loading={loading} disabled={loading}>
-            Accept & Continue
+            {t('telemetryNoticeModal.acceptContinue')}
           </Button>
         </Group>
       </Stack>

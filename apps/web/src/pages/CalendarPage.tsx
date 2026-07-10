@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Stack, Title, Group, Button, Paper, Center, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconPlus, IconCalendar } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { MultiMonthCalendar } from '../components/MultiMonthCalendar';
 import { DayDetailModal } from '../components/DayDetailModal';
 import type { Bill } from '../api/client';
@@ -21,6 +22,7 @@ export function CalendarPage({
   onEditBill,
   hasDatabase,
 }: CalendarPageProps) {
+  const { t } = useTranslation();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [viewMonths, setViewMonths] = useState<1 | 3 | 6>(3);
   const [dayModalOpened, { open: openDayModal, close: closeDayModal }] = useDisclosure(false);
@@ -36,10 +38,10 @@ export function CalendarPage({
         <Paper withBorder p="xl" radius="md" ta="center" maw={400}>
           <IconCalendar size={48} color="var(--mantine-color-dimmed)" />
           <Title order={3} mt="md">
-            No Bill Group Selected
+            {t('dashboardPage.noBillGroupTitle')}
           </Title>
           <Text c="dimmed" mt="sm">
-            Select a bill group from the header to view the calendar.
+            {t('calendarPage.noBillGroupBody')}
           </Text>
         </Paper>
       </Center>
@@ -50,9 +52,9 @@ export function CalendarPage({
     <Stack gap="lg">
       {/* Header */}
       <Group justify="space-between" align="center">
-        <Title order={2}>Calendar</Title>
+        <Title order={2}>{t('sidebar.navCalendar')}</Title>
         <Button leftSection={<IconPlus size={16} />} onClick={onAddBill}>
-          Add Bill
+          {t('dashboardPage.addBill')}
         </Button>
       </Group>
 

@@ -3,8 +3,9 @@ import '@mantine/charts/styles.css';
 import { Modal, Stack, Text, Loader, Center, Paper, Group, SegmentedControl, SimpleGrid, Alert } from '@mantine/core';
 import { LineChart, BarChart } from '@mantine/charts';
 import { IconAlertCircle } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { getMonthlyPayments, ApiError } from '../api/client';
-import { formatCurrency, formatCurrencyAxis } from '../lib/currency';
+import { formatCurrency, formatCurrencyAxis, getLocale } from '../lib/currency';
 
 interface MonthlyTotalsChartProps {
   opened: boolean;
@@ -18,6 +19,7 @@ interface ChartData {
 }
 
 export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps) {
+  const { t } = useTranslation();
   const [data, setData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const key = `${year}-${month}`;
-        const label = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+        const label = date.toLocaleDateString(getLocale(), { month: 'short', year: '2-digit' });
 
         // API returns {deposits, expenses} per month - use expenses for spending trends
         const monthData = monthlyData[key];
@@ -62,7 +64,7 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
 
       setData(months);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Failed to load spending data';
+      const message = err instanceof ApiError ? err.message : t('monthlyTotalsChart.errorLoadDefault');
       setError(message);
       setData([]);
     } finally {
@@ -74,24 +76,24 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
   const displayData = monthRange === '6' ? data.slice(-6) : data;
   const totalSpent = displayData.reduce((sum, d) => sum + d.total, 0);
   const avgMonthly = displayData.length > 0 ? totalSpent / displayData.filter(d => d.total > 0).length : 0;
-  const maxMonth = displayData.reduce((max, d) => d.total > max.total ? d : max, { total: 0, label: 'N/A' } as ChartData);
-  const minMonth = displayData.filter(d => d.total > 0).reduce((min, d) => d.total < min.total ? d : min, { total: Infinity, label: 'N/A' } as ChartData);
+  const maxMonth = displayData.reduce((max, d) => d.total > max.total ? d : max, { total: 0, label: t('common.notApplicable') } as ChartData);
+  const minMonth = displayData.filter(d => d.total > 0).reduce((min, d) => d.total < min.total ? d : min, { total: Infinity, label: t('common.notApplicable') } as ChartData);
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Spending Trends" size="xl" centered>
+    <Modal opened={opened} onClose={onClose} title={t('monthlyTotalsChart.title')} size="xl" centered>
       <Stack gap="md">
         {loading ? (
           <Center py="xl">
             <Loader />
           </Center>
         ) : error ? (
-          <Alert icon={<IconAlertCircle size={16} />} title="Error loading data" color="red">
+          <Alert icon={<IconAlertCircle size={16} />} title={t('monthlyTotalsChart.errorLoadTitle')} color="red">
             {error}
           </Alert>
         ) : data.length === 0 || totalSpent === 0 ? (
           <Paper p="xl" withBorder>
             <Text ta="center" c="dimmed">
-              No payment data available
+              {t('common.noPaymentData')}
             </Text>
           </Paper>
         ) : (
@@ -103,8 +105,8 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
                 value={monthRange}
                 onChange={setMonthRange}
                 data={[
-                  { value: '6', label: '6 Months' },
-                  { value: '12', label: '12 Months' },
+                  { value: '6', label: t('monthlyTotalsChart.sixMonths') },
+                  { value: '12', label: t('monthlyTotalsChart.twelveMonths') },
                 ]}
               />
               <SegmentedControl
@@ -112,8 +114,8 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
                 value={chartType}
                 onChange={setChartType}
                 data={[
-                  { value: 'bar', label: 'Bar' },
-                  { value: 'line', label: 'Line' },
+                  { value: 'bar', label: t('monthlyTotalsChart.chartTypeBar') },
+                  { value: 'line', label: t('monthlyTotalsChart.chartTypeLine') },
                 ]}
               />
             </Group>
@@ -121,22 +123,22 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
             {/* Stats */}
             <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
               <Paper p="sm" withBorder>
-                <Text size="xs" c="dimmed">Total Spent</Text>
+                <Text size="xs" c="dimmed">{t('monthlyTotalsChart.totalSpent')}</Text>
                 <Text size="lg" fw={700} c="violet">{formatCurrency(totalSpent)}</Text>
               </Paper>
               <Paper p="sm" withBorder>
-                <Text size="xs" c="dimmed">Monthly Avg</Text>
+                <Text size="xs" c="dimmed">{t('monthlyTotalsChart.monthlyAvg')}</Text>
                 <Text size="lg" fw={700} c="blue">{formatCurrency(avgMonthly)}</Text>
               </Paper>
               <Paper p="sm" withBorder>
-                <Text size="xs" c="dimmed">Highest</Text>
+                <Text size="xs" c="dimmed">{t('monthlyTotalsChart.highest')}</Text>
                 <Text size="lg" fw={700} c="red">{formatCurrency(maxMonth.total)}</Text>
                 <Text size="xs" c="dimmed">{maxMonth.label}</Text>
               </Paper>
               <Paper p="sm" withBorder>
-                <Text size="xs" c="dimmed">Lowest</Text>
+                <Text size="xs" c="dimmed">{t('monthlyTotalsChart.lowest')}</Text>
                 <Text size="lg" fw={700} c="green">{formatCurrency(minMonth.total === Infinity ? 0 : minMonth.total)}</Text>
-                <Text size="xs" c="dimmed">{minMonth.total === Infinity ? 'N/A' : minMonth.label}</Text>
+                <Text size="xs" c="dimmed">{minMonth.total === Infinity ? t('common.notApplicable') : minMonth.label}</Text>
               </Paper>
             </SimpleGrid>
 
@@ -147,7 +149,7 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
                   h={300}
                   data={displayData}
                   dataKey="label"
-                  series={[{ name: 'total', color: 'violet.6', label: 'Total Paid' }]}
+                  series={[{ name: 'total', color: 'violet.6', label: t('monthlyTotalsChart.totalPaidSeries') }]}
                   withTooltip
                   tooltipProps={{
                     content: ({ payload }) => {
@@ -172,7 +174,7 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
                   h={300}
                   data={displayData}
                   dataKey="label"
-                  series={[{ name: 'total', color: 'violet.6', label: 'Total Paid' }]}
+                  series={[{ name: 'total', color: 'violet.6', label: t('monthlyTotalsChart.totalPaidSeries') }]}
                   curveType="monotone"
                   connectNulls
                   withTooltip

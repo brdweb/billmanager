@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Stack, Title, Group, Button, Text, Paper, Loader, Center, Grid } from '@mantine/core';
 import { IconPlus, IconReceipt } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { StatCards } from '../components/Dashboard/StatCards';
 import { UpcomingBillsList } from '../components/Dashboard/UpcomingBillsList';
 import type { Bill } from '../api/client';
@@ -29,6 +30,7 @@ export function Dashboard({
   onStatClick,
   hasDatabase,
 }: DashboardProps) {
+  const { t } = useTranslation();
   const [monthlyPaid, setMonthlyPaid] = useState(0);
 
   // Fetch monthly payments to get paid amount
@@ -53,10 +55,10 @@ export function Dashboard({
         <Paper withBorder p="xl" radius="md" ta="center" maw={400}>
           <IconReceipt size={48} color="var(--mantine-color-dimmed)" />
           <Title order={3} mt="md">
-            No Bill Group Selected
+            {t('dashboardPage.noBillGroupTitle')}
           </Title>
           <Text c="dimmed" mt="sm">
-            Select a bill group from the header to view your dashboard.
+            {t('dashboardPage.noBillGroupBody')}
           </Text>
         </Paper>
       </Center>
@@ -75,9 +77,9 @@ export function Dashboard({
     <Stack gap="lg">
       {/* Header */}
       <Group justify="space-between" align="center">
-        <Title order={2}>Dashboard</Title>
+        <Title order={2}>{t('sidebar.navDashboard')}</Title>
         <Button leftSection={<IconPlus size={16} />} onClick={onAddBill}>
-          Add Bill
+          {t('dashboardPage.addBill')}
         </Button>
       </Group>
 
@@ -99,7 +101,7 @@ export function Dashboard({
         <Grid.Col span={{ base: 12, md: 4 }}>
           {/* Quick Actions */}
           <Paper withBorder p="md" radius="md">
-            <Title order={5} mb="md">Quick Actions</Title>
+            <Title order={5} mb="md">{t('dashboardPage.quickActions')}</Title>
             <Stack gap="xs">
               <Button
                 variant="light"
@@ -107,7 +109,7 @@ export function Dashboard({
                 leftSection={<IconPlus size={16} />}
                 onClick={onAddBill}
               >
-                Add New Bill
+                {t('dashboardPage.addNewBill')}
               </Button>
               <Button
                 variant="light"
@@ -116,7 +118,7 @@ export function Dashboard({
                 leftSection={<IconReceipt size={16} />}
                 onClick={onViewBills}
               >
-                View All Bills
+                {t('dashboardPage.viewAllBills')}
               </Button>
             </Stack>
           </Paper>

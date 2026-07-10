@@ -29,13 +29,15 @@ import {
   IconTrendingDown,
   IconTrendingUp,
 } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { AccountPieChart } from '../components/Analytics/AccountPieChart';
 import { YoYComparison } from '../components/Analytics/YoYComparison';
 import { CashFlowForecast } from '../components/Dashboard/CashFlowForecast';
 import { useAuth } from '../context/AuthContext';
 import { getAllPayments, getMonthlyComparison, getStatsByAccount, getStatsYearly } from '../api/client';
 import type { AccountStats, MonthlyComparison as MonthlyComparisonType, PaymentWithBill, YearlyStats } from '../api/client';
-import { formatCurrency, formatCurrencyAxis } from '../lib/currency';
+import { formatCurrency, formatCurrencyAxis, getLocale } from '../lib/currency';
 
 interface AnalyticsProps {
   hasDatabase: boolean;
@@ -108,8 +110,8 @@ function paymentMonthKey(paymentDate: string): string | null {
   return match ? `${match[1]}-${match[2]}` : null;
 }
 
-function categoryLabel(payment: PaymentWithBill): string {
-  return payment.category?.trim() || 'Uncategorized';
+function categoryLabel(payment: PaymentWithBill, t: TFunction): string {
+  return payment.category?.trim() || t('analyticsPage.uncategorized');
 }
 
 function SectionShell({
@@ -131,6 +133,7 @@ function SectionShell({
   onDrop: (event: DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Paper
       withBorder
@@ -150,7 +153,7 @@ function SectionShell({
           onDragEnd={onDragEnd}
           style={{ cursor: 'grab', flex: 1, minWidth: 0 }}
         >
-          <ActionIcon variant="subtle" color="gray" aria-label={`Move ${section.title}`}>
+          <ActionIcon variant="subtle" color="gray" aria-label={t('analyticsPage.moveAriaLabel', { title: section.title })}>
             <IconGripVertical size={18} />
           </ActionIcon>
           <Stack gap={2} style={{ minWidth: 0 }}>
@@ -166,7 +169,7 @@ function SectionShell({
           variant="subtle"
           color="gray"
           onClick={onToggle}
-          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${section.title}`}
+          aria-label={collapsed ? t('analyticsPage.expandAriaLabel', { title: section.title }) : t('analyticsPage.collapseAriaLabel', { title: section.title })}
         >
           {collapsed ? <IconChevronDown size={18} /> : <IconChevronUp size={18} />}
         </ActionIcon>
@@ -178,6 +181,7 @@ function SectionShell({
 }
 
 export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [accountStats, setAccountStats] = useState<AccountStats[]>([]);
   const [yearlyStats, setYearlyStats] = useState<YearlyStats | null>(null);
@@ -232,7 +236,7 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
       setMonthlyComparison(comparison);
       setPayments(Array.isArray(allPayments) ? allPayments : []);
     } catch (err) {
-      setError('Failed to load analytics data');
+      setError(t('analyticsPage.loadFailed'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -250,7 +254,7 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
       const key = monthKey(date);
       const row: CategoryChartData = {
         month: key,
-        label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+        label: date.toLocaleDateString(getLocale(), { month: 'short', year: '2-digit' }),
         total: 0,
       };
       rows.push(row);
@@ -268,7 +272,7 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
         return;
       }
 
-      const category = categoryLabel(payment);
+      const category = categoryLabel(payment, t);
       const amount = Number(payment.amount) || 0;
       row.total += amount;
       categoryTotals.set(category, (categoryTotals.get(category) ?? 0) + amount);
@@ -303,7 +307,7 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
         return;
       }
 
-      const categoryKey = keyByCategory.get(categoryLabel(payment));
+      const categoryKey = keyByCategory.get(categoryLabel(payment, t));
       if (!categoryKey) {
         return;
       }
@@ -312,7 +316,7 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
     });
 
     return { rows, series };
-  }, [payments]);
+  }, [payments, t]);
 
   const displayData = monthRange === '6' ? trend.rows.slice(-6) : trend.rows;
   const totalSpent = displayData.reduce((sum, item) => sum + item.total, 0);
@@ -320,14 +324,14 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
   const avgMonthly = monthsWithData.length > 0 ? totalSpent / monthsWithData.length : 0;
   const maxMonth = displayData.reduce(
     (max, item) => (item.total > max.total ? item : max),
-    { total: 0, label: 'N/A' } as CategoryChartData
+    { total: 0, label: t('common.notApplicable') } as CategoryChartData
   );
   const minMonth = monthsWithData.length > 0
     ? monthsWithData.reduce(
         (min, item) => (item.total < min.total ? item : min),
-        { total: Infinity, label: 'N/A' } as CategoryChartData
+        { total: Infinity, label: t('common.notApplicable') } as CategoryChartData
       )
-    : ({ total: 0, label: 'N/A' } as CategoryChartData);
+    : ({ total: 0, label: t('common.notApplicable') } as CategoryChartData);
 
   const yearlyEntries = yearlyStats ? Object.entries(yearlyStats).sort((a, b) => b[0].localeCompare(a[0])) : [];
   const currentYearData = yearlyEntries[0];
@@ -369,10 +373,10 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
         <Paper withBorder p="xl" radius="md" ta="center" maw={400}>
           <IconChartPie size={48} color="var(--mantine-color-dimmed)" />
           <Title order={3} mt="md">
-            No Bill Group Selected
+            {t('dashboardPage.noBillGroupTitle')}
           </Title>
           <Text c="dimmed" mt="sm">
-            Select a bill group from the header to view analytics.
+            {t('analyticsPage.noBillGroupBody')}
           </Text>
         </Paper>
       </Center>
@@ -415,7 +419,7 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
   const sections: AnalyticsSection[] = [
     {
       id: 'summary',
-      title: 'Summary',
+      title: t('analyticsPage.summaryTitle'),
       content: (
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
           {currentYearData && (
@@ -423,7 +427,7 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
               <Group justify="space-between">
                 <div>
                   <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                    {currentYearData[0]} Expenses
+                    {t('analyticsPage.expensesSuffix', { year: currentYearData[0] })}
                   </Text>
                   <Text fw={700} size="xl">
                     {formatCurrency(currentYearData[1].expenses)}
@@ -441,7 +445,7 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
               <Group justify="space-between">
                 <div>
                   <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                    {lastYearData[0]} Expenses
+                    {t('analyticsPage.expensesSuffix', { year: lastYearData[0] })}
                   </Text>
                   <Text fw={700} size="xl">
                     {formatCurrency(lastYearData[1].expenses)}
@@ -459,7 +463,7 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
               <Group justify="space-between">
                 <div>
                   <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                    Year-over-Year Change
+                    {t('analyticsPage.yoyChangeLabel')}
                   </Text>
                   <Text fw={700} size="xl" c={yoyChange >= 0 ? 'red' : 'green'}>
                     {yoyChange >= 0 ? '+' : ''}{yoyChange.toFixed(1)}%
@@ -476,8 +480,8 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
     },
     {
       id: 'spending-trends',
-      title: 'Spending Trends',
-      description: 'Monthly expenses split by bill category.',
+      title: t('analyticsPage.spendingTrendsTitle'),
+      description: t('analyticsPage.spendingTrendsDescription'),
       content: totalSpent > 0 ? (
         <Stack gap="md">
           <Group justify="space-between">
@@ -487,8 +491,8 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
                 value={monthRange}
                 onChange={setMonthRange}
                 data={[
-                  { value: '6', label: '6 Months' },
-                  { value: '12', label: '12 Months' },
+                  { value: '6', label: t('monthlyTotalsChart.sixMonths') },
+                  { value: '12', label: t('monthlyTotalsChart.twelveMonths') },
                 ]}
               />
               <SegmentedControl
@@ -496,8 +500,8 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
                 value={chartType}
                 onChange={setChartType}
                 data={[
-                  { value: 'bar', label: 'Bar' },
-                  { value: 'line', label: 'Line' },
+                  { value: 'bar', label: t('monthlyTotalsChart.chartTypeBar') },
+                  { value: 'line', label: t('monthlyTotalsChart.chartTypeLine') },
                 ]}
               />
             </Group>
@@ -505,22 +509,22 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
 
           <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
             <Paper p="sm" withBorder>
-              <Text size="xs" c="dimmed">Total Spent</Text>
+              <Text size="xs" c="dimmed">{t('monthlyTotalsChart.totalSpent')}</Text>
               <Text size="lg" fw={700} c="violet">{formatCurrency(totalSpent)}</Text>
             </Paper>
             <Paper p="sm" withBorder>
-              <Text size="xs" c="dimmed">Monthly Avg</Text>
+              <Text size="xs" c="dimmed">{t('monthlyTotalsChart.monthlyAvg')}</Text>
               <Text size="lg" fw={700} c="blue">{formatCurrency(avgMonthly)}</Text>
             </Paper>
             <Paper p="sm" withBorder>
-              <Text size="xs" c="dimmed">Highest</Text>
+              <Text size="xs" c="dimmed">{t('monthlyTotalsChart.highest')}</Text>
               <Text size="lg" fw={700} c="red">{formatCurrency(maxMonth.total)}</Text>
               <Text size="xs" c="dimmed">{maxMonth.label}</Text>
             </Paper>
             <Paper p="sm" withBorder>
-              <Text size="xs" c="dimmed">Lowest</Text>
+              <Text size="xs" c="dimmed">{t('monthlyTotalsChart.lowest')}</Text>
               <Text size="lg" fw={700} c="green">{formatCurrency(minMonth.total === Infinity ? 0 : minMonth.total)}</Text>
-              <Text size="xs" c="dimmed">{minMonth.total === Infinity ? 'N/A' : minMonth.label}</Text>
+              <Text size="xs" c="dimmed">{minMonth.total === Infinity ? t('common.notApplicable') : minMonth.label}</Text>
             </Paper>
           </SimpleGrid>
 
@@ -560,20 +564,20 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
       ) : (
         <Paper withBorder p="md" radius="sm" bg="var(--mantine-color-default)">
           <Text size="sm" c="dimmed">
-            No categorized payment history yet. Add categories to bills and record payments to see stacked trends.
+            {t('analyticsPage.noCategorizedData')}
           </Text>
         </Paper>
       ),
     },
     {
       id: 'cash-flow',
-      title: 'Cash Flow Forecast',
-      description: 'Projected balance from upcoming bills, deposits, and shared payables.',
+      title: t('dashboard.cashFlowForecast.title'),
+      description: t('dashboard.cashFlowForecast.description'),
       content: <CashFlowForecast hasDatabase={hasDatabase} framed={false} showHeader={false} />,
     },
     {
       id: 'accounts',
-      title: 'Account Breakdown',
+      title: t('analyticsPage.accountsTitle'),
       content: (
         <Grid>
           <Grid.Col span={{ base: 12, lg: 6 }}>
@@ -587,7 +591,7 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
     },
     {
       id: 'yearly',
-      title: 'Yearly Summary',
+      title: t('analyticsPage.yearlyTitle'),
       content: yearlyEntries.length > 0 ? (
         <SimpleGrid cols={{ base: 2, sm: 4, md: 6 }}>
           {yearlyEntries.map(([year, data]) => {
@@ -597,18 +601,18 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
                 <Text size="sm" fw={700} mb={4}>{year}</Text>
                 <Divider mb={4} />
                 <Group justify="space-between" gap={4}>
-                  <Text size="xs" c="dimmed">Expenses</Text>
+                  <Text size="xs" c="dimmed">{t('analyticsPage.expensesLabel')}</Text>
                   <Text size="sm" fw={600} c="red">-{formatCurrency(data.expenses)}</Text>
                 </Group>
                 {data.deposits > 0 && (
                   <Group justify="space-between" gap={4}>
-                    <Text size="xs" c="dimmed">Deposits</Text>
+                    <Text size="xs" c="dimmed">{t('dayDetailModal.depositsHeader')}</Text>
                     <Text size="sm" fw={600} c="green">+{formatCurrency(data.deposits)}</Text>
                   </Group>
                 )}
                 <Divider my={4} />
                 <Group justify="space-between" gap={4}>
-                  <Text size="xs" fw={600}>Net</Text>
+                  <Text size="xs" fw={600}>{t('analyticsPage.netLabel')}</Text>
                   <Text size="sm" fw={700} c={net >= 0 ? 'green' : 'red'}>
                     {net >= 0 ? '+' : '-'}{formatCurrency(Math.abs(net))}
                   </Text>
@@ -618,7 +622,7 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
           })}
         </SimpleGrid>
       ) : (
-        <Text size="sm" c="dimmed">No yearly payment data available yet.</Text>
+        <Text size="sm" c="dimmed">{t('analyticsPage.noYearlyData')}</Text>
       ),
     },
   ];
@@ -628,7 +632,7 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="center">
-        <Title order={2}>Analytics</Title>
+        <Title order={2}>{t('analyticsPage.title')}</Title>
       </Group>
 
       {error && (

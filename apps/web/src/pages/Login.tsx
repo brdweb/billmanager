@@ -24,6 +24,7 @@ import {
   IconAlertCircle,
   IconBrandGithub,
 } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
 import { SocialLoginButtons } from '../components/SocialLoginButtons';
@@ -49,6 +50,7 @@ function getPasswordColor(strength: number): string {
 }
 
 export function Login() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { login, pending2FA } = useAuth();
   const { config } = useConfig();
@@ -85,7 +87,7 @@ export function Login() {
     setLoginError('');
 
     if (!loginUsername.trim() || !loginPassword.trim()) {
-      setLoginError('Username and password are required');
+      setLoginError(t('loginModal.usernamePasswordRequired'));
       return;
     }
 
@@ -99,27 +101,27 @@ export function Login() {
         }
         // If require2FA, the component will re-render with pending2FA and show TwoFactorVerify
       } else {
-        setLoginError('Invalid credentials');
+        setLoginError(t('loginModal.invalidCredentials'));
       }
     } catch {
-      setLoginError('Login failed. Please try again.');
+      setLoginError(t('loginModal.loginFailed'));
     } finally {
       setLoginLoading(false);
     }
   };
 
   const validateSignup = (): string | null => {
-    if (!signupUsername.trim()) return 'Username is required';
-    if (signupUsername.length < 3) return 'Username must be at least 3 characters';
-    if (!signupEmail.trim()) return 'Email is required';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signupEmail)) return 'Invalid email address';
-    if (!signupPassword) return 'Password is required';
-    if (signupPassword.length < 8) return 'Password must be at least 8 characters';
+    if (!signupUsername.trim()) return t('loginPage.usernameRequired');
+    if (signupUsername.length < 3) return t('loginPage.usernameMinLength');
+    if (!signupEmail.trim()) return t('loginPage.emailRequired');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signupEmail)) return t('loginPage.invalidEmail');
+    if (!signupPassword) return t('loginPage.passwordRequired');
+    if (signupPassword.length < 8) return t('loginPage.passwordMinLength');
     if (!/[a-z]/.test(signupPassword) || !/[A-Z]/.test(signupPassword)) {
-      return 'Password must contain both uppercase and lowercase letters';
+      return t('loginPage.passwordCase');
     }
-    if (!/[0-9]/.test(signupPassword)) return 'Password must contain at least one number';
-    if (signupPassword !== signupConfirmPassword) return 'Passwords do not match';
+    if (!/[0-9]/.test(signupPassword)) return t('loginPage.passwordNumber');
+    if (signupPassword !== signupConfirmPassword) return t('loginPage.passwordsMismatch');
     return null;
   };
 
@@ -144,11 +146,11 @@ export function Login() {
         setSignupSuccess(true);
         window.umami?.track('user_registered');
       } else {
-        setSignupError(response.error || 'Registration failed');
+        setSignupError(response.error || t('loginPage.registrationFailedDefault'));
       }
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } } };
-      setSignupError(error.response?.data?.error || 'Registration failed. Please try again.');
+      setSignupError(error.response?.data?.error || t('loginPage.registrationFailedRetry'));
     } finally {
       setSignupLoading(false);
     }
@@ -169,13 +171,12 @@ export function Login() {
           <Paper withBorder shadow="xl" p={40} radius="md" style={{ textAlign: 'center' }}>
             <Stack gap="lg">
               <div style={{ fontSize: '48px' }}>📧</div>
-              <Title order={2}>Check Your Email</Title>
+              <Title order={2}>{t('loginPage.checkEmailTitle')}</Title>
               <Text c="dimmed">
-                We&apos;ve sent a verification link to <strong>{signupEmail}</strong>.
-                Please check your inbox and click the link to activate your account.
+                {t('loginPage.checkEmailPrefix')} <strong>{signupEmail}</strong>. {t('loginPage.checkEmailSuffix')}
               </Text>
               <Button onClick={() => { setSignupSuccess(false); setActiveTab('login'); }}>
-                Back to Login
+                {t('loginPage.backToLogin')}
               </Button>
             </Stack>
           </Paper>
@@ -209,15 +210,15 @@ export function Login() {
             BillManager
           </Title>
           <Text c="white" size="lg" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
-            Track your bills and income with ease
+            {t('loginPage.tagline')}
           </Text>
         </Stack>
 
         <Paper withBorder shadow="xl" p={30} radius="md">
           <Tabs value={activeTab} onChange={setActiveTab}>
             <Tabs.List grow={registrationEnabled}>
-              <Tabs.Tab value="login">Sign In</Tabs.Tab>
-              {registrationEnabled && <Tabs.Tab value="signup">Sign Up</Tabs.Tab>}
+              <Tabs.Tab value="login">{t('loginPage.signIn')}</Tabs.Tab>
+              {registrationEnabled && <Tabs.Tab value="signup">{t('loginPage.signUp')}</Tabs.Tab>}
             </Tabs.List>
 
             <Tabs.Panel value="login" pt="xl">
@@ -230,8 +231,8 @@ export function Login() {
                   )}
 
                   <TextInput
-                    label="Username"
-                    placeholder="Enter your username"
+                    label={t('loginModal.usernameLabel')}
+                    placeholder={t('loginModal.usernamePlaceholder')}
                     leftSection={<IconUser size={16} />}
                     value={loginUsername}
                     onChange={(e) => setLoginUsername(e.currentTarget.value)}
@@ -239,8 +240,8 @@ export function Login() {
                   />
 
                   <PasswordInput
-                    label="Password"
-                    placeholder="Enter your password"
+                    label={t('loginModal.passwordLabel')}
+                    placeholder={t('loginModal.passwordPlaceholder')}
                     leftSection={<IconLock size={16} />}
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.currentTarget.value)}
@@ -249,12 +250,12 @@ export function Login() {
 
                   <Group justify="space-between">
                     <Anchor component={Link} to="/forgot-password" size="sm">
-                      Forgot password?
+                      {t('loginPage.forgotPassword')}
                     </Anchor>
                   </Group>
 
                   <Button type="submit" fullWidth loading={loginLoading} size="md">
-                    Sign In
+                    {t('loginPage.signIn')}
                   </Button>
 
                   {config?.oauth_providers && config.oauth_providers.length > 0 && (
@@ -278,8 +279,8 @@ export function Login() {
                   )}
 
                   <TextInput
-                    label="Username"
-                    placeholder="Choose a username"
+                    label={t('loginModal.usernameLabel')}
+                    placeholder={t('loginPage.chooseUsernamePlaceholder')}
                     leftSection={<IconUser size={16} />}
                     value={signupUsername}
                     onChange={(e) => setSignupUsername(e.currentTarget.value)}
@@ -287,8 +288,8 @@ export function Login() {
                   />
 
                   <TextInput
-                    label="Email"
-                    placeholder="your@email.com"
+                    label={t('loginPage.emailLabel')}
+                    placeholder={t('loginPage.emailPlaceholder')}
                     leftSection={<IconMail size={16} />}
                     value={signupEmail}
                     onChange={(e) => setSignupEmail(e.currentTarget.value)}
@@ -298,8 +299,8 @@ export function Login() {
 
                   <div>
                     <PasswordInput
-                      label="Password"
-                      placeholder="Create a strong password"
+                      label={t('loginModal.passwordLabel')}
+                      placeholder={t('loginPage.createPasswordPlaceholder')}
                       leftSection={<IconLock size={16} />}
                       value={signupPassword}
                       onChange={(e) => setSignupPassword(e.currentTarget.value)}
@@ -315,7 +316,7 @@ export function Login() {
                         />
                         <List size="xs" c="dimmed" spacing={0} mt={5}>
                           <List.Item c={signupPassword.length >= 8 ? 'green' : undefined}>
-                            At least 8 characters
+                            {t('loginPage.atLeast8Chars')}
                           </List.Item>
                           <List.Item
                             c={
@@ -324,10 +325,10 @@ export function Login() {
                                 : undefined
                             }
                           >
-                            Upper and lowercase letters
+                            {t('loginPage.upperLowerLetters')}
                           </List.Item>
                           <List.Item c={/[0-9]/.test(signupPassword) ? 'green' : undefined}>
-                            At least one number
+                            {t('loginPage.atLeastOneNumber')}
                           </List.Item>
                         </List>
                       </>
@@ -335,31 +336,31 @@ export function Login() {
                   </div>
 
                   <PasswordInput
-                    label="Confirm Password"
-                    placeholder="Confirm your password"
+                    label={t('loginPage.confirmPasswordLabel')}
+                    placeholder={t('loginPage.confirmPasswordPlaceholder')}
                     leftSection={<IconLock size={16} />}
                     value={signupConfirmPassword}
                     onChange={(e) => setSignupConfirmPassword(e.currentTarget.value)}
                     error={
                       signupConfirmPassword && signupPassword !== signupConfirmPassword
-                        ? 'Passwords do not match'
+                        ? t('loginPage.passwordsMismatch')
                         : undefined
                     }
                     required
                   />
 
                   <Button type="submit" fullWidth loading={signupLoading} size="md">
-                    Create Account
+                    {t('loginPage.createAccount')}
                   </Button>
 
                   <Text size="xs" c="dimmed" ta="center">
-                    By signing up, you agree to our{' '}
+                    {t('loginPage.agreeToTerms')}{' '}
                     <Anchor href="/terms" size="xs">
-                      Terms
+                      {t('loginPage.terms')}
                     </Anchor>{' '}
-                    and{' '}
+                    {t('loginPage.and')}{' '}
                     <Anchor href="/privacy" size="xs">
-                      Privacy Policy
+                      {t('loginPage.privacyPolicy')}
                     </Anchor>
                   </Text>
                 </Stack>
@@ -370,7 +371,7 @@ export function Login() {
         </Paper>
 
         <Text component="div" c="white" size="sm" ta="center" mt="xl" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
-          Open source •{' '}
+          {t('loginPage.openSource')} •{' '}
           <Anchor
             href="https://github.com/brdweb/billmanager"
             c="white"
@@ -378,7 +379,7 @@ export function Login() {
           >
             <Group gap={4} style={{ display: 'inline-flex' }}>
               <IconBrandGithub size={16} />
-              <span>View on GitHub</span>
+              <span>{t('loginPage.viewOnGithub')}</span>
             </Group>
           </Anchor>
         </Text>

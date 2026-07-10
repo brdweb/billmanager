@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import '@mantine/charts/styles.css';
 import { Paper, Text, Loader, Center } from '@mantine/core';
 import { AreaChart } from '@mantine/charts';
+import { useTranslation } from 'react-i18next';
 import { getBillMonthlyPayments } from '../api/client';
 import type { MonthlyBillPayment } from '../api/client';
-import { formatCurrency, formatCurrencyAxis } from '../lib/currency';
+import { formatCurrency, formatCurrencyAxis, getLocale } from '../lib/currency';
 
 interface PaymentHistoryChartProps {
   billName: string | null;
@@ -28,6 +29,7 @@ function parseMonthString(monthStr: string): { year: number; month: number } | n
 }
 
 export function PaymentHistoryChart({ billName }: PaymentHistoryChartProps) {
+  const { t } = useTranslation();
   const [data, setData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -47,7 +49,7 @@ export function PaymentHistoryChart({ billName }: PaymentHistoryChartProps) {
           const date = new Date(parsed.year, parsed.month - 1, 1);
           return {
             month: item.month,
-            label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+            label: date.toLocaleDateString(getLocale(), { month: 'short', year: '2-digit' }),
             total: item.total ?? 0,
           };
         })
@@ -84,14 +86,14 @@ export function PaymentHistoryChart({ billName }: PaymentHistoryChartProps) {
   return (
     <Paper p="sm" withBorder mb="md" style={{ minWidth: 0 }}>
       <Text size="sm" fw={500} mb="xs" c="dimmed">
-        Payment History (Last {data.length} Months)
+        {t('paymentHistoryChart.title', { count: data.length })}
       </Text>
       <AreaChart
         h={150}
         w="100%"
         data={data}
         dataKey="label"
-        series={[{ name: 'total', color: 'teal.6', label: 'Amount' }]}
+        series={[{ name: 'total', color: 'teal.6', label: t('common.table.amount') }]}
         curveType="monotone"
         withTooltip
         tooltipProps={{

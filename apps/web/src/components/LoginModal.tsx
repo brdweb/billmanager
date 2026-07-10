@@ -12,6 +12,7 @@ import {
   Divider,
 } from '@mantine/core';
 import { IconUser, IconLock, IconAlertCircle, IconAlertTriangle } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 
 interface LoginModalProps {
@@ -21,6 +22,7 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ opened, onClose, onPasswordChangeRequired }: LoginModalProps) {
+  const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -34,7 +36,7 @@ export function LoginModal({ opened, onClose, onPasswordChangeRequired }: LoginM
     setWarning('');
 
     if (!username.trim() || !password.trim()) {
-      setError('Username and password are required');
+      setError(t('loginModal.usernamePasswordRequired'));
       return;
     }
 
@@ -59,10 +61,10 @@ export function LoginModal({ opened, onClose, onPasswordChangeRequired }: LoginM
           setPassword('');
         }
       } else {
-        setError('Invalid credentials');
+        setError(t('loginModal.invalidCredentials'));
       }
     } catch {
-      setError('Login failed. Please try again.');
+      setError(t('loginModal.loginFailed'));
     } finally {
       setLoading(false);
     }
@@ -78,7 +80,7 @@ export function LoginModal({ opened, onClose, onPasswordChangeRequired }: LoginM
     <Modal
       opened={opened}
       onClose={onClose}
-      title="Login"
+      title={t('loginModal.title')}
       centered
     >
       <form onSubmit={handleSubmit}>
@@ -86,7 +88,7 @@ export function LoginModal({ opened, onClose, onPasswordChangeRequired }: LoginM
           {error && (
             <Alert
               icon={<IconAlertCircle size={16} />}
-              title="Error"
+              title={t('loginModal.errorTitle')}
               color="red"
               variant="light"
             >
@@ -97,7 +99,7 @@ export function LoginModal({ opened, onClose, onPasswordChangeRequired }: LoginM
           {warning && (
             <Alert
               icon={<IconAlertTriangle size={16} />}
-              title="Warning"
+              title={t('loginModal.warningTitle')}
               color="yellow"
               variant="light"
             >
@@ -106,8 +108,8 @@ export function LoginModal({ opened, onClose, onPasswordChangeRequired }: LoginM
           )}
 
           <TextInput
-            label="Username"
-            placeholder="Enter your username"
+            label={t('loginModal.usernameLabel')}
+            placeholder={t('loginModal.usernamePlaceholder')}
             leftSection={<IconUser size={16} />}
             value={username}
             onChange={(e) => setUsername(e.currentTarget.value)}
@@ -116,8 +118,8 @@ export function LoginModal({ opened, onClose, onPasswordChangeRequired }: LoginM
           />
 
           <PasswordInput
-            label="Password"
-            placeholder="Enter your password"
+            label={t('loginModal.passwordLabel')}
+            placeholder={t('loginModal.passwordPlaceholder')}
             leftSection={<IconLock size={16} />}
             value={password}
             onChange={(e) => setPassword(e.currentTarget.value)}
@@ -126,7 +128,7 @@ export function LoginModal({ opened, onClose, onPasswordChangeRequired }: LoginM
           />
 
           <Button type="submit" fullWidth loading={loading}>
-            Login
+            {t('loginModal.loginButton')}
           </Button>
 
           <Anchor
@@ -136,15 +138,15 @@ export function LoginModal({ opened, onClose, onPasswordChangeRequired }: LoginM
             ta="center"
             onClick={onClose}
           >
-            Forgot your password?
+            {t('loginModal.forgotPassword')}
           </Anchor>
 
-          <Divider label="or" labelPosition="center" />
+          <Divider label={t('loginModal.or')} labelPosition="center" />
 
           <Text size="sm" ta="center">
-            Don&apos;t have an account?{' '}
+            {t('loginModal.noAccount')}{' '}
             <Anchor component={Link} to="/register" onClick={onClose}>
-              Sign up
+              {t('loginModal.signUp')}
             </Anchor>
           </Text>
         </Stack>

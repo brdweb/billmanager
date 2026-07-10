@@ -1,7 +1,8 @@
 import { Modal, Stack, Text, Paper, Group, Button, Badge, Box } from '@mantine/core';
 import { IconCoin, IconCoinOff } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import type { Bill } from '../api/client';
-import { formatCurrency } from '../lib/currency';
+import { formatCurrency, getLocale } from '../lib/currency';
 
 interface DayDetailModalProps {
   opened: boolean;
@@ -13,12 +14,13 @@ interface DayDetailModalProps {
 }
 
 export function DayDetailModal({ opened, onClose, date, bills, onPay, onEdit }: DayDetailModalProps) {
+  const { t } = useTranslation();
   if (!date) return null;
 
   // Parse date for display
   const [year, month, day] = date.split('-').map(Number);
   const dateObj = new Date(year, month - 1, day);
-  const formattedDate = dateObj.toLocaleDateString('en-US', {
+  const formattedDate = dateObj.toLocaleDateString(getLocale(), {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -41,7 +43,7 @@ export function DayDetailModal({ opened, onClose, date, bills, onPay, onEdit }: 
       <Stack gap="md">
         {dayBills.length === 0 ? (
           <Text c="dimmed" ta="center" py="lg">
-            No bills due on this date
+            {t('dayDetailModal.noBillsDue')}
           </Text>
         ) : (
           <>
@@ -49,13 +51,13 @@ export function DayDetailModal({ opened, onClose, date, bills, onPay, onEdit }: 
             <Group grow>
               {expenses.length > 0 && (
                 <Paper withBorder p="xs" radius="sm" bg="red.0">
-                  <Text size="xs" c="red.7" fw={500}>Expenses</Text>
+                  <Text size="xs" c="red.7" fw={500}>{t('dayDetailModal.expensesHeader')}</Text>
                   <Text fw={700} c="red.8">{formatCurrency(expenseTotal)}</Text>
                 </Paper>
               )}
               {deposits.length > 0 && (
                 <Paper withBorder p="xs" radius="sm" bg="green.0">
-                  <Text size="xs" c="green.7" fw={500}>Deposits</Text>
+                  <Text size="xs" c="green.7" fw={500}>{t('dayDetailModal.depositsHeader')}</Text>
                   <Text fw={700} c="green.8">{formatCurrency(depositTotal)}</Text>
                 </Paper>
               )}
@@ -80,17 +82,16 @@ export function DayDetailModal({ opened, onClose, date, bills, onPay, onEdit }: 
                             color={isExpense ? 'red' : 'green'}
                             variant="light"
                           >
-                            {isExpense ? 'Expense' : 'Deposit'}
+                            {isExpense ? t('common.billType.expense') : t('common.billType.deposit')}
                           </Badge>
                           {bill.varies && (
                             <Badge size="xs" color="gray" variant="outline">
-                              ~avg
+                              {t('dayDetailModal.avgBadge')}
                             </Badge>
                           )}
                         </Group>
                         <Text size="sm" c="dimmed">
-                          {formatCurrency(amount)}
-                          {bill.account && ` - ${bill.account}`}
+                          {bill.account ? t('dayDetailModal.amountWithAccount', { amount: formatCurrency(amount), account: bill.account }) : formatCurrency(amount)}
                         </Text>
                       </Box>
                       <Group gap="xs">
@@ -104,7 +105,7 @@ export function DayDetailModal({ opened, onClose, date, bills, onPay, onEdit }: 
                             onClose();
                           }}
                         >
-                          {isExpense ? 'Pay' : 'Record'}
+                          {isExpense ? t('common.actions.pay') : t('common.actions.record')}
                         </Button>
                         <Button
                           variant="subtle"
@@ -115,7 +116,7 @@ export function DayDetailModal({ opened, onClose, date, bills, onPay, onEdit }: 
                             onClose();
                           }}
                         >
-                          Edit
+                          {t('common.actions.edit')}
                         </Button>
                       </Group>
                     </Group>

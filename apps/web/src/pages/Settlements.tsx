@@ -27,50 +27,52 @@ import {
   IconShare,
   IconUser,
 } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import * as api from '../api/client';
 import type { SettlementItem, SettlementsResponse } from '../api/client';
 import { BillIcon } from '../components/BillIcon';
-import { formatCurrency } from '../lib/currency';
+import { formatCurrency, getLocale } from '../lib/currency';
 
 interface SettlementsProps {
   hasDatabase: boolean;
 }
 
-function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return 'No date';
+function formatDate(dateStr: string | null | undefined, t: TFunction): string {
+  if (!dateStr) return t('settlementsPage.noDate');
   const parts = dateStr.split('-').map(Number);
   if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) {
     return dateStr;
   }
   const [year, month, day] = parts;
-  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+  return new Date(year, month - 1, day).toLocaleDateString(getLocale(), {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
 }
 
-function dueBadge(item: SettlementItem) {
+function dueBadge(item: SettlementItem, t: TFunction) {
   if (item.paid) {
-    return <Badge color="green" variant="light">Paid</Badge>;
+    return <Badge color="green" variant="light">{t('sharedBillsSection.paid')}</Badge>;
   }
   if (item.due_status === 'overdue') {
-    return <Badge color="red">Overdue</Badge>;
+    return <Badge color="red">{t('dashboard.statCards.overdue')}</Badge>;
   }
   if (item.due_status === 'due_today') {
-    return <Badge color="orange">Due today</Badge>;
+    return <Badge color="orange">{t('settlementsPage.statusDueToday')}</Badge>;
   }
   if (item.days_until_due !== null && item.days_until_due <= 7) {
-    return <Badge color="yellow" variant="light">Due soon</Badge>;
+    return <Badge color="yellow" variant="light">{t('settlementsPage.statusDueSoon')}</Badge>;
   }
-  return <Badge color="gray" variant="light">Open</Badge>;
+  return <Badge color="gray" variant="light">{t('settlementsPage.statusOpen')}</Badge>;
 }
 
-function splitLabel(item: SettlementItem): string {
-  if (!item.split_type) return 'Full amount';
-  if (item.split_type === 'equal') return 'Equal split';
-  if (item.split_type === 'percentage') return `${item.split_value ?? 0}% split`;
-  return `${formatCurrency(item.split_value)} fixed`;
+function splitLabel(item: SettlementItem, t: TFunction): string {
+  if (!item.split_type) return t('settlementsPage.splitFullAmount');
+  if (item.split_type === 'equal') return t('settlementsPage.splitEqual');
+  if (item.split_type === 'percentage') return t('settlementsPage.splitPercentage', { value: item.split_value ?? 0 });
+  return t('settlementsPage.splitFixed', { amount: formatCurrency(item.split_value) });
 }
 
 function StatCard({
@@ -111,6 +113,7 @@ function SettlementCard({
   actionLoading: number | null;
   onMarkPaid?: (shareId: number) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Paper withBorder p="md" radius="md">
       <Stack gap="sm">
@@ -120,7 +123,7 @@ function SettlementCard({
             <Stack gap={2}>
               <Group gap="xs">
                 <Text fw={600}>{item.bill_name}</Text>
-                {dueBadge(item)}
+                {dueBadge(item, t)}
               </Group>
               <Group gap={6}>
                 <IconUser size={13} />
@@ -130,14 +133,14 @@ function SettlementCard({
                 )}
               </Group>
               <Text size="xs" c="dimmed">
-                Due {formatDate(item.due_date)} · {splitLabel(item)}
+                {t('settlementsPage.dueDatePrefix', { date: formatDate(item.due_date, t), split: splitLabel(item, t) })}
               </Text>
             </Stack>
           </Group>
           <Stack gap={2} align="flex-end">
             <Text fw={700} size="lg">{formatCurrency(item.amount)}</Text>
             {item.total_amount !== null && item.total_amount !== item.amount && (
-              <Text size="xs" c="dimmed">of {formatCurrency(item.total_amount)}</Text>
+              <Text size="xs" c="dimmed">{t('sharedBillsSection.ofAmount', { amount: formatCurrency(item.total_amount) })}</Text>
             )}
           </Stack>
         </Group>
@@ -152,7 +155,7 @@ function SettlementCard({
                 loading={actionLoading === item.share_id}
                 onClick={() => onMarkPaid(item.share_id)}
               >
-                Mark paid
+                {t('settlementsPage.markPaidButton')}
               </Button>
             </Group>
           </>
@@ -202,6 +205,7 @@ function SettlementColumn({
 }
 
 export function Settlements({ hasDatabase }: SettlementsProps) {
+  const { t } = useTranslation();
   const [data, setData] = useState<SettlementsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -219,12 +223,12 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
       const response = await api.getSettlements();
       setData(response);
     } catch {
-      setError('Unable to load settlements.');
+      setError(t('settlementsPage.loadFailed'));
       setData(null);
     } finally {
       setLoading(false);
     }
-  }, [hasDatabase]);
+  }, [hasDatabase, t]);
 
   useEffect(() => {
     loadSettlements();
@@ -235,14 +239,14 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
     try {
       await api.markSharePaid(shareId);
       notifications.show({
-        message: 'Share marked paid',
+        message: t('settlementsPage.markPaidSuccess'),
         color: 'green',
       });
       await loadSettlements();
     } catch {
       notifications.show({
-        title: 'Payment update failed',
-        message: 'Unable to mark this share paid.',
+        title: t('settlementsPage.markPaidFailedTitle'),
+        message: t('settlementsPage.markPaidFailedBody'),
         color: 'red',
       });
     } finally {
@@ -258,7 +262,7 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
   if (!hasDatabase) {
     return (
       <Center py="xl">
-        <Text c="dimmed">Create or select a bill group to track settlements.</Text>
+        <Text c="dimmed">{t('settlementsPage.hasDatabaseEmptyBody')}</Text>
       </Center>
     );
   }
@@ -275,10 +279,10 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
     <Stack gap="md">
       <Group justify="space-between" align="flex-start">
         <Stack gap={2}>
-          <Title order={2}>Settlements</Title>
-          <Text c="dimmed">Shared-bill balances and payback status</Text>
+          <Title order={2}>{t('settlementsPage.title')}</Title>
+          <Text c="dimmed">{t('settlementsPage.subtitle')}</Text>
         </Stack>
-        <ActionIcon variant="light" size="lg" onClick={loadSettlements} title="Refresh settlements">
+        <ActionIcon variant="light" size="lg" onClick={loadSettlements} title={t('settlementsPage.refreshTooltip')}>
           <IconRefresh size={18} />
         </ActionIcon>
       </Group>
@@ -293,51 +297,51 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
         <>
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
             <StatCard
-              label="Owed to me"
+              label={t('settlementsPage.owedToMe')}
               value={formatCurrency(data.summary.owed_to_me)}
               color="green"
               icon={<IconArrowUpRight size={18} />}
-              detail={`${data.summary.overdue_owed_to_me} overdue`}
+              detail={t('settlementsPage.overdueCount', { count: data.summary.overdue_owed_to_me })}
             />
             <StatCard
-              label="I owe"
+              label={t('settlementsPage.iOwe')}
               value={formatCurrency(data.summary.i_owe)}
               color="red"
               icon={<IconArrowDownRight size={18} />}
-              detail={`${data.summary.overdue_i_owe} overdue`}
+              detail={t('settlementsPage.overdueCount', { count: data.summary.overdue_i_owe })}
             />
             <StatCard
-              label="Net balance"
+              label={t('settlementsPage.netBalance')}
               value={formatCurrency(data.summary.net_balance)}
               color={netColor}
               icon={<IconCash size={18} />}
-              detail={data.summary.net_balance >= 0 ? 'Net receivable' : 'Net payable'}
+              detail={data.summary.net_balance >= 0 ? t('settlementsPage.netReceivable') : t('settlementsPage.netPayable')}
             />
             <StatCard
-              label="Open shares"
+              label={t('settlementsPage.openShares')}
               value={String(data.summary.open_count)}
               color="blue"
               icon={<IconShare size={18} />}
-              detail={`${data.summary.settled_count} settled`}
+              detail={t('settlementsPage.settledCount', { count: data.summary.settled_count })}
             />
           </SimpleGrid>
 
           {data.summary.open_count === 0 && data.summary.settled_count === 0 && (
             <Alert color="blue" variant="light" icon={<IconShare size={16} />}>
-              No shared-bill settlement activity yet.
+              {t('settlementsPage.noActivity')}
             </Alert>
           )}
 
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
             <SettlementColumn
-              title="Owed to me"
-              empty="No one currently owes you for shared bills."
+              title={t('settlementsPage.owedToMe')}
+              empty={t('settlementsPage.noOneOwesYou')}
               items={data.owed_to_me}
               actionLoading={actionLoading}
             />
             <SettlementColumn
-              title="I owe"
-              empty="You do not have any open shared-bill balances."
+              title={t('settlementsPage.iOwe')}
+              empty={t('settlementsPage.noOpenBalances')}
               items={data.i_owe}
               actionLoading={actionLoading}
               onMarkPaid={handleMarkPaid}
@@ -347,15 +351,15 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
           {data.people.length > 0 && (
             <Paper withBorder p="md" radius="md">
               <Stack gap="md">
-                <Title order={4}>By Person</Title>
+                <Title order={4}>{t('settlementsPage.byPersonTitle')}</Title>
                 <Table striped highlightOnHover>
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th>Person</Table.Th>
-                      <Table.Th>Owed to me</Table.Th>
-                      <Table.Th>I owe</Table.Th>
-                      <Table.Th>Net</Table.Th>
-                      <Table.Th>Open</Table.Th>
+                      <Table.Th>{t('settlementsPage.personColumn')}</Table.Th>
+                      <Table.Th>{t('settlementsPage.owedToMe')}</Table.Th>
+                      <Table.Th>{t('settlementsPage.iOwe')}</Table.Th>
+                      <Table.Th>{t('settlementsPage.netColumn')}</Table.Th>
+                      <Table.Th>{t('settlementsPage.openColumn')}</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -381,15 +385,15 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
           {data.settled.length > 0 && (
             <Paper withBorder p="md" radius="md">
               <Stack gap="md">
-                <Title order={4}>Recently Settled</Title>
+                <Title order={4}>{t('settlementsPage.recentlySettledTitle')}</Title>
                 <Table striped highlightOnHover>
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th>Bill</Table.Th>
-                      <Table.Th>Person</Table.Th>
-                      <Table.Th>Amount</Table.Th>
-                      <Table.Th>Paid</Table.Th>
-                      <Table.Th>Direction</Table.Th>
+                      <Table.Th>{t('dashboard.cashFlowForecast.columns.bill')}</Table.Th>
+                      <Table.Th>{t('settlementsPage.personColumn')}</Table.Th>
+                      <Table.Th>{t('common.table.amount')}</Table.Th>
+                      <Table.Th>{t('settlementsPage.paidColumn')}</Table.Th>
+                      <Table.Th>{t('settlementsPage.directionColumn')}</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -403,10 +407,10 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
                         </Table.Td>
                         <Table.Td>{item.counterparty_name}</Table.Td>
                         <Table.Td>{formatCurrency(item.amount)}</Table.Td>
-                        <Table.Td>{formatDate(item.paid_date?.slice(0, 10))}</Table.Td>
+                        <Table.Td>{formatDate(item.paid_date?.slice(0, 10), t)}</Table.Td>
                         <Table.Td>
                           <Badge color={item.direction === 'owed_to_me' ? 'green' : 'red'} variant="light">
-                            {item.direction === 'owed_to_me' ? 'Received' : 'Paid'}
+                            {item.direction === 'owed_to_me' ? t('settlementsPage.received') : t('sharedBillsSection.paid')}
                           </Badge>
                         </Table.Td>
                       </Table.Tr>

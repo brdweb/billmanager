@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { Paper, Title, SimpleGrid, Text, Center, Stack, Badge } from '@mantine/core';
+import { useTranslation } from 'react-i18next';
 import type { Bill } from '../api/client';
+import { getLocale } from '../lib/currency';
 
 interface CalendarProps {
   bills: Bill[];
@@ -9,11 +11,12 @@ interface CalendarProps {
 }
 
 export function Calendar({ bills, selectedDate, onDateSelect }: CalendarProps) {
+  const { t } = useTranslation();
   const calendarData = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
-    const monthName = now.toLocaleString('default', { month: 'long' });
+    const monthName = now.toLocaleString(getLocale(), { month: 'long' });
 
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -80,9 +83,9 @@ export function Calendar({ bills, selectedDate, onDateSelect }: CalendarProps) {
         </Title>
 
         <SimpleGrid cols={7} spacing={1}>
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+          {(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const).map((day) => (
             <Text key={day} size="xs" fw={600} ta="center" c="dimmed">
-              {day}
+              {t(`common.weekdaysShort.${day}`)}
             </Text>
           ))}
         </SimpleGrid>

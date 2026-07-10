@@ -19,6 +19,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconTrash, IconEdit, IconMail, IconX, IconMailOff, IconUserPlus } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import type { User, Database, UserInvite } from '../../api/client';
 import {
   getUsers,
@@ -36,12 +37,14 @@ import {
 } from '../../api/client';
 import { useConfig } from '../../context/ConfigContext';
 import { useAuth } from '../../context/AuthContext';
+import { getLocale } from '../../lib/currency';
 
 interface UsersTabProps {
   isActive: boolean;
 }
 
 export function UsersTab({ isActive }: UsersTabProps) {
+  const { t } = useTranslation();
   const { emailEnabled, isSelfHosted } = useConfig();
   const { refreshAuth } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
@@ -106,8 +109,8 @@ export function UsersTab({ isActive }: UsersTabProps) {
   const handleInviteUser = async () => {
     if (!inviteEmail) {
       notifications.show({
-        title: 'Validation error',
-        message: 'Email address is required',
+        title: t('admin.users.errors.validationTitle'),
+        message: t('admin.users.errors.emailRequired'),
         color: 'red',
       });
       return;
@@ -117,7 +120,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
     try {
       await inviteUser(inviteEmail, inviteRole, selectedDatabases);
       notifications.show({
-        message: 'Invitation sent successfully',
+        message: t('admin.users.success.invited'),
         color: 'green',
       });
       await fetchData();
@@ -126,9 +129,9 @@ export function UsersTab({ isActive }: UsersTabProps) {
       setInviteRole('user');
       setSelectedDatabases([]);
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to send invitation';
+      const message = error instanceof ApiError ? error.message : t('admin.users.errors.inviteFailed');
       notifications.show({
-        title: 'Failed to send invitation',
+        title: t('admin.users.errors.inviteFailed'),
         message,
         color: 'red',
       });
@@ -140,8 +143,8 @@ export function UsersTab({ isActive }: UsersTabProps) {
   const handleCreateUser = async () => {
     if (!createUsername || !createPassword) {
       notifications.show({
-        title: 'Validation error',
-        message: 'Username and password are required',
+        title: t('admin.users.errors.validationTitle'),
+        message: t('admin.users.errors.usernamePasswordRequired'),
         color: 'red',
       });
       return;
@@ -151,7 +154,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
     try {
       await addUser(createUsername, createPassword, createRole, createDatabases);
       notifications.show({
-        message: 'User created successfully',
+        message: t('admin.users.success.created'),
         color: 'green',
       });
       await fetchData();
@@ -161,9 +164,9 @@ export function UsersTab({ isActive }: UsersTabProps) {
       setCreateRole('user');
       setCreateDatabases([]);
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to create user';
+      const message = error instanceof ApiError ? error.message : t('admin.users.errors.createFailed');
       notifications.show({
-        title: 'Failed to create user',
+        title: t('admin.users.errors.createFailed'),
         message,
         color: 'red',
       });
@@ -173,19 +176,19 @@ export function UsersTab({ isActive }: UsersTabProps) {
   };
 
   const handleCancelInvite = async (inviteId: number) => {
-    if (!confirm('Are you sure you want to cancel this invitation?')) return;
+    if (!confirm(t('admin.users.confirmCancelInvite'))) return;
 
     try {
       await cancelInvite(inviteId);
       notifications.show({
-        message: 'Invitation cancelled',
+        message: t('admin.users.success.inviteCancelled'),
         color: 'green',
       });
       await fetchData();
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to cancel invitation';
+      const message = error instanceof ApiError ? error.message : t('admin.users.errors.cancelInviteFailed');
       notifications.show({
-        title: 'Failed to cancel invitation',
+        title: t('admin.users.errors.cancelInviteFailed'),
         message,
         color: 'red',
       });
@@ -193,19 +196,19 @@ export function UsersTab({ isActive }: UsersTabProps) {
   };
 
   const handleDeleteUser = async (userId: number) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
+    if (!confirm(t('admin.users.confirmDeleteUser'))) return;
 
     try {
       await deleteUser(userId);
       notifications.show({
-        message: 'User deleted successfully',
+        message: t('admin.users.success.deleted'),
         color: 'green',
       });
       await fetchData();
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to delete user';
+      const message = error instanceof ApiError ? error.message : t('admin.users.errors.deleteFailed');
       notifications.show({
-        title: 'Failed to delete user',
+        title: t('admin.users.errors.deleteFailed'),
         message,
         color: 'red',
       });
@@ -269,7 +272,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
       ]);
 
       notifications.show({
-        message: 'User updated successfully',
+        message: t('admin.users.success.updated'),
         color: 'green',
       });
       await fetchData();
@@ -277,9 +280,9 @@ export function UsersTab({ isActive }: UsersTabProps) {
       await refreshAuth();
       setEditingUser(null);
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to update user';
+      const message = error instanceof ApiError ? error.message : t('admin.users.errors.updateFailed');
       notifications.show({
-        title: 'Failed to update user',
+        title: t('admin.users.errors.updateFailed'),
         message,
         color: 'red',
       });
@@ -299,14 +302,14 @@ export function UsersTab({ isActive }: UsersTabProps) {
   return (
     <Stack gap="md">
       {/* Users Table */}
-      <Text fw={600} size="sm">Users</Text>
+      <Text fw={600} size="sm">{t('admin.users.sectionTitle')}</Text>
       <Table striped highlightOnHover>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Username</Table.Th>
-            <Table.Th>Email</Table.Th>
-            <Table.Th>Role</Table.Th>
-            <Table.Th>Actions</Table.Th>
+            <Table.Th>{t('admin.users.columns.username')}</Table.Th>
+            <Table.Th>{t('admin.users.columns.email')}</Table.Th>
+            <Table.Th>{t('admin.users.columns.role')}</Table.Th>
+            <Table.Th>{t('common.table.actions')}</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -320,7 +323,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
               </Table.Td>
               <Table.Td>
                 <Badge color={user.role === 'admin' ? 'orange' : 'blue'}>
-                  {user.role}
+                  {user.role === 'admin' ? t('admin.users.roleAdmin') : t('admin.users.roleUser')}
                 </Badge>
               </Table.Td>
               <Table.Td>
@@ -329,7 +332,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
                     variant="subtle"
                     color="blue"
                     onClick={() => handleEditUser(user)}
-                    title="Edit User"
+                    title={t('admin.users.editUser')}
                   >
                     <IconEdit size={18} />
                   </ActionIcon>
@@ -337,7 +340,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
                     variant="subtle"
                     color="red"
                     onClick={() => handleDeleteUser(user.id)}
-                    title="Delete"
+                    title={t('common.actions.delete')}
                   >
                     <IconTrash size={18} />
                   </ActionIcon>
@@ -368,25 +371,25 @@ export function UsersTab({ isActive }: UsersTabProps) {
               setShowCreateForm(true);
             }}
           >
-            Create User
+            {t('admin.users.createUser')}
           </Button>
         ) : (
           <Paper p="md" withBorder>
             <Stack gap="sm">
-              <Text fw={500}>Create New User</Text>
+              <Text fw={500}>{t('admin.users.createUserTitle')}</Text>
               <Text size="sm" c="dimmed">
-                Create a user account with username and password. The user can log in immediately.
+                {t('admin.users.createUserDescription')}
               </Text>
               <Group grow>
                 <TextInput
-                  label="Username"
+                  label={t('admin.users.usernameLabel')}
                   value={createUsername}
                   onChange={(e) => setCreateUsername(e.currentTarget.value)}
-                  placeholder="johndoe"
+                  placeholder={t('admin.users.usernamePlaceholder')}
                   required
                 />
                 <TextInput
-                  label="Password"
+                  label={t('admin.users.passwordLabel')}
                   type="password"
                   value={createPassword}
                   onChange={(e) => setCreatePassword(e.currentTarget.value)}
@@ -395,17 +398,17 @@ export function UsersTab({ isActive }: UsersTabProps) {
                 />
               </Group>
               <Select
-                label="Role"
+                label={t('admin.users.roleLabel')}
                 value={createRole}
                 onChange={(val) => setCreateRole(val || 'user')}
                 data={[
-                  { value: 'user', label: 'User' },
-                  { value: 'admin', label: 'Admin' },
+                  { value: 'user', label: t('admin.users.roleUser') },
+                  { value: 'admin', label: t('admin.users.roleAdmin') },
                 ]}
               />
 
               <Text size="sm" fw={500}>
-                Bill Group Access
+                {t('admin.users.billGroupAccess')}
               </Text>
               <Group>
                 {databases.map((db) => (
@@ -430,10 +433,10 @@ export function UsersTab({ isActive }: UsersTabProps) {
                   loading={createLoading}
                   leftSection={<IconUserPlus size={16} />}
                 >
-                  Create User
+                  {t('admin.users.createUser')}
                 </Button>
                 <Button variant="default" onClick={() => setShowCreateForm(false)}>
-                  Cancel
+                  {t('common.actions.cancel')}
                 </Button>
               </Group>
             </Stack>
@@ -445,14 +448,14 @@ export function UsersTab({ isActive }: UsersTabProps) {
           {/* Pending Invitations */}
           {invites.length > 0 && (
             <>
-              <Text fw={600} size="sm">Pending Invitations</Text>
+              <Text fw={600} size="sm">{t('admin.users.pendingInvitations')}</Text>
               <Table striped highlightOnHover>
                 <Table.Thead>
                   <Table.Tr>
-                    <Table.Th>Email</Table.Th>
-                    <Table.Th>Role</Table.Th>
-                    <Table.Th>Expires</Table.Th>
-                    <Table.Th>Actions</Table.Th>
+                    <Table.Th>{t('admin.users.columns.email')}</Table.Th>
+                    <Table.Th>{t('admin.users.columns.role')}</Table.Th>
+                    <Table.Th>{t('admin.users.columns.expires')}</Table.Th>
+                    <Table.Th>{t('common.table.actions')}</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -461,12 +464,12 @@ export function UsersTab({ isActive }: UsersTabProps) {
                       <Table.Td>{invite.email}</Table.Td>
                       <Table.Td>
                         <Badge color={invite.role === 'admin' ? 'orange' : 'blue'}>
-                          {invite.role}
+                          {invite.role === 'admin' ? t('admin.users.roleAdmin') : t('admin.users.roleUser')}
                         </Badge>
                       </Table.Td>
                       <Table.Td>
                         <Text size="sm" c="dimmed">
-                          {new Date(invite.expires_at).toLocaleDateString()}
+                          {new Date(invite.expires_at).toLocaleDateString(getLocale())}
                         </Text>
                       </Table.Td>
                       <Table.Td>
@@ -474,7 +477,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
                           variant="subtle"
                           color="red"
                           onClick={() => handleCancelInvite(invite.id)}
-                          title="Cancel Invitation"
+                          title={t('admin.users.cancelInvitation')}
                         >
                           <IconX size={18} />
                         </ActionIcon>
@@ -504,36 +507,36 @@ export function UsersTab({ isActive }: UsersTabProps) {
                 setShowInviteForm(true);
               }}
             >
-              Invite User
+              {t('admin.users.inviteUser')}
             </Button>
           ) : (
             <Paper p="md" withBorder>
               <Stack gap="sm">
-                <Text fw={500}>Invite New User</Text>
+                <Text fw={500}>{t('admin.users.inviteUserTitle')}</Text>
                 <Text size="sm" c="dimmed">
-                  Send an invitation email. The user will set their own username and password.
+                  {t('admin.users.inviteUserDescription')}
                 </Text>
                 <Group grow>
                   <TextInput
-                    label="Email Address"
+                    label={t('admin.users.emailLabel')}
                     type="email"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.currentTarget.value)}
-                    placeholder="user@example.com"
+                    placeholder={t('admin.users.emailPlaceholder')}
                   />
                   <Select
-                    label="Role"
+                    label={t('admin.users.roleLabel')}
                     value={inviteRole}
                     onChange={(val) => setInviteRole(val || 'user')}
                     data={[
-                      { value: 'user', label: 'User' },
-                      { value: 'admin', label: 'Admin' },
+                      { value: 'user', label: t('admin.users.roleUser') },
+                      { value: 'admin', label: t('admin.users.roleAdmin') },
                     ]}
                   />
                 </Group>
 
                 <Text size="sm" fw={500}>
-                  Bill Group Access
+                  {t('admin.users.billGroupAccess')}
                 </Text>
                 <Group>
                   {databases.map((db) => (
@@ -558,10 +561,10 @@ export function UsersTab({ isActive }: UsersTabProps) {
                     loading={inviteLoading}
                     leftSection={<IconMail size={16} />}
                   >
-                    Send Invitation
+                    {t('admin.users.sendInvitation')}
                   </Button>
                   <Button variant="default" onClick={() => setShowInviteForm(false)}>
-                    Cancel
+                    {t('common.actions.cancel')}
                   </Button>
                 </Group>
               </Stack>
@@ -573,7 +576,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
           <Divider my="sm" />
           <Alert icon={<IconMailOff size={16} />} color="gray" variant="light">
             <Text size="sm">
-              Email invitations are not available. Configure outbound email to enable sending invitations.
+              {t('admin.users.emailDisabledNotice')}
             </Text>
           </Alert>
         </>
@@ -583,7 +586,7 @@ export function UsersTab({ isActive }: UsersTabProps) {
       <Modal
         opened={!!editingUser}
         onClose={() => setEditingUser(null)}
-        title={`Edit User: ${editingUser?.username}`}
+        title={t('admin.users.editUserModalTitle', { username: editingUser?.username })}
         centered
       >
         <Stack gap="md">
@@ -594,24 +597,24 @@ export function UsersTab({ isActive }: UsersTabProps) {
           ) : (
             <>
               <TextInput
-                label="Email"
-                placeholder="user@example.com"
+                label={t('admin.users.columns.email')}
+                placeholder={t('admin.users.emailPlaceholder')}
                 value={userEmail}
                 onChange={(e) => setUserEmail(e.currentTarget.value)}
               />
 
               <Select
-                label="Role"
+                label={t('admin.users.roleLabel')}
                 value={userRole}
                 onChange={(val) => setUserRole((val as 'admin' | 'user') || 'user')}
                 data={[
-                  { value: 'user', label: 'User' },
-                  { value: 'admin', label: 'Admin' },
+                  { value: 'user', label: t('admin.users.roleUser') },
+                  { value: 'admin', label: t('admin.users.roleAdmin') },
                 ]}
               />
 
               <Text size="sm" fw={500}>
-                Bill Group Access
+                {t('admin.users.billGroupAccess')}
               </Text>
               {databases.map((db) => (
                 <Checkbox
@@ -631,9 +634,9 @@ export function UsersTab({ isActive }: UsersTabProps) {
 
               <Group justify="flex-end">
                 <Button variant="default" onClick={() => setEditingUser(null)}>
-                  Cancel
+                  {t('common.actions.cancel')}
                 </Button>
-                <Button onClick={handleSaveUser}>Save Changes</Button>
+                <Button onClick={handleSaveUser}>{t('common.actions.saveChanges')}</Button>
               </Group>
             </>
           )}

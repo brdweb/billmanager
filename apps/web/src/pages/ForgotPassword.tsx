@@ -12,9 +12,11 @@ import {
   Anchor,
 } from '@mantine/core';
 import { IconMail, IconAlertCircle, IconCheck } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 
 export function ForgotPassword() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,12 +27,12 @@ export function ForgotPassword() {
     setError('');
 
     if (!email.trim()) {
-      setError('Email is required');
+      setError(t('loginPage.emailRequired'));
       return;
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Please enter a valid email address');
+      setError(t('forgotPasswordPage.invalidEmail'));
       return;
     }
 
@@ -40,7 +42,7 @@ export function ForgotPassword() {
       if (response.success) {
         setSuccess(true);
       } else {
-        setError(response.error || 'Failed to send reset email');
+        setError(response.error || t('forgotPasswordPage.sendFailedDefault'));
       }
     } catch {
       // Always show success to prevent email enumeration
@@ -56,16 +58,15 @@ export function ForgotPassword() {
         <Paper withBorder shadow="md" p={30} radius="md">
           <Stack align="center" gap="md">
             <IconCheck size={48} color="var(--mantine-color-green-6)" />
-            <Title order={2} ta="center">Check Your Email</Title>
+            <Title order={2} ta="center">{t('loginPage.checkEmailTitle')}</Title>
             <Text c="dimmed" ta="center">
-              If an account exists for <strong>{email}</strong>, we&apos;ve sent a password reset link.
-              Please check your inbox.
+              {t('forgotPasswordPage.ifAccountExistsPrefix')} <strong>{email}</strong>{t('forgotPasswordPage.ifAccountExistsSuffix')}
             </Text>
             <Text size="sm" c="dimmed" ta="center">
-              The link will expire in 1 hour for security reasons.
+              {t('forgotPasswordPage.linkExpire1Hour')}
             </Text>
             <Button component={Link} to="/login" variant="light">
-              Back to Login
+              {t('loginPage.backToLogin')}
             </Button>
           </Stack>
         </Paper>
@@ -75,9 +76,9 @@ export function ForgotPassword() {
 
   return (
     <Container size={420} my={40}>
-      <Title ta="center">Forgot Password?</Title>
+      <Title ta="center">{t('forgotPasswordPage.title')}</Title>
       <Text c="dimmed" size="sm" ta="center" mt={5}>
-        Enter your email and we&apos;ll send you a reset link
+        {t('forgotPasswordPage.subtitle')}
       </Text>
 
       <Paper withBorder shadow="md" p={30} mt={30} radius="md">
@@ -90,8 +91,8 @@ export function ForgotPassword() {
             )}
 
             <TextInput
-              label="Email"
-              placeholder="your@email.com"
+              label={t('loginPage.emailLabel')}
+              placeholder={t('loginPage.emailPlaceholder')}
               leftSection={<IconMail size={16} />}
               value={email}
               onChange={(e) => setEmail(e.currentTarget.value)}
@@ -99,12 +100,12 @@ export function ForgotPassword() {
             />
 
             <Button type="submit" fullWidth loading={loading}>
-              Send Reset Link
+              {t('forgotPasswordPage.sendResetLink')}
             </Button>
 
             <Text size="sm" ta="center">
               <Anchor component={Link} to="/login" size="sm">
-                Back to login
+                {t('forgotPasswordPage.backToLoginLink')}
               </Anchor>
             </Text>
           </Stack>

@@ -1,8 +1,8 @@
 {
   "name": "BillManager",
   "short_name": "BillManager",
-  "lang": "en",
-  "description": "Track your bills and income with ease",
+  "lang": "de",
+  "description": "Behalten Sie Ihre Rechnungen und Einnahmen mühelos im Blick",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#064E3B",
@@ -69,9 +69,9 @@
   "screenshots": [],
   "shortcuts": [
     {
-      "name": "View Bills",
-      "short_name": "Bills",
-      "description": "View your upcoming bills",
+      "name": "Rechnungen anzeigen",
+      "short_name": "Rechnungen",
+      "description": "Ihre anstehenden Rechnungen anzeigen",
       "url": "/",
       "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
     }

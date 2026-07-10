@@ -27,10 +27,13 @@ import {
   IconCopy,
   IconRefresh,
 } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useConfig } from '../context/ConfigContext';
 import * as api from '../api/client';
+import { getLocale } from '../lib/currency';
 
 export function TwoFactorSettings() {
+  const { t } = useTranslation();
   const { config } = useConfig();
   const [status, setStatus] = useState<api.TwoFAStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,7 +56,7 @@ export function TwoFactorSettings() {
 
   // Passkey setup
   const [registeringPasskey, setRegisteringPasskey] = useState(false);
-  const [passkeyDeviceName, setPasskeyDeviceName] = useState('This device');
+  const [passkeyDeviceName, setPasskeyDeviceName] = useState('');
 
   const base64urlToArrayBuffer = (value: string): ArrayBuffer => {
     const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
@@ -77,11 +80,11 @@ export function TwoFactorSettings() {
       const result = await api.get2FAStatus();
       setStatus(result);
     } catch {
-      setError('Failed to load 2FA status');
+      setError(t('twoFactorSettings.loadStatusFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (config?.twofa_enabled) {
@@ -106,7 +109,7 @@ export function TwoFactorSettings() {
       const result = await api.setup2FAEmail();
       setSetupToken(result.setup_token);
     } catch {
-      setError('Failed to send verification code');
+      setError(t('twoFactorSettings.sendCodeFailed'));
     } finally {
       setSettingUpEmail(false);
     }
@@ -125,7 +128,7 @@ export function TwoFactorSettings() {
       setSetupCode('');
       await fetchStatus();
     } catch {
-      setError('Invalid verification code');
+      setError(t('twoFactorSettings.invalidCode'));
     } finally {
       setConfirmingEmail(false);
     }
@@ -137,7 +140,7 @@ export function TwoFactorSettings() {
       setRecoveryCodes(result.recovery_codes);
       setShowRecoveryCodes(true);
     } catch {
-      setError('Failed to regenerate recovery codes');
+      setError(t('twoFactorSettings.regenerateFailed'));
     }
   };
 
@@ -146,7 +149,7 @@ export function TwoFactorSettings() {
       await api.deletePasskey(passkeyId);
       await fetchStatus();
     } catch {
-      setError('Failed to delete passkey');
+      setError(t('twoFactorSettings.deletePasskeyFailed'));
     }
   };
 
@@ -155,7 +158,7 @@ export function TwoFactorSettings() {
     setError('');
     try {
       if (!window.PublicKeyCredential || !navigator.credentials) {
-        setError('Passkeys are not supported by this browser/device');
+        setError(t('twoFactorSettings.passkeysNotSupported'));
         return;
       }
 
@@ -182,7 +185,7 @@ export function TwoFactorSettings() {
       })) as PublicKeyCredential | null;
 
       if (!credential) {
-        setError('Passkey registration was cancelled');
+        setError(t('twoFactorSettings.passkeyCancelled'));
         return;
       }
 
@@ -202,7 +205,7 @@ export function TwoFactorSettings() {
       const result = await api.registerPasskey(
         registration_token,
         registrationPayload as unknown as Record<string, unknown>,
-        passkeyDeviceName.trim() || 'Security Key'
+        passkeyDeviceName.trim() || t('twoFactorSettings.securityKeyDefault')
       );
 
       if (result.recovery_codes) {
@@ -215,7 +218,7 @@ export function TwoFactorSettings() {
       if (error instanceof api.ApiError) {
         setError(error.message);
       } else {
-        setError('Failed to register passkey. Try again on a supported device/browser.');
+        setError(t('twoFactorSettings.passkeyRegisterFailedDefault'));
       }
     } finally {
       setRegisteringPasskey(false);
@@ -231,7 +234,7 @@ export function TwoFactorSettings() {
       setDisablePassword('');
       await fetchStatus();
     } catch {
-      setError('Failed to disable 2FA. Check your password.');
+      setError(t('twoFactorSettings.disableFailed'));
     } finally {
       setDisabling(false);
     }
@@ -242,12 +245,12 @@ export function TwoFactorSettings() {
       <Stack gap="md">
         <Group>
           <IconShieldCheck size={24} />
-          <Title order={4}>Two-Factor Authentication</Title>
-          {status?.enabled && <Badge color="green">Enabled</Badge>}
+          <Title order={4}>{t('twoFactorSettings.title')}</Title>
+          {status?.enabled && <Badge color="green">{t('twoFactorSettings.enabledBadge')}</Badge>}
         </Group>
 
         <Text size="sm" c="dimmed">
-          Add an extra layer of security to your account by requiring a second form of verification.
+          {t('twoFactorSettings.description')}
         </Text>
 
         {error && (
@@ -262,12 +265,12 @@ export function TwoFactorSettings() {
             <Group>
               <IconMail size={20} />
               <div>
-                <Text fw={500}>Email Verification Code</Text>
-                <Text size="xs" c="dimmed">Receive a 6-digit code via email when signing in</Text>
+                <Text fw={500}>{t('twoFactorSettings.emailOtpTitle')}</Text>
+                <Text size="xs" c="dimmed">{t('twoFactorSettings.emailOtpDescription')}</Text>
               </div>
             </Group>
             {status?.email_otp_enabled ? (
-              <Badge color="green">Active</Badge>
+              <Badge color="green">{t('twoFactorSettings.activeBadge')}</Badge>
             ) : setupToken ? (
               <Group gap="xs">
                 <PinInput
@@ -278,12 +281,12 @@ export function TwoFactorSettings() {
                   size="xs"
                 />
                 <Button size="xs" onClick={handleConfirmEmail} loading={confirmingEmail} disabled={setupCode.length !== 6}>
-                  Verify
+                  {t('twoFactorSettings.verify')}
                 </Button>
               </Group>
             ) : (
               <Button size="xs" variant="light" onClick={handleSetupEmail} loading={settingUpEmail}>
-                Enable
+                {t('twoFactorSettings.enable')}
               </Button>
             )}
           </Group>
@@ -296,18 +299,18 @@ export function TwoFactorSettings() {
               <Group>
                 <IconKey size={20} />
                 <div>
-                  <Text fw={500}>Passkeys</Text>
-                  <Text size="xs" c="dimmed">Use a security key or biometrics for 2FA</Text>
+                  <Text fw={500}>{t('twoFactorSettings.passkeysTitle')}</Text>
+                  <Text size="xs" c="dimmed">{t('twoFactorSettings.passkeysDescription')}</Text>
                 </div>
               </Group>
               <Badge color={status?.passkey_enabled ? 'green' : 'gray'}>
-                {status?.passkeys?.length || 0} registered
+                {t('twoFactorSettings.passkeysRegisteredCount', { count: status?.passkeys?.length || 0 })}
               </Badge>
             </Group>
             <Group gap="xs" mt="sm">
               <TextInput
                 size="xs"
-                placeholder="Device name"
+                placeholder={t('twoFactorSettings.devicePlaceholder')}
                 value={passkeyDeviceName}
                 onChange={(e) => setPasskeyDeviceName(e.currentTarget.value)}
                 style={{ flex: 1 }}
@@ -319,7 +322,7 @@ export function TwoFactorSettings() {
                 onClick={handleRegisterPasskey}
                 loading={registeringPasskey}
               >
-                Add Passkey
+                {t('twoFactorSettings.addPasskey')}
               </Button>
             </Group>
             {status?.passkeys && status.passkeys.length > 0 && (
@@ -329,8 +332,8 @@ export function TwoFactorSettings() {
                     <div>
                       <Text size="sm" fw={500}>{passkey.device_name}</Text>
                       <Text size="xs" c="dimmed">
-                        Added {passkey.created_at ? new Date(passkey.created_at).toLocaleDateString() : 'unknown'}
-                        {passkey.last_used_at && ` · Last used ${new Date(passkey.last_used_at).toLocaleDateString()}`}
+                        {t('twoFactorSettings.addedOn', { date: passkey.created_at ? new Date(passkey.created_at).toLocaleDateString(getLocale()) : t('common.unknown') })}
+                        {passkey.last_used_at && t('twoFactorSettings.lastUsed', { date: new Date(passkey.last_used_at).toLocaleDateString(getLocale()) })}
                       </Text>
                     </div>
                     <ActionIcon
@@ -352,11 +355,11 @@ export function TwoFactorSettings() {
           <Paper withBorder p="md">
             <Group justify="space-between">
               <div>
-                <Text fw={500}>Recovery Codes</Text>
+                <Text fw={500}>{t('twoFactorSettings.recoveryCodesTitle')}</Text>
                 <Text size="xs" c="dimmed">
                   {status.has_recovery_codes
-                    ? 'Use a recovery code if you lose access to your 2FA methods'
-                    : 'Generate recovery codes as a backup'}
+                    ? t('twoFactorSettings.recoveryCodesHasDescription')
+                    : t('twoFactorSettings.recoveryCodesGenerateDescription')}
                 </Text>
               </div>
               <Button
@@ -365,7 +368,7 @@ export function TwoFactorSettings() {
                 leftSection={<IconRefresh size={14} />}
                 onClick={handleRegenerateRecoveryCodes}
               >
-                {status.has_recovery_codes ? 'Regenerate' : 'Generate'}
+                {status.has_recovery_codes ? t('twoFactorSettings.regenerate') : t('twoFactorSettings.generate')}
               </Button>
             </Group>
           </Paper>
@@ -379,7 +382,7 @@ export function TwoFactorSettings() {
             size="sm"
             onClick={() => setShowDisable(true)}
           >
-            Disable Two-Factor Authentication
+            {t('twoFactorSettings.disableButton')}
           </Button>
         )}
       </Stack>
@@ -388,13 +391,12 @@ export function TwoFactorSettings() {
       <Modal
         opened={showRecoveryCodes}
         onClose={() => setShowRecoveryCodes(false)}
-        title="Recovery Codes"
+        title={t('twoFactorSettings.recoveryCodesTitle')}
         size="sm"
       >
         <Stack gap="md">
           <Alert icon={<IconAlertCircle size={16} />} color="orange">
-            Save these codes somewhere safe. Each code can only be used once.
-            If you lose your 2FA device, these codes are the only way to access your account.
+            {t('twoFactorSettings.recoveryCodesWarning')}
           </Alert>
           <Paper withBorder p="md" bg="gray.0">
             <Stack gap={4}>
@@ -409,20 +411,20 @@ export function TwoFactorSettings() {
           </Paper>
           <CopyButton value={recoveryCodes?.join('\n') || ''}>
             {({ copied, copy }) => (
-              <Tooltip label={copied ? 'Copied!' : 'Copy all codes'}>
+              <Tooltip label={copied ? t('twoFactorSettings.copied') : t('twoFactorSettings.copyAllCodes')}>
                 <Button
                   variant="light"
                   leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
                   onClick={copy}
                   fullWidth
                 >
-                  {copied ? 'Copied!' : 'Copy All Codes'}
+                  {copied ? t('twoFactorSettings.copied') : t('twoFactorSettings.copyAllCodesButton')}
                 </Button>
               </Tooltip>
             )}
           </CopyButton>
           <Button onClick={() => setShowRecoveryCodes(false)}>
-            I&apos;ve saved my codes
+            {t('twoFactorSettings.savedCodes')}
           </Button>
         </Stack>
       </Modal>
@@ -431,23 +433,23 @@ export function TwoFactorSettings() {
       <Modal
         opened={showDisable}
         onClose={() => { setShowDisable(false); setDisablePassword(''); }}
-        title="Disable Two-Factor Authentication"
+        title={t('twoFactorSettings.disableModalTitle')}
         size="sm"
       >
         <Stack gap="md">
           <Alert icon={<IconAlertCircle size={16} />} color="red">
-            This will remove all 2FA protection from your account. You will only need your password to sign in.
+            {t('twoFactorSettings.disableWarning')}
           </Alert>
           <TextInput
-            label="Confirm your password"
+            label={t('twoFactorSettings.confirmPasswordLabel')}
             type="password"
             value={disablePassword}
             onChange={(e) => setDisablePassword(e.currentTarget.value)}
-            placeholder="Enter your password"
+            placeholder={t('twoFactorSettings.confirmPasswordPlaceholder')}
           />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => { setShowDisable(false); setDisablePassword(''); }}>
-              Cancel
+              {t('common.actions.cancel')}
             </Button>
             <Button
               color="red"
@@ -455,7 +457,7 @@ export function TwoFactorSettings() {
               loading={disabling}
               disabled={!disablePassword}
             >
-              Disable 2FA
+              {t('twoFactorSettings.disableConfirmButton')}
             </Button>
           </Group>
         </Stack>

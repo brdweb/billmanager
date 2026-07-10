@@ -4,6 +4,8 @@ import { Stack, Loader, Center, Divider, Text, Anchor } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
 import { BillList } from './components/BillList';
@@ -40,8 +42,8 @@ const TelemetryNoticeModal = lazy(() => import('./components/TelemetryNoticeModa
 const ReleaseNotesModal = lazy(() => import('./components/ReleaseNotesModal').then((module) => ({ default: module.ReleaseNotesModal })));
 
 // Helper to show error notifications
-function showError(title: string, error: unknown) {
-  const message = error instanceof ApiError ? error.message : 'An unexpected error occurred';
+function showError(title: string, error: unknown, t: TFunction) {
+  const message = error instanceof ApiError ? error.message : t('app.unexpectedError');
   notifications.show({
     title,
     message,
@@ -84,6 +86,7 @@ export interface BillFilter {
 }
 
 function App() {
+  const { t } = useTranslation();
   const { isLoggedIn, isLoading, pendingPasswordChange, currentDb, databases } = useAuth();
   const { config } = useConfig();
   const navigate = useNavigate();
@@ -311,14 +314,14 @@ function App() {
     try {
       if (currentBill) {
         await api.updateBill(currentBill.id, billData);
-        showSuccess('Bill updated successfully');
+        showSuccess(t('app.billUpdated'));
       } else {
         await api.addBill(billData);
-        showSuccess('Bill created successfully');
+        showSuccess(t('app.billCreated'));
       }
       await fetchBills();
     } catch (error) {
-      showError('Failed to save bill', error);
+      showError(t('app.saveFailed'), error, t);
       throw error; // Re-throw to let BillModal handle loading state
     }
   };
@@ -326,10 +329,10 @@ function App() {
   const handleArchiveBill = async (bill: Bill) => {
     try {
       await archiveBill(bill.id);
-      showSuccess('Bill archived successfully');
+      showSuccess(t('app.billArchived'));
       await fetchBills();
     } catch (error) {
-      showError('Failed to archive bill', error);
+      showError(t('app.archiveFailed'), error, t);
       throw error;
     }
   };
@@ -337,10 +340,10 @@ function App() {
   const handleDeleteBill = async (bill: Bill) => {
     try {
       await deleteBillPermanent(bill.id);
-      showSuccess('Bill deleted permanently');
+      showSuccess(t('app.billDeleted'));
       await fetchBills();
     } catch (error) {
-      showError('Failed to delete bill', error);
+      showError(t('app.deleteFailed'), error, t);
       throw error;
     }
   };
@@ -348,10 +351,10 @@ function App() {
   const handleUnarchiveBill = async (bill: Bill) => {
     try {
       await unarchiveBill(bill.id);
-      showSuccess('Bill restored successfully');
+      showSuccess(t('app.billRestored'));
       await fetchBills();
     } catch (error) {
-      showError('Failed to restore bill', error);
+      showError(t('app.restoreFailed'), error, t);
       throw error;
     }
   };
@@ -360,10 +363,10 @@ function App() {
     if (!currentBill) return;
     try {
       await api.payBill(currentBill.id, amount, advanceDue);
-      showSuccess('Payment recorded successfully');
+      showSuccess(t('app.paymentRecorded'));
       await fetchBills();
     } catch (error) {
-      showError('Failed to record payment', error);
+      showError(t('app.recordPaymentFailed'), error, t);
       throw error;
     }
   };
@@ -455,14 +458,14 @@ function App() {
                   <Anchor component="button" size="xs" onClick={openReleaseNotes}>
                     v{currentVersion}
                   </Anchor>
-                  {' '}- Licensed under{' '}
+                  {' '}{t('app.footerLicensedUnder')}{' '}
                   <Anchor href="https://osaasy.dev/" target="_blank" rel="noopener noreferrer" size="xs">
                     O'Saasy
                   </Anchor>
                 </Text>
                 <Text size="xs" ta="center">
                   <Anchor href="https://docs.billmanager.app" target="_blank" rel="noopener noreferrer" size="xs">
-                    Need Help?
+                    {t('app.needHelp')}
                   </Anchor>
                 </Text>
               </>

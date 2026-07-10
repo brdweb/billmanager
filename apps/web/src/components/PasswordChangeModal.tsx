@@ -7,6 +7,7 @@ import {
   Alert,
 } from '@mantine/core';
 import { IconLock, IconAlertCircle, IconInfoCircle } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 
 interface PasswordChangeModalProps {
@@ -15,6 +16,7 @@ interface PasswordChangeModalProps {
 }
 
 export function PasswordChangeModal({ opened, onClose }: PasswordChangeModalProps) {
+  const { t } = useTranslation();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -27,17 +29,17 @@ export function PasswordChangeModal({ opened, onClose }: PasswordChangeModalProp
     setError('');
 
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setError('All fields are required');
+      setError(t('passwordChangeModal.allFieldsRequired'));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
+      setError(t('passwordChangeModal.passwordsMismatch'));
       return;
     }
 
     if (newPassword.length < 6) {
-      setError('New password must be at least 6 characters');
+      setError(t('passwordChangeModal.passwordTooShort'));
       return;
     }
 
@@ -50,10 +52,10 @@ export function PasswordChangeModal({ opened, onClose }: PasswordChangeModalProp
         setNewPassword('');
         setConfirmPassword('');
       } else {
-        setError(result.error || 'Failed to change password');
+        setError(result.error || t('passwordChangeModal.changeFailedDefault'));
       }
     } catch {
-      setError('Failed to change password. Please try again.');
+      setError(t('passwordChangeModal.changeFailedRetry'));
     } finally {
       setLoading(false);
     }
@@ -63,7 +65,7 @@ export function PasswordChangeModal({ opened, onClose }: PasswordChangeModalProp
     <Modal
       opened={opened}
       onClose={() => {}} // Prevent closing - must change password
-      title="Change Password"
+      title={t('passwordChangeModal.title')}
       centered
       withCloseButton={false}
       closeOnClickOutside={false}
@@ -73,17 +75,17 @@ export function PasswordChangeModal({ opened, onClose }: PasswordChangeModalProp
         <Stack gap="md">
           <Alert
             icon={<IconInfoCircle size={16} />}
-            title="Password Change Required"
+            title={t('passwordChangeModal.requiredTitle')}
             color="blue"
             variant="light"
           >
-            You must change your password before continuing.
+            {t('passwordChangeModal.requiredBody')}
           </Alert>
 
           {error && (
             <Alert
               icon={<IconAlertCircle size={16} />}
-              title="Error"
+              title={t('passwordChangeModal.errorTitle')}
               color="red"
               variant="light"
             >
@@ -92,8 +94,8 @@ export function PasswordChangeModal({ opened, onClose }: PasswordChangeModalProp
           )}
 
           <PasswordInput
-            label="Current Password"
-            placeholder="Enter current password"
+            label={t('passwordChangeModal.currentPasswordLabel')}
+            placeholder={t('passwordChangeModal.currentPasswordPlaceholder')}
             leftSection={<IconLock size={16} />}
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.currentTarget.value)}
@@ -101,9 +103,9 @@ export function PasswordChangeModal({ opened, onClose }: PasswordChangeModalProp
           />
 
           <PasswordInput
-            label="New Password"
-            placeholder="Enter new password"
-            description="Minimum 6 characters"
+            label={t('passwordChangeModal.newPasswordLabel')}
+            placeholder={t('passwordChangeModal.newPasswordPlaceholder')}
+            description={t('passwordChangeModal.newPasswordDescription')}
             leftSection={<IconLock size={16} />}
             value={newPassword}
             onChange={(e) => setNewPassword(e.currentTarget.value)}
@@ -111,8 +113,8 @@ export function PasswordChangeModal({ opened, onClose }: PasswordChangeModalProp
           />
 
           <PasswordInput
-            label="Confirm New Password"
-            placeholder="Confirm new password"
+            label={t('passwordChangeModal.confirmPasswordLabel')}
+            placeholder={t('passwordChangeModal.confirmPasswordPlaceholder')}
             leftSection={<IconLock size={16} />}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.currentTarget.value)}
@@ -120,7 +122,7 @@ export function PasswordChangeModal({ opened, onClose }: PasswordChangeModalProp
           />
 
           <Button type="submit" fullWidth loading={loading}>
-            Change Password
+            {t('passwordChangeModal.submitButton')}
           </Button>
         </Stack>
       </form>

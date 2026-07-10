@@ -17,6 +17,7 @@ import {
   Center,
 } from '@mantine/core';
 import { IconUser, IconLock, IconAlertCircle, IconCheck } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { getInviteInfo, acceptInvite } from '../api/client';
 
 function getPasswordStrength(password: string): number {
@@ -38,6 +39,7 @@ function getPasswordColor(strength: number): string {
 }
 
 export function AcceptInvite() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -62,7 +64,7 @@ export function AcceptInvite() {
   // Fetch invite info on mount
   useEffect(() => {
     if (!token) {
-      setInviteError('Invalid invitation link. Please check the link and try again.');
+      setInviteError(t('acceptInvite.invalidLink'));
       setInviteLoading(false);
       return;
     }
@@ -74,26 +76,26 @@ export function AcceptInvite() {
         setInvitedBy(response.invited_by);
       } catch (err: unknown) {
         const error = err as { response?: { data?: { error?: string } } };
-        setInviteError(error.response?.data?.error || 'This invitation is invalid or has expired.');
+        setInviteError(error.response?.data?.error || t('acceptInvite.invalidExpiredDefault'));
       } finally {
         setInviteLoading(false);
       }
     };
 
     fetchInviteInfo();
-  }, [token]);
+  }, [token, t]);
 
   const validateForm = (): string | null => {
-    if (!username.trim()) return 'Username is required';
-    if (username.length < 3) return 'Username must be at least 3 characters';
-    if (!/^[a-zA-Z0-9_]+$/.test(username)) return 'Username can only contain letters, numbers, and underscores';
-    if (!password) return 'Password is required';
-    if (password.length < 8) return 'Password must be at least 8 characters';
+    if (!username.trim()) return t('loginPage.usernameRequired');
+    if (username.length < 3) return t('loginPage.usernameMinLength');
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) return t('acceptInvite.usernameFormat');
+    if (!password) return t('loginPage.passwordRequired');
+    if (password.length < 8) return t('loginPage.passwordMinLength');
     if (!/[a-z]/.test(password) || !/[A-Z]/.test(password)) {
-      return 'Password must contain both uppercase and lowercase letters';
+      return t('loginPage.passwordCase');
     }
-    if (!/[0-9]/.test(password)) return 'Password must contain at least one number';
-    if (password !== confirmPassword) return 'Passwords do not match';
+    if (!/[0-9]/.test(password)) return t('loginPage.passwordNumber');
+    if (password !== confirmPassword) return t('loginPage.passwordsMismatch');
     return null;
   };
 
@@ -108,7 +110,7 @@ export function AcceptInvite() {
     }
 
     if (!token) {
-      setError('Invalid invitation token');
+      setError(t('acceptInvite.invalidToken'));
       return;
     }
 
@@ -119,7 +121,7 @@ export function AcceptInvite() {
       setSuccess(true);
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } } };
-      setError(error.response?.data?.error || 'Failed to create account. Please try again.');
+      setError(error.response?.data?.error || t('acceptInvite.createFailedDefault'));
     } finally {
       setLoading(false);
     }
@@ -133,7 +135,7 @@ export function AcceptInvite() {
           <Center py="xl">
             <Stack align="center" gap="md">
               <Loader size="lg" />
-              <Text c="dimmed">Loading invitation...</Text>
+              <Text c="dimmed">{t('acceptInvite.loadingInvitation')}</Text>
             </Stack>
           </Center>
         </Paper>
@@ -148,12 +150,12 @@ export function AcceptInvite() {
         <Paper withBorder shadow="md" p={30} mt={30} radius="md">
           <Stack align="center" gap="md">
             <IconAlertCircle size={48} color="var(--mantine-color-red-6)" />
-            <Title order={2} ta="center">Invalid Invitation</Title>
+            <Title order={2} ta="center">{t('acceptInvite.invalidInvitationTitle')}</Title>
             <Text c="dimmed" ta="center">
               {inviteError}
             </Text>
             <Button variant="light" onClick={() => navigate('/login')}>
-              Go to Login
+              {t('acceptInvite.goToLogin')}
             </Button>
           </Stack>
         </Paper>
@@ -168,13 +170,13 @@ export function AcceptInvite() {
         <Paper withBorder shadow="md" p={30} mt={30} radius="md">
           <Stack align="center" gap="md">
             <IconCheck size={48} color="var(--mantine-color-green-6)" />
-            <Title order={2} ta="center">Account Created!</Title>
+            <Title order={2} ta="center">{t('acceptInvite.accountCreatedTitle')}</Title>
             <Text c="dimmed" ta="center">
-              Your account has been created successfully. You can now sign in with your username{' '}
+              {t('acceptInvite.accountCreatedBody')}{' '}
               <strong>{createdUsername}</strong>.
             </Text>
             <Button onClick={() => navigate('/login')}>
-              Sign In
+              {t('loginPage.signIn')}
             </Button>
           </Stack>
         </Paper>
@@ -184,9 +186,9 @@ export function AcceptInvite() {
 
   return (
     <Container size={420} my={40}>
-      <Title ta="center">Accept Invitation</Title>
+      <Title ta="center">{t('acceptInvite.acceptInvitationTitle')}</Title>
       <Text c="dimmed" size="sm" ta="center" mt={5}>
-        <strong>{invitedBy}</strong> has invited you to join BillManager
+        <strong>{invitedBy}</strong> {t('acceptInvite.invitedBySuffix')}
       </Text>
 
       <Paper withBorder shadow="md" p={30} mt={30} radius="md">
@@ -199,26 +201,26 @@ export function AcceptInvite() {
             )}
 
             <TextInput
-              label="Email"
+              label={t('loginPage.emailLabel')}
               value={inviteEmail}
               disabled
-              description="Your account will be linked to this email"
+              description={t('acceptInvite.emailDescription')}
             />
 
             <TextInput
-              label="Username"
-              placeholder="Choose a username"
+              label={t('loginModal.usernameLabel')}
+              placeholder={t('loginPage.chooseUsernamePlaceholder')}
               leftSection={<IconUser size={16} />}
               value={username}
               onChange={(e) => setUsername(e.currentTarget.value)}
-              description="Letters, numbers, and underscores only"
+              description={t('acceptInvite.usernameDescription')}
               required
             />
 
             <div>
               <PasswordInput
-                label="Password"
-                placeholder="Create a strong password"
+                label={t('loginModal.passwordLabel')}
+                placeholder={t('loginPage.createPasswordPlaceholder')}
                 leftSection={<IconLock size={16} />}
                 value={password}
                 onChange={(e) => setPassword(e.currentTarget.value)}
@@ -233,17 +235,17 @@ export function AcceptInvite() {
                     mt={5}
                   />
                   <Text size="xs" c="dimmed" mt={5}>
-                    Password requirements:
+                    {t('acceptInvite.passwordRequirements')}
                   </Text>
                   <List size="xs" c="dimmed" spacing={0}>
                     <List.Item c={password.length >= 8 ? 'green' : undefined}>
-                      At least 8 characters
+                      {t('loginPage.atLeast8Chars')}
                     </List.Item>
                     <List.Item c={/[a-z]/.test(password) && /[A-Z]/.test(password) ? 'green' : undefined}>
-                      Upper and lowercase letters
+                      {t('loginPage.upperLowerLetters')}
                     </List.Item>
                     <List.Item c={/[0-9]/.test(password) ? 'green' : undefined}>
-                      At least one number
+                      {t('loginPage.atLeastOneNumber')}
                     </List.Item>
                   </List>
                 </>
@@ -251,23 +253,23 @@ export function AcceptInvite() {
             </div>
 
             <PasswordInput
-              label="Confirm Password"
-              placeholder="Confirm your password"
+              label={t('loginPage.confirmPasswordLabel')}
+              placeholder={t('loginPage.confirmPasswordPlaceholder')}
               leftSection={<IconLock size={16} />}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.currentTarget.value)}
-              error={confirmPassword && password !== confirmPassword ? 'Passwords do not match' : undefined}
+              error={confirmPassword && password !== confirmPassword ? t('loginPage.passwordsMismatch') : undefined}
               required
             />
 
             <Button type="submit" fullWidth loading={loading}>
-              Create Account
+              {t('loginPage.createAccount')}
             </Button>
 
             <Text size="sm" c="dimmed" ta="center">
-              Already have an account?{' '}
+              {t('acceptInvite.alreadyHaveAccount')}{' '}
               <Anchor component={Link} to="/login" size="sm">
-                Sign in
+                {t('acceptInvite.signInLink')}
               </Anchor>
             </Text>
           </Stack>

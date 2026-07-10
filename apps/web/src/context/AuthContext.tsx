@@ -214,13 +214,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error instanceof api.ApiError) {
         return { success: false, error: error.message };
       }
-      return { success: false, error: 'Authentication failed' };
+      return { success: false };
     }
   };
 
   const complete2FA = async (method: string, payload: Record<string, unknown>): Promise<{ success: boolean; error?: string }> => {
     if (!state.pending2FA) {
-      return { success: false, error: 'No pending 2FA session' };
+      return { success: false };
     }
 
     try {
@@ -242,7 +242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     } catch (error: unknown) {
       const err = error as { message?: string };
-      return { success: false, error: err.message || 'Verification failed' };
+      return { success: false, error: err.message };
     }
   };
 
@@ -255,7 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     newPassword: string
   ): Promise<{ success: boolean; error?: string }> => {
     if (!state.pendingPasswordChange) {
-      return { success: false, error: 'No pending password change' };
+      return { success: false };
     }
 
     try {
@@ -273,7 +273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const err = error as { response?: { data?: { error?: string } } };
       return {
         success: false,
-        error: err.response?.data?.error || 'Failed to change password',
+        error: err.response?.data?.error,
       };
     }
   };

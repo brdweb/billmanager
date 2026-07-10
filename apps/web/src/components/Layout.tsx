@@ -14,6 +14,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure, useWindowScroll, useMediaQuery } from '@mantine/hooks';
 import { IconSun, IconMoon, IconSettings, IconLogout, IconCreditCard, IconArrowUp } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import type { ReactNode } from 'react';
 
@@ -25,6 +26,7 @@ interface LayoutProps {
 }
 
 export function Layout({ children, sidebar, onAdminClick, onBillingClick }: LayoutProps) {
+  const { t } = useTranslation();
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
   const [drawerOpened, { toggle: toggleDrawer, close: closeDrawer }] = useDisclosure();
   const { isLoggedIn, isAdmin, databases, currentDb, selectDatabase, logout } = useAuth();
@@ -53,9 +55,9 @@ export function Layout({ children, sidebar, onAdminClick, onBillingClick }: Layo
             <Group>
               {isLoggedIn && databases.length > 0 && (
                 <Select
-                  placeholder="Select bill group"
+                  placeholder={t('layout.selectBillGroupPlaceholder')}
                   data={[
-                    { value: '_all_', label: 'All Buckets' },
+                    { value: '_all_', label: t('layout.allBuckets') },
                     ...databases.map((db) => ({
                       value: db.name,
                       label: db.display_name,
@@ -72,7 +74,7 @@ export function Layout({ children, sidebar, onAdminClick, onBillingClick }: Layo
                 variant="default"
                 size="lg"
                 onClick={() => toggleColorScheme()}
-                aria-label="Toggle color scheme"
+                aria-label={t('layout.toggleColorScheme')}
               >
                 {colorScheme === 'dark' ? <IconSun size={20} /> : <IconMoon size={20} />}
               </ActionIcon>
@@ -87,7 +89,7 @@ export function Layout({ children, sidebar, onAdminClick, onBillingClick }: Layo
                       leftSection={<IconCreditCard size={16} />}
                       onClick={onBillingClick}
                     >
-                      Billing
+                      {t('layout.billing')}
                     </Button>
                   )}
                   {isAdmin && (
@@ -98,7 +100,7 @@ export function Layout({ children, sidebar, onAdminClick, onBillingClick }: Layo
                       leftSection={<IconSettings size={16} />}
                       onClick={onAdminClick}
                     >
-                      Admin
+                      {t('layout.admin')}
                     </Button>
                   )}
                   <Button
@@ -108,7 +110,7 @@ export function Layout({ children, sidebar, onAdminClick, onBillingClick }: Layo
                     leftSection={<IconLogout size={16} />}
                     onClick={logout}
                   >
-                    Logout
+                    {t('layout.logout')}
                   </Button>
                 </Group>
               )}
@@ -139,7 +141,7 @@ export function Layout({ children, sidebar, onAdminClick, onBillingClick }: Layo
         onClose={closeDrawer}
         size="280"
         padding="md"
-        title="Dashboard"
+        title={t('sidebar.navDashboard')}
       >
         {sidebar}
       </Drawer>
@@ -155,7 +157,7 @@ export function Layout({ children, sidebar, onAdminClick, onBillingClick }: Layo
               variant="filled"
               color="billGreen"
               onClick={() => scrollTo({ y: 0 })}
-              aria-label="Scroll to top"
+              aria-label={t('layout.scrollToTop')}
             >
               <IconArrowUp size={18} />
             </ActionIcon>

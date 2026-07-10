@@ -1,8 +1,11 @@
 import { Paper, Title, Text, Group, Button, Table, Badge, ThemeIcon, ActionIcon, Tooltip } from '@mantine/core';
 import { IconCalendar, IconCash, IconEdit, IconUsers } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { Bill } from '../../api/client';
 import { BillIcon } from '../BillIcon';
 import { formatCurrency } from '../../lib/currency';
+import { formatDateString } from '../../utils/date';
 
 interface UpcomingBillsListProps {
   bills: Bill[];
@@ -16,15 +19,6 @@ interface UpcomingBillsListProps {
 function parseDate(dateStr: string): Date {
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day);
-}
-
-function formatDate(dateStr: string): string {
-  const date = parseDate(dateStr);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 function getDueBadgeColor(dateStr: string): string {
@@ -43,39 +37,41 @@ function getDueBadgeColor(dateStr: string): string {
   return 'gray';
 }
 
-function getFrequencyText(bill: Bill): string {
+function getFrequencyText(bill: Bill, t: TFunction): string {
   let frequencyConfig: { dates?: number[]; days?: number[] } = {};
   try { frequencyConfig = bill.frequency_config ? JSON.parse(bill.frequency_config) : {}; } catch { /* ignore malformed config */ }
 
   switch (bill.frequency) {
     case 'weekly':
-      return 'Weekly';
+      return t('common.frequency.weekly');
     case 'bi-weekly':
     case 'biweekly':
-      return 'Bi-weekly';
+      return t('common.frequency.biweekly');
     case 'quarterly':
-      return 'Quarterly';
+      return t('common.frequency.quarterly');
     case 'yearly':
-      return 'Yearly';
+      return t('common.frequency.yearly');
     case 'monthly':
       if (bill.frequency_type === 'specific_dates' && frequencyConfig.dates) {
-        const dates = frequencyConfig.dates.join(', ');
-        return `Monthly (${dates}${frequencyConfig.dates.length === 1 ? 'st/nd/rd/th' : ''})`;
+        const dates = frequencyConfig.dates.join(', ') + (frequencyConfig.dates.length === 1 ? 'st/nd/rd/th' : '');
+        return t('common.frequency.monthlyOnDates', { dates });
       }
-      return 'Monthly';
+      return t('common.frequency.monthly');
     case 'custom':
       if (bill.frequency_type === 'multiple_weekly' && frequencyConfig.days) {
-        const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        const days = frequencyConfig.days.map((d: number) => dayNames[d]).join(', ');
-        return `Weekly (${days})`;
+        const dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+        const days = frequencyConfig.days.map((d: number) => t(`common.weekdaysShort.${dayKeys[d]}`)).join(', ');
+        return t('common.frequency.customWeekly', { days });
       }
-      return 'Custom';
+      return t('common.frequency.custom');
     default:
       return bill.frequency;
   }
 }
 
 export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onViewAll }: UpcomingBillsListProps) {
+  const { t } = useTranslation();
+
   // Get today's date at midnight
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -99,26 +95,26 @@ export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onView
           <ThemeIcon color="blue" variant="light" size="md" radius="md">
             <IconCalendar size={16} />
           </ThemeIcon>
-          <Title order={5}>Upcoming Bills (Next 7 Days)</Title>
+          <Title order={5}>{t('dashboard.upcomingBills.title')}</Title>
         </Group>
         <Button variant="subtle" size="xs" onClick={onViewAll}>
-          View All
+          {t('common.actions.viewAll')}
         </Button>
       </Group>
 
       {upcomingBills.length === 0 ? (
         <Text c="dimmed" ta="center" py="md">
-          No bills due in the next 7 days
+          {t('dashboard.upcomingBills.empty')}
         </Text>
       ) : (
         <Table striped highlightOnHover>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Name</Table.Th>
-              <Table.Th>Amount</Table.Th>
-              <Table.Th>Due Date</Table.Th>
-              <Table.Th>Frequency</Table.Th>
-              <Table.Th>Actions</Table.Th>
+              <Table.Th>{t('common.table.name')}</Table.Th>
+              <Table.Th>{t('common.table.amount')}</Table.Th>
+              <Table.Th>{t('common.table.dueDate')}</Table.Th>
+              <Table.Th>{t('common.table.frequency')}</Table.Th>
+              <Table.Th>{t('common.table.actions')}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -138,8 +134,8 @@ export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onView
                           <Tooltip
                             label={
                               bill.is_shared
-                                ? `Shared with you by ${bill.share_info?.owner_name}`
-                                : `Shared with ${bill.share_count} ${bill.share_count === 1 ? 'person' : 'people'}`
+                                ? t('common.sharedWithYouBy', { name: bill.share_info?.owner_name })
+                                : t('common.sharedWithCount', { count: bill.share_count ?? 0 })
                             }
                             withArrow
                           >
@@ -161,11 +157,11 @@ export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onView
                           color={bill.type === 'deposit' ? 'green' : 'blue'}
                           variant="light"
                         >
-                          {bill.type === 'deposit' ? 'Deposit' : 'Expense'}
+                          {bill.type === 'deposit' ? t('common.billType.deposit') : t('common.billType.expense')}
                         </Badge>
                         {bill.is_shared && bill.share_info && (
                           <Badge size="xs" color="violet" variant="filled">
-                            From {bill.share_info.owner_name}
+                            {t('common.fromOwner', { name: bill.share_info.owner_name })}
                           </Badge>
                         )}
                         {bill.account && (
@@ -175,7 +171,7 @@ export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onView
                         )}
                         {!!bill.auto_payment && (
                           <Badge size="xs" color="green" variant="light">
-                            Auto-pay
+                            {t('common.autoPay')}
                           </Badge>
                         )}
                       </Group>
@@ -185,7 +181,7 @@ export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onView
                 <Table.Td>
                   {bill.varies ? (
                     <Text c={bill.type === 'deposit' ? 'green' : 'red'}>
-                      Varies{' '}
+                      {t('common.varies')}{' '}
                       <Text span size="xs">
                         (~{formatCurrency(bill.avg_amount || 0)})
                       </Text>
@@ -198,12 +194,12 @@ export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onView
                 </Table.Td>
                 <Table.Td>
                   <Badge color={getDueBadgeColor(bill.next_due)} variant="light">
-                    {formatDate(bill.next_due)}
+                    {formatDateString(bill.next_due)}
                   </Badge>
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm" c="dimmed">
-                    {getFrequencyText(bill)}
+                    {getFrequencyText(bill, t)}
                   </Text>
                 </Table.Td>
                 <Table.Td>
@@ -214,7 +210,7 @@ export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onView
                           variant="subtle"
                           color="blue"
                           onClick={() => onEdit(bill)}
-                          title="Edit"
+                          title={t('common.actions.edit')}
                         >
                           <IconEdit size={18} />
                         </ActionIcon>
@@ -222,7 +218,7 @@ export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onView
                           variant="filled"
                           color="green"
                           onClick={() => onPay(bill)}
-                          title="Pay"
+                          title={t('common.actions.pay')}
                         >
                           <IconCash size={18} />
                         </ActionIcon>
@@ -233,7 +229,7 @@ export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onView
                         variant="filled"
                         color="green"
                         onClick={() => onPay(bill)}
-                        title="Mark my portion as paid"
+                        title={t('common.markMyPortionPaid')}
                       >
                         <IconCash size={18} />
                       </ActionIcon>

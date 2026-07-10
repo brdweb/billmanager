@@ -25,10 +25,16 @@ import {
   IconCalendarStats,
   IconCash,
 } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import * as api from '../../api/client';
 import type { CashFlowForecast as CashFlowForecastData } from '../../api/client';
 import { BillIcon } from '../BillIcon';
-import { formatCurrency, formatCurrencyAxis, getCurrencySymbol } from '../../lib/currency';
+import {
+  formatCurrency,
+  formatCurrencyAxis,
+  getCurrencyInputProps,
+} from '../../lib/currency';
+import { formatDateShort } from '../../utils/date';
 
 interface CashFlowForecastProps {
   hasDatabase: boolean;
@@ -37,15 +43,6 @@ interface CashFlowForecastProps {
 }
 
 const STORAGE_KEY = 'billmanager:forecast-starting-balance';
-
-function formatShortDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  if (!year || !month || !day) return dateStr;
-  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  });
-}
 
 function SummaryMetric({
   label,
@@ -75,6 +72,7 @@ function SummaryMetric({
 }
 
 export function CashFlowForecast({ hasDatabase, framed = true, showHeader = true }: CashFlowForecastProps) {
+  const { t } = useTranslation();
   const [startingBalance, setStartingBalance] = useState<number>(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     const parsed = saved ? Number(saved) : 0;
@@ -123,7 +121,7 @@ export function CashFlowForecast({ hasDatabase, framed = true, showHeader = true
 
   const chartData = useMemo(() => (
     forecast?.daily.map((day) => ({
-      date: formatShortDate(day.date),
+      date: formatDateShort(day.date),
       balance: day.balance,
     })) ?? []
   ), [forecast]);
@@ -135,17 +133,16 @@ export function CashFlowForecast({ hasDatabase, framed = true, showHeader = true
         <Group justify={showHeader ? 'space-between' : 'flex-end'} align={showHeader ? 'flex-start' : 'flex-end'}>
           {showHeader && (
             <Stack gap={2}>
-              <Title order={4}>Cash Flow Forecast</Title>
+              <Title order={4}>{t('dashboard.cashFlowForecast.title')}</Title>
               <Text size="sm" c="dimmed">
-                Projected balance from upcoming bills, deposits, and shared payables
+                {t('dashboard.cashFlowForecast.description')}
               </Text>
             </Stack>
           )}
           <Group gap="sm" align="flex-end">
             <NumberInput
-              label="Starting balance"
-              prefix={getCurrencySymbol()}
-              decimalScale={2}
+              label={t('dashboard.cashFlowForecast.startingBalance')}
+              {...getCurrencyInputProps()}
               value={startingBalance}
               onChange={(value) => setStartingBalance(typeof value === 'number' ? value : 0)}
               w={170}
@@ -154,9 +151,9 @@ export function CashFlowForecast({ hasDatabase, framed = true, showHeader = true
               value={days}
               onChange={setDays}
               data={[
-                { label: '30d', value: '30' },
-                { label: '60d', value: '60' },
-                { label: '90d', value: '90' },
+                { label: t('dashboard.cashFlowForecast.days30'), value: '30' },
+                { label: t('dashboard.cashFlowForecast.days60'), value: '60' },
+                { label: t('dashboard.cashFlowForecast.days90'), value: '90' },
               ]}
             />
           </Group>
@@ -164,7 +161,7 @@ export function CashFlowForecast({ hasDatabase, framed = true, showHeader = true
 
         {error && (
           <Alert color="red" icon={<IconAlertTriangle size={16} />}>
-            Unable to load cash flow forecast.
+            {t('dashboard.cashFlowForecast.loadError')}
           </Alert>
         )}
 
@@ -176,32 +173,32 @@ export function CashFlowForecast({ hasDatabase, framed = true, showHeader = true
           <>
             <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
               <SummaryMetric
-                label="Ending balance"
+                label={t('dashboard.cashFlowForecast.endingBalance')}
                 value={formatCurrency(forecast.summary.ending_balance)}
-                detail={`${forecast.summary.days} day projection`}
+                detail={t('dashboard.cashFlowForecast.dayProjection', { count: forecast.summary.days })}
                 color={forecast.summary.ending_balance >= 0 ? 'green' : 'red'}
                 icon={<IconCash size={18} />}
               />
               <SummaryMetric
-                label="Lowest balance"
+                label={t('dashboard.cashFlowForecast.lowestBalance')}
                 value={formatCurrency(forecast.summary.lowest_balance)}
-                detail={formatShortDate(forecast.summary.lowest_balance_date)}
+                detail={formatDateShort(forecast.summary.lowest_balance_date)}
                 color={forecast.summary.lowest_balance >= 0 ? 'blue' : 'red'}
                 icon={<IconCalendarStats size={18} />}
               />
               <SummaryMetric
-                label="Income"
+                label={t('dashboard.cashFlowForecast.income')}
                 value={formatCurrency(forecast.summary.total_income)}
-                detail="Projected deposits"
+                detail={t('dashboard.cashFlowForecast.projectedDeposits')}
                 color="green"
                 icon={<IconArrowUpRight size={18} />}
               />
               <SummaryMetric
-                label="Expenses"
+                label={t('dashboard.cashFlowForecast.expenses')}
                 value={formatCurrency(forecast.summary.total_expenses)}
                 detail={forecast.summary.runway_days === null
-                  ? 'No negative balance'
-                  : `Negative in ${forecast.summary.runway_days} day${forecast.summary.runway_days === 1 ? '' : 's'}`}
+                  ? t('dashboard.cashFlowForecast.noNegativeBalance')
+                  : t('dashboard.cashFlowForecast.negativeInDays', { count: forecast.summary.runway_days })}
                 color={forecast.summary.runway_days === null ? 'orange' : 'red'}
                 icon={<IconArrowDownRight size={18} />}
               />
@@ -215,7 +212,7 @@ export function CashFlowForecast({ hasDatabase, framed = true, showHeader = true
                 series={[{
                   name: 'balance',
                   color: forecast.summary.lowest_balance < 0 ? 'red.6' : 'teal.6',
-                  label: 'Projected Balance',
+                  label: t('dashboard.cashFlowForecast.projectedBalance'),
                 }]}
                 curveType="linear"
                 withTooltip
@@ -226,22 +223,22 @@ export function CashFlowForecast({ hasDatabase, framed = true, showHeader = true
             )}
 
             {forecast.occurrences.length === 0 ? (
-              <Text size="sm" c="dimmed">No projected bills or deposits in this window.</Text>
+              <Text size="sm" c="dimmed">{t('dashboard.cashFlowForecast.noOccurrences')}</Text>
             ) : (
               <Table striped highlightOnHover>
                 <Table.Thead>
                   <Table.Tr>
-                    <Table.Th>Date</Table.Th>
-                    <Table.Th>Bill</Table.Th>
-                    <Table.Th>Type</Table.Th>
-                    <Table.Th>Amount</Table.Th>
-                    <Table.Th>Balance After</Table.Th>
+                    <Table.Th>{t('common.table.date')}</Table.Th>
+                    <Table.Th>{t('dashboard.cashFlowForecast.columns.bill')}</Table.Th>
+                    <Table.Th>{t('common.table.type')}</Table.Th>
+                    <Table.Th>{t('common.table.amount')}</Table.Th>
+                    <Table.Th>{t('dashboard.cashFlowForecast.columns.balanceAfter')}</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
                   {forecast.occurrences.slice(0, 6).map((item) => (
                     <Table.Tr key={`${item.source}-${item.share_id ?? item.bill_id}-${item.date}`}>
-                      <Table.Td>{formatShortDate(item.date)}</Table.Td>
+                      <Table.Td>{formatDateShort(item.date)}</Table.Td>
                       <Table.Td>
                         <Group gap="xs" wrap="nowrap">
                           <BillIcon icon={item.bill_icon} size={24} />
@@ -249,7 +246,7 @@ export function CashFlowForecast({ hasDatabase, framed = true, showHeader = true
                             <Text size="sm" fw={500}>{item.bill_name}</Text>
                             <Text size="xs" c="dimmed">
                               {item.source === 'shared' && item.counterparty_name
-                                ? `Shared by ${item.counterparty_name}`
+                                ? t('common.sharedBy', { name: item.counterparty_name })
                                 : item.database_name}
                             </Text>
                           </Stack>
@@ -257,7 +254,7 @@ export function CashFlowForecast({ hasDatabase, framed = true, showHeader = true
                       </Table.Td>
                       <Table.Td>
                         <Badge color={item.signed_amount >= 0 ? 'green' : 'red'} variant="light">
-                          {item.signed_amount >= 0 ? 'Deposit' : 'Expense'}
+                          {item.signed_amount >= 0 ? t('common.billType.deposit') : t('common.billType.expense')}
                         </Badge>
                       </Table.Td>
                       <Table.Td>

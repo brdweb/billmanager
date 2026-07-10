@@ -23,45 +23,19 @@ import {
   IconCash,
   IconCalendar,
 } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 import type { SharedBill, PendingShare } from '../api/client';
 import { BillIcon } from './BillIcon';
 import { formatCurrency } from '../lib/currency';
+import { formatDateString } from '../utils/date';
 
 interface SharedBillsSectionProps {
   onRefresh?: () => void;
 }
 
-// Parse date string directly to avoid timezone issues
-function parseDate(dateStr: string): Date | null {
-  if (!dateStr || typeof dateStr !== 'string') return null;
-
-  const parts = dateStr.split('-');
-  if (parts.length !== 3) return null;
-
-  const [year, month, day] = parts.map(Number);
-  if (isNaN(year) || isNaN(month) || isNaN(day)) return null;
-  if (month < 1 || month > 12) return null;
-  if (day < 1 || day > 31) return null;
-
-  const date = new Date(year, month - 1, day);
-  if (isNaN(date.getTime())) return null;
-
-  return date;
-}
-
-function formatDate(dateStr: string): string {
-  const date = parseDate(dateStr);
-  if (!date) return dateStr; // Return original if parsing fails
-
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
 export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
+  const { t } = useTranslation();
   const [sharedBills, setSharedBills] = useState<SharedBill[]>([]);
   const [pendingShares, setPendingShares] = useState<PendingShare[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,7 +127,7 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
         >
           <Group gap="xs">
             <IconShare size={20} />
-            <Text fw={600}>Shared Bills</Text>
+            <Text fw={600}>{t('sharedBillsSection.title')}</Text>
             <Badge size="sm" variant="light">
               {totalCount}
             </Badge>
@@ -169,7 +143,7 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
             {pendingShares.length > 0 && (
               <>
                 <Text size="sm" fw={500} c="dimmed">
-                  Pending Invitations
+                  {t('sharedBillsSection.pendingInvitations')}
                 </Text>
                 {pendingShares.map((share) => (
                   <Alert key={share.share_id} color="yellow" variant="light">
@@ -181,7 +155,7 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
                         <Group gap="xs">
                           <IconUser size={14} />
                           <Text size="xs" c="dimmed">
-                            From: {share.owner}
+                            {t('sharedBillsSection.fromOwner', { name: share.owner })}
                           </Text>
                           {share.my_portion && (
                             <>
@@ -189,7 +163,7 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
                                 |
                               </Text>
                               <Text size="xs" c="dimmed">
-                                Your portion: {formatCurrency(share.my_portion)}
+                                {t('sharedBillsSection.yourPortion', { amount: formatCurrency(share.my_portion) })}
                               </Text>
                             </>
                           )}
@@ -203,7 +177,7 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
                           onClick={() => handleAccept(share.share_id)}
                           loading={actionLoading === share.share_id}
                         >
-                          Accept
+                          {t('sharedBillsSection.accept')}
                         </Button>
                         <Button
                           size="xs"
@@ -213,7 +187,7 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
                           onClick={() => handleDecline(share.share_id)}
                           loading={actionLoading === share.share_id}
                         >
-                          Decline
+                          {t('sharedBillsSection.decline')}
                         </Button>
                       </Group>
                     </Group>
@@ -227,7 +201,7 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
               <>
                 {pendingShares.length > 0 && (
                   <Text size="sm" fw={500} c="dimmed" mt="xs">
-                    Watching
+                    {t('sharedBillsSection.watching')}
                   </Text>
                 )}
                 {sharedBills.map((shared) => (
@@ -245,7 +219,7 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
                               color={shared.bill.type === 'deposit' ? 'green' : 'blue'}
                               variant="light"
                             >
-                              {shared.bill.type}
+                              {shared.bill.type === 'deposit' ? t('common.billType.deposit') : t('common.billType.expense')}
                             </Badge>
                           </Group>
                           <Group gap="xs">
@@ -258,7 +232,7 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
                             </Text>
                             <IconCalendar size={12} />
                             <Text size="xs" c="dimmed">
-                              Due: {formatDate(shared.bill.next_due)}
+                              {t('sharedBillsSection.dueLabel', { date: formatDateString(shared.bill.next_due) })}
                             </Text>
                           </Group>
                         </Stack>
@@ -273,7 +247,7 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
                                 {formatCurrency(shared.my_portion)}
                               </Text>
                               <Text size="xs" c="dimmed">
-                                of {formatCurrency(shared.bill.amount || 0)}
+                                {t('sharedBillsSection.ofAmount', { amount: formatCurrency(shared.bill.amount || 0) })}
                               </Text>
                             </>
                           ) : (
@@ -285,19 +259,19 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
 
                         {/* Payment Status */}
                         {shared.last_payment ? (
-                          <Tooltip label={`Paid on ${formatDate(shared.last_payment.date)}`}>
+                          <Tooltip label={t('billModal.paidOn', { date: formatDateString(shared.last_payment.date) })}>
                             <Badge color="green" leftSection={<IconCash size={12} />}>
-                              Paid
+                              {t('sharedBillsSection.paid')}
                             </Badge>
                           </Tooltip>
                         ) : (
                           <Badge color="gray" variant="light">
-                            Unpaid
+                            {t('sharedBillsSection.unpaid')}
                           </Badge>
                         )}
 
                         {/* Leave Button */}
-                        <Tooltip label="Stop watching this bill">
+                        <Tooltip label={t('sharedBillsSection.stopWatching')}>
                           <ActionIcon
                             color="red"
                             variant="subtle"

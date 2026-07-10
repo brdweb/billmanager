@@ -5,6 +5,7 @@ import {
   IconBrandWindows,
   IconLock,
 } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import type { OAuthProviderInfo } from '../context/ConfigContext';
 import * as api from '../api/client';
 
@@ -28,6 +29,7 @@ interface SocialLoginButtonsProps {
 }
 
 export function SocialLoginButtons({ providers, loading, onError }: SocialLoginButtonsProps) {
+  const { t } = useTranslation();
   if (!providers || providers.length === 0) return null;
 
   const handleOAuthLogin = async (provider: OAuthProviderInfo) => {
@@ -36,14 +38,14 @@ export function SocialLoginButtons({ providers, loading, onError }: SocialLoginB
       // Redirect to provider
       window.location.assign(result.auth_url);
     } catch {
-      onError?.('Failed to start sign-in. Please try again.');
+      onError?.(t('socialLoginButtons.startFailed'));
     }
   };
 
   return (
     <>
       <Divider
-        label={<Text size="xs" c="dimmed">or continue with</Text>}
+        label={<Text size="xs" c="dimmed">{t('socialLoginButtons.orContinueWith')}</Text>}
         labelPosition="center"
         my="md"
       />
@@ -62,7 +64,7 @@ export function SocialLoginButtons({ providers, loading, onError }: SocialLoginB
               },
             }}
           >
-            Sign in with {provider.display_name}
+            {t('socialLoginButtons.signInWith', { name: provider.display_name })}
           </Button>
         ))}
       </Stack>

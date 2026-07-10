@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Modal, Stack, Tabs } from '@mantine/core';
 import { IconUsers, IconFolders, IconShieldLock } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { UsersTab } from './UsersTab';
 import { DatabasesTab } from './DatabasesTab';
 import { TwoFactorSettings } from '../TwoFactorSettings';
@@ -14,6 +15,7 @@ interface AdminModalProps {
 }
 
 export function AdminModal({ opened, onClose }: AdminModalProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<string | null>('users');
   const { config } = useConfig();
   const showSecurity = config?.twofa_enabled || (config?.oauth_providers && config.oauth_providers.length > 0);
@@ -22,21 +24,21 @@ export function AdminModal({ opened, onClose }: AdminModalProps) {
     <Modal
       opened={opened}
       onClose={onClose}
-      title="Admin Panel"
+      title={t('admin.title')}
       size="xl"
       centered
     >
       <Tabs value={activeTab} onChange={setActiveTab}>
         <Tabs.List>
           <Tabs.Tab value="users" leftSection={<IconUsers size={16} />}>
-            Users
+            {t('admin.tabs.users')}
           </Tabs.Tab>
           <Tabs.Tab value="databases" leftSection={<IconFolders size={16} />}>
-            Bill Groups
+            {t('admin.tabs.billGroups')}
           </Tabs.Tab>
           {showSecurity && (
             <Tabs.Tab value="security" leftSection={<IconShieldLock size={16} />}>
-              Security
+              {t('admin.tabs.security')}
             </Tabs.Tab>
           )}
         </Tabs.List>

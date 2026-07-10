@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Paper, SimpleGrid, Text, Center, Stack, Badge, Group, ActionIcon, Button, SegmentedControl, Title } from '@mantine/core';
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import type { Bill } from '../api/client';
+import { getLocale } from '../lib/currency';
 
 interface MultiMonthCalendarProps {
   bills: Bill[];
@@ -34,6 +36,7 @@ function SingleMonth({
   today: { year: number; month: number; day: number };
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   const weeks = useMemo(() => {
     const { firstDay, daysInMonth } = monthData;
     const days: (number | null)[] = [];
@@ -74,9 +77,9 @@ function SingleMonth({
         </Title>
 
         <SimpleGrid cols={7} spacing={1}>
-          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-            <Text key={`${day}-${i}`} size="xs" fw={600} ta="center" c="dimmed">
-              {day}
+          {(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const).map((day) => (
+            <Text key={day} size="xs" fw={600} ta="center" c="dimmed">
+              {t(`common.weekdaysMin.${day}`)}
             </Text>
           ))}
         </SimpleGrid>
@@ -179,6 +182,7 @@ export function MultiMonthCalendar({
   onViewChange,
   showViewSelector = true,
 }: MultiMonthCalendarProps) {
+  const { t } = useTranslation();
   const [baseOffset, setBaseOffset] = useState(0);
 
   const today = useMemo(() => {
@@ -198,7 +202,7 @@ export function MultiMonthCalendar({
       const targetDate = new Date(now.getFullYear(), now.getMonth() + baseOffset + i, 1);
       const year = targetDate.getFullYear();
       const month = targetDate.getMonth();
-      const monthName = targetDate.toLocaleString('default', { month: 'long' });
+      const monthName = targetDate.toLocaleString(getLocale(), { month: 'long' });
       const firstDay = new Date(year, month, 1).getDay();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
 
@@ -233,7 +237,7 @@ export function MultiMonthCalendar({
             <IconChevronLeft size={16} />
           </ActionIcon>
           <Button variant="light" size="compact-xs" onClick={handleToday}>
-            Today
+            {t('common.actions.today')}
           </Button>
           <ActionIcon variant="subtle" onClick={handleNext}>
             <IconChevronRight size={16} />
@@ -246,9 +250,9 @@ export function MultiMonthCalendar({
             value={String(viewMonths)}
             onChange={(v) => onViewChange(Number(v) as 1 | 3 | 6)}
             data={[
-              { label: '1 Month', value: '1' },
-              { label: '3 Months', value: '3' },
-              { label: '6 Months', value: '6' },
+              { label: t('calendar.oneMonth'), value: '1' },
+              { label: t('calendar.threeMonths'), value: '3' },
+              { label: t('calendar.sixMonths'), value: '6' },
             ]}
           />
         )}
@@ -258,11 +262,11 @@ export function MultiMonthCalendar({
       <Group gap="md" justify="center">
         <Group gap={4}>
           <div style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--mantine-color-yellow-light)' }} />
-          <Text size="xs" c="dimmed">Bills Due</Text>
+          <Text size="xs" c="dimmed">{t('calendar.legendBillsDue')}</Text>
         </Group>
         <Group gap={4}>
           <div style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--mantine-color-violet-light)', border: '2px solid var(--mantine-color-violet-6)' }} />
-          <Text size="xs" c="dimmed">Today</Text>
+          <Text size="xs" c="dimmed">{t('calendar.legendToday')}</Text>
         </Group>
       </Group>
 

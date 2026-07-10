@@ -15,11 +15,13 @@ import {
   Badge,
 } from '@mantine/core';
 import { IconAlertCircle, IconCheck, IconCurrencyDollar } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { getShareInviteDetails, acceptShareByToken } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../lib/currency';
 
 export function AcceptShareInvite() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -46,7 +48,7 @@ export function AcceptShareInvite() {
   // Fetch invite info on mount
   useEffect(() => {
     if (!token) {
-      setInviteError('Invalid invitation link. Please check the link and try again.');
+      setInviteError(t('acceptInvite.invalidLink'));
       setInviteLoading(false);
       return;
     }
@@ -57,18 +59,18 @@ export function AcceptShareInvite() {
         setInviteData(response);
       } catch (err: unknown) {
         const error = err as { response?: { data?: { error?: string } } };
-        setInviteError(error.response?.data?.error || 'This invitation is invalid or has expired.');
+        setInviteError(error.response?.data?.error || t('acceptInvite.invalidExpiredDefault'));
       } finally {
         setInviteLoading(false);
       }
     };
 
     fetchInviteInfo();
-  }, [token]);
+  }, [token, t]);
 
   const handleAccept = async () => {
     if (!token) {
-      setError('Invalid invitation token');
+      setError(t('acceptInvite.invalidToken'));
       return;
     }
 
@@ -80,7 +82,7 @@ export function AcceptShareInvite() {
       setSuccess(true);
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } } };
-      setError(error.response?.data?.error || 'Failed to accept invitation. Please try again.');
+      setError(error.response?.data?.error || t('acceptShareInvite.acceptFailedDefault'));
     } finally {
       setLoading(false);
     }
@@ -94,7 +96,7 @@ export function AcceptShareInvite() {
           <Center py="xl">
             <Stack align="center" gap="md">
               <Loader size="lg" />
-              <Text c="dimmed">Loading invitation...</Text>
+              <Text c="dimmed">{t('acceptInvite.loadingInvitation')}</Text>
             </Stack>
           </Center>
         </Paper>
@@ -109,12 +111,12 @@ export function AcceptShareInvite() {
         <Paper withBorder shadow="md" p={30} mt={30} radius="md">
           <Stack align="center" gap="md">
             <IconAlertCircle size={48} color="var(--mantine-color-red-6)" />
-            <Title order={2} ta="center">Invalid Invitation</Title>
+            <Title order={2} ta="center">{t('acceptInvite.invalidInvitationTitle')}</Title>
             <Text c="dimmed" ta="center">
               {inviteError}
             </Text>
             <Button variant="light" onClick={() => navigate('/login')}>
-              Go to Login
+              {t('acceptInvite.goToLogin')}
             </Button>
           </Stack>
         </Paper>
@@ -129,12 +131,12 @@ export function AcceptShareInvite() {
         <Paper withBorder shadow="md" p={30} mt={30} radius="md">
           <Stack align="center" gap="md">
             <IconCheck size={48} color="var(--mantine-color-green-6)" />
-            <Title order={2} ta="center">Share Accepted!</Title>
+            <Title order={2} ta="center">{t('acceptShareInvite.shareAcceptedTitle')}</Title>
             <Text c="dimmed" ta="center">
-              You have successfully accepted the shared bill. You can now view it in your bills list.
+              {t('acceptShareInvite.shareAcceptedBody')}
             </Text>
             <Button onClick={() => navigate('/')}>
-              Go to Bills
+              {t('acceptShareInvite.goToBills')}
             </Button>
           </Stack>
         </Paper>
@@ -146,20 +148,20 @@ export function AcceptShareInvite() {
   if (!isLoggedIn) {
     return (
       <Container size={500} my={40}>
-        <Title ta="center">Bill Share Invitation</Title>
+        <Title ta="center">{t('acceptShareInvite.billShareInvitationTitle')}</Title>
         <Text c="dimmed" size="sm" ta="center" mt={5}>
-          <strong>{inviteData?.owner_username}</strong> has invited you to share a bill
+          <strong>{inviteData?.owner_username}</strong> {t('acceptShareInvite.invitedByShareSuffix')}
         </Text>
 
         <Paper withBorder shadow="md" p={30} mt={30} radius="md">
           <Stack gap="md">
             <div>
-              <Text size="sm" c="dimmed" mb={5}>Bill Name</Text>
+              <Text size="sm" c="dimmed" mb={5}>{t('acceptShareInvite.billNameLabel')}</Text>
               <Text size="lg" fw={500}>{inviteData?.bill_name}</Text>
             </div>
 
             <div>
-              <Text size="sm" c="dimmed" mb={5}>Full Amount</Text>
+              <Text size="sm" c="dimmed" mb={5}>{t('acceptShareInvite.fullAmountLabel')}</Text>
               <Group gap="xs">
                 <IconCurrencyDollar size={20} />
                 <Text size="lg" fw={500}>{formatCurrency(inviteData?.bill_amount)}</Text>
@@ -168,41 +170,41 @@ export function AcceptShareInvite() {
 
             {inviteData && inviteData.my_portion !== null && (
               <div>
-                <Text size="sm" c="dimmed" mb={5}>Your Portion</Text>
+                <Text size="sm" c="dimmed" mb={5}>{t('acceptShareInvite.yourPortionLabel')}</Text>
                 <Group gap="xs">
                   <Badge color="blue" size="lg">
                     {formatCurrency(inviteData.my_portion)}
                   </Badge>
                   {inviteData.split_type === 'percentage' && (
-                    <Text size="sm" c="dimmed">({inviteData.split_value}%)</Text>
+                    <Text size="sm" c="dimmed">{t('acceptShareInvite.percentageSuffix', { value: inviteData.split_value })}</Text>
                   )}
                   {inviteData.split_type === 'equal' && (
-                    <Text size="sm" c="dimmed">(Split equally)</Text>
+                    <Text size="sm" c="dimmed">{t('acceptShareInvite.splitEqually')}</Text>
                   )}
                 </Group>
               </div>
             )}
 
             <div>
-              <Text size="sm" c="dimmed" mb={5}>Shared with</Text>
+              <Text size="sm" c="dimmed" mb={5}>{t('acceptShareInvite.sharedWithLabel')}</Text>
               <Text size="sm">{inviteData?.shared_with_email}</Text>
             </div>
 
             <Alert color="blue" variant="light">
-              You need to sign in to accept this invitation
+              {t('acceptShareInvite.needSignInNotice')}
             </Alert>
 
             <Button
               fullWidth
               onClick={() => navigate(`/login?redirect=/accept-share-invite?token=${token}`)}
             >
-              Sign In to Accept
+              {t('acceptShareInvite.signInToAccept')}
             </Button>
 
             <Text size="sm" c="dimmed" ta="center">
-              Don't have an account?{' '}
+              {t('acceptShareInvite.noAccountPrompt')}{' '}
               <Anchor component={Link} to={`/accept-invite?token=${token}`} size="sm">
-                Create one
+                {t('acceptShareInvite.createOne')}
               </Anchor>
             </Text>
           </Stack>
@@ -214,9 +216,9 @@ export function AcceptShareInvite() {
   // Logged in - show accept button
   return (
     <Container size={500} my={40}>
-      <Title ta="center">Bill Share Invitation</Title>
+      <Title ta="center">{t('acceptShareInvite.billShareInvitationTitle')}</Title>
       <Text c="dimmed" size="sm" ta="center" mt={5}>
-        <strong>{inviteData?.owner_username}</strong> has invited you to share a bill
+        <strong>{inviteData?.owner_username}</strong> {t('acceptShareInvite.invitedByShareSuffix')}
       </Text>
 
       <Paper withBorder shadow="md" p={30} mt={30} radius="md">
@@ -228,12 +230,12 @@ export function AcceptShareInvite() {
           )}
 
           <div>
-            <Text size="sm" c="dimmed" mb={5}>Bill Name</Text>
+            <Text size="sm" c="dimmed" mb={5}>{t('acceptShareInvite.billNameLabel')}</Text>
             <Text size="lg" fw={500}>{inviteData?.bill_name}</Text>
           </div>
 
           <div>
-            <Text size="sm" c="dimmed" mb={5}>Full Amount</Text>
+            <Text size="sm" c="dimmed" mb={5}>{t('acceptShareInvite.fullAmountLabel')}</Text>
             <Group gap="xs">
               <IconCurrencyDollar size={20} />
               <Text size="lg" fw={500}>{formatCurrency(inviteData?.bill_amount)}</Text>
@@ -242,32 +244,32 @@ export function AcceptShareInvite() {
 
           {inviteData && inviteData.my_portion !== null && (
             <div>
-              <Text size="sm" c="dimmed" mb={5}>Your Portion</Text>
+              <Text size="sm" c="dimmed" mb={5}>{t('acceptShareInvite.yourPortionLabel')}</Text>
               <Group gap="xs">
                 <Badge color="blue" size="lg">
                   {formatCurrency(inviteData.my_portion)}
                 </Badge>
                 {inviteData.split_type === 'percentage' && (
-                  <Text size="sm" c="dimmed">({inviteData.split_value}%)</Text>
+                  <Text size="sm" c="dimmed">{t('acceptShareInvite.percentageSuffix', { value: inviteData.split_value })}</Text>
                 )}
                 {inviteData.split_type === 'equal' && (
-                  <Text size="sm" c="dimmed">(Split equally)</Text>
+                  <Text size="sm" c="dimmed">{t('acceptShareInvite.splitEqually')}</Text>
                 )}
               </Group>
             </div>
           )}
 
           <div>
-            <Text size="sm" c="dimmed" mb={5}>Shared with</Text>
+            <Text size="sm" c="dimmed" mb={5}>{t('acceptShareInvite.sharedWithLabel')}</Text>
             <Text size="sm">{inviteData?.shared_with_email}</Text>
           </div>
 
           <Button fullWidth onClick={handleAccept} loading={loading}>
-            Accept Invitation
+            {t('acceptShareInvite.acceptInvitationButton')}
           </Button>
 
           <Button variant="subtle" fullWidth onClick={() => navigate('/')}>
-            Cancel
+            {t('common.actions.cancel')}
           </Button>
         </Stack>
       </Paper>
