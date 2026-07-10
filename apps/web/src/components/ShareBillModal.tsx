@@ -21,7 +21,11 @@ import type { TFunction } from 'i18next';
 import * as api from '../api/client';
 import type { Bill, BillShare, UserSearchResult } from '../api/client';
 import { useConfig } from '../context/ConfigContext';
-import { formatCurrency, getCurrencySymbol } from '../lib/currency';
+import {
+  formatCurrency,
+  getCurrencyInputPlaceholder,
+  getCurrencyInputProps,
+} from '../lib/currency';
 
 function getStatusLabel(status: string, t: TFunction): string {
   switch (status) {
@@ -299,12 +303,11 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
             {splitType === 'fixed' && (
               <NumberInput
                 label={t('shareBillModal.theirFixedLabel')}
-                placeholder="0.00"
+                placeholder={getCurrencyInputPlaceholder()}
                 value={splitValue}
                 onChange={(val) => setSplitValue(typeof val === 'number' ? val : undefined)}
                 min={0}
-                decimalScale={2}
-                prefix={getCurrencySymbol()}
+                {...getCurrencyInputProps()}
               />
             )}
 
@@ -380,8 +383,7 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
                           value={editSplitValue}
                           onChange={(val) => setEditSplitValue(typeof val === 'number' ? val : undefined)}
                           min={0}
-                          decimalScale={2}
-                          prefix={getCurrencySymbol()}
+                          {...getCurrencyInputProps()}
                           size="xs"
                         />
                       )}

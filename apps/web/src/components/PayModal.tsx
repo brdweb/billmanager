@@ -10,7 +10,10 @@ import {
 } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import type { Bill } from '../api/client';
-import { getCurrencySymbol } from '../lib/currency';
+import {
+  getCurrencyInputPlaceholder,
+  getCurrencyInputProps,
+} from '../lib/currency';
 
 interface PayModalProps {
   opened: boolean;
@@ -65,9 +68,8 @@ export function PayModal({ opened, onClose, onPay, bill }: PayModalProps) {
 
         <NumberInput
           label={isDeposit ? t('payModal.depositAmountLabel') : t('payModal.paymentAmountLabel')}
-          placeholder="0.00"
-          prefix={getCurrencySymbol()}
-          decimalScale={2}
+          placeholder={getCurrencyInputPlaceholder()}
+          {...getCurrencyInputProps()}
           fixedDecimalScale
           min={0}
           value={amount}

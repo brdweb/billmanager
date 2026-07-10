@@ -22,7 +22,7 @@ import type { Payment, Bill } from '../api/client';
 import { getPayments, updatePayment, deletePayment, ApiError } from '../api/client';
 import { PaymentHistoryChart } from './PaymentHistoryChart';
 import { parseLocalDate, formatDateString, formatDateForAPI } from '../utils/date';
-import { formatCurrency, getCurrencySymbol, getLocale } from '../lib/currency';
+import { formatCurrency, getCurrencyInputProps, getLocale } from '../lib/currency';
 
 interface PaymentHistoryProps {
   opened: boolean;
@@ -71,7 +71,7 @@ export function PaymentHistory({
     } finally {
       setLoading(false);
     }
-  }, [billId]);
+  }, [billId, t]);
 
   useEffect(() => {
     if (opened && billId) {
@@ -229,6 +229,7 @@ export function PaymentHistory({
                       <DatePickerInput
                         value={editDate}
                         onChange={(value) => setEditDate(value ? parseLocalDate(value) : null)}
+                        valueFormat={t('common.dateInputFormat')}
                         size="xs"
                         w={140}
                       />
@@ -241,8 +242,7 @@ export function PaymentHistory({
                       <NumberInput
                         value={editAmount}
                         onChange={(val) => setEditAmount(val === '' ? '' : Number(val))}
-                        prefix={getCurrencySymbol()}
-                        decimalScale={2}
+                        {...getCurrencyInputProps()}
                         fixedDecimalScale
                         size="xs"
                         w={100}

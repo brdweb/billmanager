@@ -1,5 +1,30 @@
 {
+  "meta": {
+    "description": "Track your bills and income with ease"
+  },
+  "apiErrors": {
+    "timeout": "Request timed out. Please check your connection and try again.",
+    "offline": "Unable to connect to server. Please check your internet connection.",
+    "badRequest": "Invalid request. Please check your input and try again.",
+    "unauthorized": "Your session has expired. Please log in again.",
+    "forbidden": "You do not have permission to perform this action.",
+    "notFound": "The requested resource was not found.",
+    "notAllowed": "This operation is not allowed. Please contact support if this persists.",
+    "conflict": "This action conflicts with existing data.",
+    "invalidData": "The provided data is invalid. Please check your input.",
+    "rateLimited": "Too many requests. Please wait a moment and try again.",
+    "server": "Server error. Please try again later.",
+    "unavailable": "Service temporarily unavailable. Please try again later.",
+    "unexpected": "An unexpected error occurred. Please try again.",
+    "requestFailed": "API request failed",
+    "invitationLoadFailed": "Failed to get invitation info",
+    "invitationAcceptFailed": "Failed to accept invitation",
+    "oauthCallbackFailed": "OAuth callback failed",
+    "loginFailed": "Login failed",
+    "configLoadFailed": "Failed to load configuration"
+  },
   "common": {
+    "dateInputFormat": "MMMM D, YYYY",
     "billType": {
       "deposit": "Deposit",
       "expense": "Expense"
@@ -252,6 +277,7 @@
     "enable": "Enable",
     "passkeysTitle": "Passkeys",
     "passkeysDescription": "Use a security key or biometrics for 2FA",
+    "securityKeyDefault": "Security Key",
     "passkeysRegisteredCount": "{{count}} registered",
     "devicePlaceholder": "Device name",
     "addPasskey": "Add Passkey",
@@ -578,7 +604,8 @@
         "deleted": "Bill group deleted successfully"
       },
       "deleteConfirm": "Are you sure you want to delete \"{{name}}\"?\n\nThis will permanently delete all bills and payments in this group.",
-      "deleteConfirmWithUsers": "WARNING: \"{{name}}\" has {{count}} user(s) with access: {{users}}\n\nDeleting will:\n- Permanently delete all bills and payments in this group\n- Remove access for all users\n\nContinue?"
+      "deleteConfirmWithUsers_one": "WARNING: \"{{name}}\" has {{count}} user with access: {{users}}\n\nDeleting will:\n- Permanently delete all bills and payments in this group\n- Remove access for all users\n\nContinue?",
+      "deleteConfirmWithUsers_other": "WARNING: \"{{name}}\" has {{count}} users with access: {{users}}\n\nDeleting will:\n- Permanently delete all bills and payments in this group\n- Remove access for all users\n\nContinue?"
     },
     "users": {
       "sectionTitle": "Users",
@@ -857,7 +884,8 @@
     "tierFree": "Free",
     "currentPlanTitle": "Current Plan",
     "trialExpiredAlert": "Your trial has expired. Subscribe to continue with full features.",
-    "trialRemainingAlert": "You have {{count}} days remaining in your free trial.",
+    "trialRemainingAlert_one": "You have {{count}} day remaining in your free trial.",
+    "trialRemainingAlert_other": "You have {{count}} days remaining in your free trial.",
     "trialRemainingUrgentSuffix": "Subscribe now to keep your data!",
     "currentTierLabel": "Current Tier",
     "billingLabel": "Billing",
@@ -918,7 +946,8 @@
   },
   "allPaymentsPage": {
     "title": "All Payments",
-    "summaryBadge": "{{count}} payments · {{amount}} total",
+    "summaryBadge_one": "{{count}} payment · {{amount}} total",
+    "summaryBadge_other": "{{count}} payments · {{amount}} total",
     "exportPayments": "Export payments",
     "searchPlaceholder": "Search by bill name...",
     "sortByPlaceholder": "Sort by",
@@ -1132,7 +1161,8 @@
       "title_other": "{{count}} Overdue Bills",
       "daysOverdue_one": "{{count}} day overdue - {{amount}}",
       "daysOverdue_other": "{{count}} days overdue - {{amount}}",
-      "moreOverdue": "+ {{count}} more overdue bills"
+      "moreOverdue_one": "+ {{count}} more overdue bill",
+      "moreOverdue_other": "+ {{count}} more overdue bills"
     },
     "cashFlowForecast": {
       "title": "Cash Flow Forecast",
@@ -1143,7 +1173,8 @@
       "days90": "90d",
       "loadError": "Unable to load cash flow forecast.",
       "endingBalance": "Ending balance",
-      "dayProjection": "{{count}} day projection",
+      "dayProjection_one": "{{count}} day projection",
+      "dayProjection_other": "{{count}} day projection",
       "lowestBalance": "Lowest balance",
       "income": "Income",
       "projectedDeposits": "Projected deposits",

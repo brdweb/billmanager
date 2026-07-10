@@ -83,7 +83,7 @@ export function AcceptInvite() {
     };
 
     fetchInviteInfo();
-  }, [token]);
+  }, [token, t]);
 
   const validateForm = (): string | null => {
     if (!username.trim()) return t('loginPage.usernameRequired');

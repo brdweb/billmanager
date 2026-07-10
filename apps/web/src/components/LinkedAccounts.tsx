@@ -55,7 +55,7 @@ export function LinkedAccounts() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (hasProviders) {

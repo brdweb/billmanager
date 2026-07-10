@@ -1,5 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
+import { setFormattingLanguage } from '../lib/currency';
 import en from './locales/en.json';
 import de from './locales/de.json';
 
@@ -8,42 +9,75 @@ export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
 const STORAGE_KEY = 'billmanager:language';
 
-function getStoredLanguage(): SupportedLanguage | null {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  return (SUPPORTED_LANGUAGES as readonly string[]).includes(stored ?? '')
-    ? (stored as SupportedLanguage)
-    : null;
+function isSupportedLanguage(language: string): language is SupportedLanguage {
+  return (SUPPORTED_LANGUAGES as readonly string[]).includes(language);
 }
 
-i18n.use(initReactI18next).init({
-  resources: {
-    en: { translation: en },
-    de: { translation: de },
-  },
-  lng: getStoredLanguage() ?? 'en',
-  fallbackLng: 'en',
-  interpolation: {
-    escapeValue: false, // React already escapes output
-  },
+function normalizeLanguage(language: string): SupportedLanguage {
+  const normalized = language.split(/[-_]/)[0].toLowerCase();
+  return isSupportedLanguage(normalized) ? normalized : 'en';
+}
+
+function getStoredLanguage(): SupportedLanguage | null {
+  const stored = window.localStorage.getItem(STORAGE_KEY);
+  return stored && isSupportedLanguage(stored) ? stored : null;
+}
+
+function updateDocumentMetadata(language: SupportedLanguage): void {
+  document.documentElement.lang = language;
+
+  const description = i18n.t('meta.description', { lng: language });
+  document.querySelector('meta[name="description"]')?.setAttribute('content', description);
+  document
+    .querySelector('meta[property="og:description"]')
+    ?.setAttribute('content', description);
+
+  const manifest = document.querySelector('link[rel="manifest"]');
+  manifest?.setAttribute(
+    'href',
+    language === 'de' ? '/manifest.de.json' : '/manifest.json'
+  );
+}
+
+const initialLanguage = getStoredLanguage() ?? 'en';
+
+i18n.on('languageChanged', (language) => {
+  const supportedLanguage = normalizeLanguage(language);
+  setFormattingLanguage(supportedLanguage);
+  updateDocumentMetadata(supportedLanguage);
 });
 
-export function setLanguage(lang: SupportedLanguage): void {
-  window.localStorage.setItem(STORAGE_KEY, lang);
-  i18n.changeLanguage(lang);
+void i18n
+  .use(initReactI18next)
+  .init({
+    resources: {
+      en: { translation: en },
+      de: { translation: de },
+    },
+    lng: initialLanguage,
+    fallbackLng: 'en',
+    supportedLngs: [...SUPPORTED_LANGUAGES],
+    load: 'languageOnly',
+    interpolation: {
+      escapeValue: false,
+    },
+  })
+  .then(() => updateDocumentMetadata(normalizeLanguage(i18n.language)));
+
+export function setLanguage(language: SupportedLanguage): void {
+  window.localStorage.setItem(STORAGE_KEY, language);
+  void i18n.changeLanguage(language);
 }
 
 /**
- * Applies the server-configured DEFAULT_LOCALE (e.g. "de-DE") as the UI
- * language, but only if the user hasn't explicitly picked one via the
- * language switcher. Called once by ConfigContext after config load, so
- * the app doesn't need a second, independent language-default mechanism.
+ * Applies DEFAULT_LOCALE as the initial UI language unless the user has an
+ * explicit browser preference from the Settings language switcher.
  */
 export function applyLocaleDefault(locale: string): void {
   if (getStoredLanguage()) return;
-  const lang = locale.split(/[-_]/)[0].toLowerCase();
-  if ((SUPPORTED_LANGUAGES as readonly string[]).includes(lang)) {
-    i18n.changeLanguage(lang as SupportedLanguage);
-  }
+
+  const language = normalizeLanguage(locale);
+  void i18n.changeLanguage(language);
 }
 
 export default i18n;

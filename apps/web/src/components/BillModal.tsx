@@ -31,7 +31,11 @@ import { IconPicker } from './IconPicker';
 import { BillIcon } from './BillIcon';
 import { ShareBillModal } from './ShareBillModal';
 import { formatDateForAPI, parseLocalDate } from '../utils/date';
-import { getCurrencySymbol, getLocale } from '../lib/currency';
+import {
+  getCurrencyInputPlaceholder,
+  getCurrencyInputProps,
+  getLocale,
+} from '../lib/currency';
 
 interface BillFormValues {
   name: string;
@@ -412,9 +416,8 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
             <Group grow align="flex-end">
               <NumberInput
                 label={t('billModal.amountLabel')}
-                placeholder="0.00"
-                prefix={getCurrencySymbol()}
-                decimalScale={2}
+                placeholder={getCurrencyInputPlaceholder()}
+                {...getCurrencyInputProps()}
                 fixedDecimalScale
                 disabled={form.values.varies}
                 {...form.getInputProps('amount')}
@@ -513,7 +516,7 @@ export function BillModal({ opened, onClose, onSave, onArchive, onUnarchive, onD
                 label={t('billModal.nextDueLabel')}
                 placeholder={t('billModal.nextDuePlaceholder')}
                 required
-                valueFormat="MMMM D, YYYY"
+                valueFormat={t('common.dateInputFormat')}
                 {...form.getInputProps('next_due')}
               />
             )}

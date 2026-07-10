@@ -66,7 +66,7 @@ export function AcceptShareInvite() {
     };
 
     fetchInviteInfo();
-  }, [token]);
+  }, [token, t]);
 
   const handleAccept = async () => {
     if (!token) {

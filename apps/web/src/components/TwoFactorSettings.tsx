@@ -56,7 +56,7 @@ export function TwoFactorSettings() {
 
   // Passkey setup
   const [registeringPasskey, setRegisteringPasskey] = useState(false);
-  const [passkeyDeviceName, setPasskeyDeviceName] = useState('This device');
+  const [passkeyDeviceName, setPasskeyDeviceName] = useState('');
 
   const base64urlToArrayBuffer = (value: string): ArrayBuffer => {
     const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
@@ -84,7 +84,7 @@ export function TwoFactorSettings() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (config?.twofa_enabled) {
@@ -205,7 +205,7 @@ export function TwoFactorSettings() {
       const result = await api.registerPasskey(
         registration_token,
         registrationPayload as unknown as Record<string, unknown>,
-        passkeyDeviceName.trim() || 'Security Key'
+        passkeyDeviceName.trim() || t('twoFactorSettings.securityKeyDefault')
       );
 
       if (result.recovery_codes) {

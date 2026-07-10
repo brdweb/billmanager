@@ -33,7 +33,7 @@ import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 import type { SubscriptionStatus, BillingUsage } from '../api/client';
 import { useConfig } from '../context/ConfigContext';
-import { getLocale } from '../lib/currency';
+import { formatCurrencyFor, getLocale } from '../lib/currency';
 
 const PRICING = {
   basic: { monthly: 5, annual: 50 },
@@ -356,11 +356,11 @@ export function Billing() {
 
               <Card.Section inheritPadding py="md">
                 <Group align="baseline" gap={4}>
-                  <Text size="xl" fw={700}>${billingInterval === 'monthly' ? PRICING.basic.monthly : PRICING.basic.annual}</Text>
+                  <Text size="xl" fw={700}>{formatCurrencyFor(billingInterval === 'monthly' ? PRICING.basic.monthly : PRICING.basic.annual, 'USD')}</Text>
                   <Text size="sm" c="dimmed">{billingInterval === 'monthly' ? t('billingPage.perMonth') : t('billingPage.perYear')}</Text>
                 </Group>
                 {billingInterval === 'annual' && (
-                  <Text size="xs" c="dimmed">{t('billingPage.thatsPerMonth', { amount: `$${(PRICING.basic.annual / 12).toFixed(2)}` })}</Text>
+                  <Text size="xs" c="dimmed">{t('billingPage.thatsPerMonth', { amount: formatCurrencyFor(PRICING.basic.annual / 12, 'USD') })}</Text>
                 )}
 
                 <List
@@ -403,11 +403,11 @@ export function Billing() {
 
               <Card.Section inheritPadding py="md">
                 <Group align="baseline" gap={4}>
-                  <Text size="xl" fw={700}>${billingInterval === 'monthly' ? PRICING.plus.monthly : PRICING.plus.annual}</Text>
+                  <Text size="xl" fw={700}>{formatCurrencyFor(billingInterval === 'monthly' ? PRICING.plus.monthly : PRICING.plus.annual, 'USD')}</Text>
                   <Text size="sm" c="dimmed">{billingInterval === 'monthly' ? t('billingPage.perMonth') : t('billingPage.perYear')}</Text>
                 </Group>
                 {billingInterval === 'annual' && (
-                  <Text size="xs" c="dimmed">{t('billingPage.thatsPerMonth', { amount: `$${(PRICING.plus.annual / 12).toFixed(2)}` })}</Text>
+                  <Text size="xs" c="dimmed">{t('billingPage.thatsPerMonth', { amount: formatCurrencyFor(PRICING.plus.annual / 12, 'USD') })}</Text>
                 )}
 
                 <List

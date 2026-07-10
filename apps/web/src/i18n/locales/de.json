@@ -1,5 +1,30 @@
 {
+  "meta": {
+    "description": "Behalten Sie Ihre Rechnungen und Einnahmen mühelos im Blick"
+  },
+  "apiErrors": {
+    "timeout": "Zeitüberschreitung der Anfrage. Überprüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+    "offline": "Verbindung zum Server nicht möglich. Überprüfen Sie Ihre Internetverbindung.",
+    "badRequest": "Ungültige Anfrage. Überprüfen Sie Ihre Eingaben und versuchen Sie es erneut.",
+    "unauthorized": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an.",
+    "forbidden": "Sie sind nicht berechtigt, diese Aktion auszuführen.",
+    "notFound": "Die angeforderte Ressource wurde nicht gefunden.",
+    "notAllowed": "Dieser Vorgang ist nicht zulässig. Wenden Sie sich an den Support, wenn das Problem weiterhin besteht.",
+    "conflict": "Diese Aktion steht im Konflikt mit vorhandenen Daten.",
+    "invalidData": "Die angegebenen Daten sind ungültig. Überprüfen Sie Ihre Eingaben.",
+    "rateLimited": "Zu viele Anfragen. Warten Sie einen Moment und versuchen Sie es erneut.",
+    "server": "Serverfehler. Versuchen Sie es später erneut.",
+    "unavailable": "Der Dienst ist vorübergehend nicht verfügbar. Versuchen Sie es später erneut.",
+    "unexpected": "Ein unerwarteter Fehler ist aufgetreten. Versuchen Sie es erneut.",
+    "requestFailed": "API-Anfrage fehlgeschlagen",
+    "invitationLoadFailed": "Einladungsinformationen konnten nicht geladen werden",
+    "invitationAcceptFailed": "Einladung konnte nicht angenommen werden",
+    "oauthCallbackFailed": "OAuth-Rückruf fehlgeschlagen",
+    "loginFailed": "Anmeldung fehlgeschlagen",
+    "configLoadFailed": "Konfiguration konnte nicht geladen werden"
+  },
   "common": {
+    "dateInputFormat": "D. MMMM YYYY",
     "billType": {
       "deposit": "Einzahlung",
       "expense": "Ausgabe"
@@ -252,6 +277,7 @@
     "enable": "Aktivieren",
     "passkeysTitle": "Passkeys",
     "passkeysDescription": "Verwenden Sie einen Sicherheitsschlüssel oder Biometrie für 2FA",
+    "securityKeyDefault": "Sicherheitsschlüssel",
     "passkeysRegisteredCount": "{{count}} registriert",
     "devicePlaceholder": "Gerätename",
     "addPasskey": "Passkey hinzufügen",
@@ -578,7 +604,8 @@
         "deleted": "Rechnungsgruppe erfolgreich gelöscht"
       },
       "deleteConfirm": "Möchten Sie \"{{name}}\" wirklich löschen?\n\nDadurch werden alle Rechnungen und Zahlungen in dieser Gruppe dauerhaft gelöscht.",
-      "deleteConfirmWithUsers": "WARNUNG: \"{{name}}\" hat {{count}} Nutzer mit Zugriff: {{users}}\n\nDas Löschen wird:\n- Alle Rechnungen und Zahlungen in dieser Gruppe dauerhaft löschen\n- Den Zugriff für alle Nutzer entfernen\n\nFortfahren?"
+      "deleteConfirmWithUsers_one": "WARNUNG: \"{{name}}\" hat {{count}} Nutzer mit Zugriff: {{users}}\n\nDas Löschen wird:\n- Alle Rechnungen und Zahlungen in dieser Gruppe dauerhaft löschen\n- Den Zugriff für alle Nutzer entfernen\n\nFortfahren?",
+      "deleteConfirmWithUsers_other": "WARNUNG: \"{{name}}\" hat {{count}} Nutzer mit Zugriff: {{users}}\n\nDas Löschen wird:\n- Alle Rechnungen und Zahlungen in dieser Gruppe dauerhaft löschen\n- Den Zugriff für alle Nutzer entfernen\n\nFortfahren?"
     },
     "users": {
       "sectionTitle": "Nutzer",
@@ -857,7 +884,8 @@
     "tierFree": "Kostenlos",
     "currentPlanTitle": "Aktueller Plan",
     "trialExpiredAlert": "Ihre Testphase ist abgelaufen. Abonnieren Sie, um mit vollem Funktionsumfang fortzufahren.",
-    "trialRemainingAlert": "Sie haben noch {{count}} Tage in Ihrer kostenlosen Testphase.",
+    "trialRemainingAlert_one": "Sie haben noch {{count}} Tag in Ihrer kostenlosen Testphase.",
+    "trialRemainingAlert_other": "Sie haben noch {{count}} Tage in Ihrer kostenlosen Testphase.",
     "trialRemainingUrgentSuffix": "Jetzt abonnieren, um Ihre Daten zu behalten!",
     "currentTierLabel": "Aktuelle Stufe",
     "billingLabel": "Abrechnung",
@@ -918,7 +946,8 @@
   },
   "allPaymentsPage": {
     "title": "Alle Zahlungen",
-    "summaryBadge": "{{count}} Zahlungen · {{amount}} gesamt",
+    "summaryBadge_one": "{{count}} Zahlung · {{amount}} gesamt",
+    "summaryBadge_other": "{{count}} Zahlungen · {{amount}} gesamt",
     "exportPayments": "Zahlungen exportieren",
     "searchPlaceholder": "Nach Rechnungsname suchen…",
     "sortByPlaceholder": "Sortieren nach",
@@ -1132,7 +1161,8 @@
       "title_other": "{{count}} überfällige Rechnungen",
       "daysOverdue_one": "{{count}} Tag überfällig - {{amount}}",
       "daysOverdue_other": "{{count}} Tage überfällig - {{amount}}",
-      "moreOverdue": "+ {{count}} weitere überfällige Rechnungen"
+      "moreOverdue_one": "+ {{count}} weitere überfällige Rechnung",
+      "moreOverdue_other": "+ {{count}} weitere überfällige Rechnungen"
     },
     "cashFlowForecast": {
       "title": "Cashflow-Prognose",
@@ -1143,7 +1173,8 @@
       "days90": "90T",
       "loadError": "Cashflow-Prognose konnte nicht geladen werden.",
       "endingBalance": "Endsaldo",
-      "dayProjection": "{{count}}-Tage-Prognose",
+      "dayProjection_one": "{{count}}-Tag-Prognose",
+      "dayProjection_other": "{{count}}-Tage-Prognose",
       "lowestBalance": "Niedrigster Saldo",
       "income": "Einkommen",
       "projectedDeposits": "Prognostizierte Einzahlungen",

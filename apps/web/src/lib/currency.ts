@@ -1,64 +1,141 @@
 /**
- * Shared currency formatting utility.
+ * Shared locale and currency formatting utilities.
  *
- * Currency and locale are configurable via the DEFAULT_CURRENCY /
- * DEFAULT_LOCALE environment variables (see apps/server/config.py),
- * exposed to the frontend through the /api/v2/config endpoint.
- *
- * ConfigProvider calls setCurrencyConfig() once the config is fetched.
- * This module-level state (rather than threading props through every
- * caller) exists because many formatCurrency() call sites are plain
- * helper functions outside the React component tree and can't use
- * useConfig() directly.
+ * DEFAULT_LOCALE supplies the deployment's regional conventions while the
+ * user's selected UI language supplies the language subtag. For example, an
+ * English user on a German deployment formats with `en-DE`, while switching
+ * the UI to German formats with `de-DE`.
  */
 
-let currentLocale = 'en-US';
-let currentCurrency = 'USD';
-let formatter = buildFormatter();
-let axisFormatter = buildFormatter({ maximumFractionDigits: 0 });
-let cachedSymbol = extractSymbol(formatter);
+export interface CurrencyInputFormatProps {
+  prefix?: string;
+  suffix?: string;
+  decimalSeparator: string;
+  thousandSeparator?: string;
+  allowedDecimalSeparators: string[];
+  decimalScale: number;
+}
 
-function buildFormatter(extra: Intl.NumberFormatOptions = {}): Intl.NumberFormat {
-  return new Intl.NumberFormat(currentLocale, {
+let configuredLocale = 'en-US';
+let currentLanguage = 'en';
+let currentLocale = resolveLocale(configuredLocale, currentLanguage);
+let currentCurrency = 'USD';
+let formatter = buildFormatter(currentLocale, currentCurrency);
+let axisFormatter = buildFormatter(currentLocale, currentCurrency, {
+  maximumFractionDigits: 0,
+});
+let cachedSymbol = extractSymbol(formatter, currentCurrency);
+let cachedInputProps = buildCurrencyInputProps(currentLocale, formatter);
+
+function resolveLocale(locale: string, language: string): string {
+  const base = new Intl.Locale(locale);
+  const normalizedLanguage = language.split(/[-_]/)[0].toLowerCase();
+
+  return new Intl.Locale(normalizedLanguage, {
+    region: base.region,
+    script: base.script,
+    calendar: base.calendar,
+    hourCycle: base.hourCycle,
+    numberingSystem: base.numberingSystem,
+  }).toString();
+}
+
+function buildFormatter(
+  locale: string,
+  currency: string,
+  extra: Intl.NumberFormatOptions = {}
+): Intl.NumberFormat {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: currentCurrency,
+    currency,
     ...extra,
   });
 }
 
-function extractSymbol(fmt: Intl.NumberFormat): string {
-  const part = fmt.formatToParts(0).find((p) => p.type === 'currency');
-  return part?.value ?? currentCurrency;
+function extractSymbol(fmt: Intl.NumberFormat, currency: string): string {
+  const part = fmt.formatToParts(0).find((item) => item.type === 'currency');
+  return part?.value ?? currency;
+}
+
+function buildCurrencyInputProps(
+  locale: string,
+  currencyFormatter: Intl.NumberFormat
+): CurrencyInputFormatProps {
+  const currencyParts = currencyFormatter.formatToParts(1234.5);
+  const numberParts = new Intl.NumberFormat(locale).formatToParts(1234.5);
+  const currencyIndex = currencyParts.findIndex((part) => part.type === 'currency');
+  const firstIntegerIndex = currencyParts.findIndex((part) => part.type === 'integer');
+  const lastNumberIndex = currencyParts.reduce(
+    (last, part, index) =>
+      ['integer', 'group', 'decimal', 'fraction'].includes(part.type) ? index : last,
+    -1
+  );
+  const currencyBeforeNumber = currencyIndex >= 0 && currencyIndex < firstIntegerIndex;
+  const affix = currencyBeforeNumber
+    ? currencyParts.slice(currencyIndex, firstIntegerIndex).map((part) => part.value).join('')
+    : currencyParts.slice(lastNumberIndex + 1, currencyIndex + 1).map((part) => part.value).join('');
+  const decimalSeparator = numberParts.find((part) => part.type === 'decimal')?.value ?? '.';
+  const thousandSeparator = numberParts.find((part) => part.type === 'group')?.value;
+  const alternateDecimalSeparator = decimalSeparator === '.' ? ',' : '.';
+  const allowedDecimalSeparators = [decimalSeparator, alternateDecimalSeparator].filter(
+    (separator) => separator !== thousandSeparator
+  );
+
+  return {
+    ...(currencyBeforeNumber ? { prefix: affix } : { suffix: affix }),
+    decimalSeparator,
+    ...(thousandSeparator && thousandSeparator !== decimalSeparator
+      ? { thousandSeparator }
+      : {}),
+    allowedDecimalSeparators,
+    decimalScale: currencyFormatter.resolvedOptions().maximumFractionDigits ?? 2,
+  };
+}
+
+function applyFormattingConfig(locale: string, currency: string, language: string): void {
+  const resolvedLocale = resolveLocale(locale, language);
+  const nextFormatter = buildFormatter(resolvedLocale, currency);
+  const nextAxisFormatter = buildFormatter(resolvedLocale, currency, {
+    maximumFractionDigits: 0,
+  });
+  const nextSymbol = extractSymbol(nextFormatter, currency);
+  const nextInputProps = buildCurrencyInputProps(resolvedLocale, nextFormatter);
+
+  currentLocale = resolvedLocale;
+  formatter = nextFormatter;
+  axisFormatter = nextAxisFormatter;
+  cachedSymbol = nextSymbol;
+  cachedInputProps = nextInputProps;
 }
 
 export function setCurrencyConfig(locale: string, currency: string): void {
-  if (locale === currentLocale && currency === currentCurrency) {
-    return;
-  }
-  const previousLocale = currentLocale;
-  const previousCurrency = currentCurrency;
-  currentLocale = locale;
-  currentCurrency = currency;
+  if (locale === configuredLocale && currency === currentCurrency) return;
+
   try {
-    formatter = buildFormatter();
-    axisFormatter = buildFormatter({ maximumFractionDigits: 0 });
-    cachedSymbol = extractSymbol(formatter);
+    applyFormattingConfig(locale, currency, currentLanguage);
+    configuredLocale = locale;
+    currentCurrency = currency;
   } catch {
-    // Invalid locale/currency combination (e.g. bad env var) - roll back
-    // rather than breaking the whole UI.
     console.warn(
-      `Invalid locale/currency "${locale}"/"${currency}", keeping "${previousLocale}"/"${previousCurrency}"`
+      `Invalid locale/currency "${locale}"/"${currency}", keeping "${configuredLocale}"/"${currentCurrency}"`
     );
-    currentLocale = previousLocale;
-    currentCurrency = previousCurrency;
   }
 }
 
-/**
- * Current locale, for other locale-aware formatting (e.g. dates) that
- * should follow the same DEFAULT_LOCALE config rather than tracking a
- * second, independent locale value.
- */
+export function setFormattingLanguage(language: string): void {
+  const normalizedLanguage = language.split(/[-_]/)[0].toLowerCase();
+  if (normalizedLanguage === currentLanguage) return;
+
+  try {
+    applyFormattingConfig(configuredLocale, currentCurrency, normalizedLanguage);
+    currentLanguage = normalizedLanguage;
+  } catch {
+    console.warn(
+      `Invalid formatting language "${language}", keeping "${currentLanguage}"`
+    );
+  }
+}
+
 export function getLocale(): string {
   return currentLocale;
 }
@@ -67,18 +144,31 @@ export function formatCurrency(value: number | null | undefined): string {
   return formatter.format(value ?? 0);
 }
 
-/**
- * Compact currency formatting without decimals, for chart axis ticks
- * where full cent precision isn't useful.
- */
 export function formatCurrencyAxis(value: number | null | undefined): string {
   return axisFormatter.format(value ?? 0);
 }
 
-/**
- * Currency symbol only (e.g. "$", "€"), for use as a NumberInput prefix
- * where full Intl formatting doesn't apply (raw numeric entry fields).
- */
+export function formatCurrencyFor(
+  value: number | null | undefined,
+  currency: string
+): string {
+  return buildFormatter(currentLocale, currency).format(value ?? 0);
+}
+
 export function getCurrencySymbol(): string {
   return cachedSymbol;
+}
+
+export function getCurrencyInputProps(): CurrencyInputFormatProps {
+  return {
+    ...cachedInputProps,
+    allowedDecimalSeparators: [...cachedInputProps.allowedDecimalSeparators],
+  };
+}
+
+export function getCurrencyInputPlaceholder(): string {
+  const { decimalSeparator, decimalScale } = cachedInputProps;
+  return decimalScale > 0
+    ? `0${decimalSeparator}${'0'.repeat(decimalScale)}`
+    : '0';
 }

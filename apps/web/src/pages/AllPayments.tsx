@@ -32,7 +32,12 @@ import { BillIcon } from '../components/BillIcon';
 import { IconEdit, IconTrash, IconCheck } from '@tabler/icons-react';
 import { exportPaymentsToCSV, exportPaymentsToPDF, printPayments } from '../utils/export';
 import { parseLocalDate, formatDateString, formatDateForAPI } from '../utils/date';
-import { formatCurrency, formatCurrencyAxis, getCurrencySymbol, getLocale } from '../lib/currency';
+import {
+  formatCurrency,
+  formatCurrencyAxis,
+  getCurrencyInputProps,
+  getLocale,
+} from '../lib/currency';
 
 interface MonthlyChartData {
   month: string;
@@ -332,28 +337,28 @@ export function AllPayments() {
               placeholder={t('allPaymentsPage.fromDatePlaceholder')}
               value={dateFrom}
               onChange={(val) => setDateFrom(val ? parseLocalDate(val) : null)}
+              valueFormat={t('common.dateInputFormat')}
               clearable
             />
             <DatePickerInput
               placeholder={t('allPaymentsPage.toDatePlaceholder')}
               value={dateTo}
               onChange={(val) => setDateTo(val ? parseLocalDate(val) : null)}
+              valueFormat={t('common.dateInputFormat')}
               clearable
             />
             <NumberInput
               placeholder={t('allPaymentsPage.minAmountPlaceholder')}
-              prefix={getCurrencySymbol()}
+              {...getCurrencyInputProps()}
               value={amountMin}
               onChange={(val) => setAmountMin(val === '' ? '' : Number(val))}
-              decimalScale={2}
               min={0}
             />
             <NumberInput
               placeholder={t('allPaymentsPage.maxAmountPlaceholder')}
-              prefix={getCurrencySymbol()}
+              {...getCurrencyInputProps()}
               value={amountMax}
               onChange={(val) => setAmountMax(val === '' ? '' : Number(val))}
-              decimalScale={2}
               min={0}
             />
           </Group>
@@ -498,6 +503,7 @@ export function AllPayments() {
                         <DatePickerInput
                           value={editDate}
                           onChange={(val) => setEditDate(val ? parseLocalDate(val) : null)}
+                          valueFormat={t('common.dateInputFormat')}
                           size="xs"
                           w={140}
                         />
@@ -510,8 +516,7 @@ export function AllPayments() {
                         <NumberInput
                           value={editAmount}
                           onChange={(val) => setEditAmount(val === '' ? '' : Number(val))}
-                          prefix={getCurrencySymbol()}
-                          decimalScale={2}
+                          {...getCurrencyInputProps()}
                           fixedDecimalScale
                           size="xs"
                           w={100}

@@ -3,6 +3,7 @@ import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { releaseNotes, markVersionAsSeen, getVersionIndex } from '../config/releaseNotes';
+import { germanReleaseNotes } from '../config/releaseNotes.de';
 import { getLocale } from '../lib/currency';
 
 interface ReleaseNotesModalProps {
@@ -12,13 +13,14 @@ interface ReleaseNotesModalProps {
 }
 
 export function ReleaseNotesModal({ opened, onClose, initialVersion }: ReleaseNotesModalProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // State initializes from props; parent should use key prop to force reset when modal reopens
   const [currentIndex, setCurrentIndex] = useState(() => getVersionIndex(initialVersion));
 
-  const release = releaseNotes[currentIndex];
+  const localizedReleaseNotes = i18n.resolvedLanguage === 'de' ? germanReleaseNotes : releaseNotes;
+  const release = localizedReleaseNotes[currentIndex];
   const canGoNewer = currentIndex > 0;
-  const canGoOlder = currentIndex < releaseNotes.length - 1;
+  const canGoOlder = currentIndex < localizedReleaseNotes.length - 1;
 
   const handleClose = () => {
     // Mark current version as seen when closing
@@ -78,7 +80,7 @@ export function ReleaseNotesModal({ opened, onClose, initialVersion }: ReleaseNo
               <IconChevronLeft size={18} />
             </ActionIcon>
             <Text size="sm" c="dimmed">
-              {t('releaseNotesModal.pageIndicator', { current: currentIndex + 1, total: releaseNotes.length })}
+              {t('releaseNotesModal.pageIndicator', { current: currentIndex + 1, total: localizedReleaseNotes.length })}
             </Text>
             <ActionIcon
               variant="subtle"

@@ -29,7 +29,11 @@ import { useTranslation } from 'react-i18next';
 import * as api from '../../api/client';
 import type { CashFlowForecast as CashFlowForecastData } from '../../api/client';
 import { BillIcon } from '../BillIcon';
-import { formatCurrency, formatCurrencyAxis, getCurrencySymbol } from '../../lib/currency';
+import {
+  formatCurrency,
+  formatCurrencyAxis,
+  getCurrencyInputProps,
+} from '../../lib/currency';
 import { formatDateShort } from '../../utils/date';
 
 interface CashFlowForecastProps {
@@ -138,8 +142,7 @@ export function CashFlowForecast({ hasDatabase, framed = true, showHeader = true
           <Group gap="sm" align="flex-end">
             <NumberInput
               label={t('dashboard.cashFlowForecast.startingBalance')}
-              prefix={getCurrencySymbol()}
-              decimalScale={2}
+              {...getCurrencyInputProps()}
               value={startingBalance}
               onChange={(value) => setStartingBalance(typeof value === 'number' ? value : 0)}
               w={170}
