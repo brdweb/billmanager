@@ -8611,15 +8611,26 @@ def jwt_delete_database(database_id):
     return jsonify({"success": True, "data": {"message": "Database deleted"}})
 
 
-@api_v2_bp.route("/databases/<int:database_id>/access", methods=["POST"])
+@api_v2_bp.route("/databases/<int:database_id>/access", methods=["GET", "POST"])
 @jwt_admin_required
-def jwt_add_database_access(database_id):
-    """Grant user access to a database (admin only)."""
+def jwt_database_access(database_id):
+    """Get or grant user access to a database (admin only)."""
     database = db.get_or_404(Database, database_id)
     current_user_id = g.jwt_user_id
 
     if is_saas() and database.owner_id != current_user_id:
         return jsonify({"success": False, "error": "Access denied"}), 403
+
+    if request.method == "GET":
+        return jsonify(
+            {
+                "success": True,
+                "data": [
+                    {"id": u.id, "username": u.username, "role": u.role}
+                    for u in database.users
+                ],
+            }
+        )
 
     data = request.get_json()
     target_user_id = data.get("user_id")
