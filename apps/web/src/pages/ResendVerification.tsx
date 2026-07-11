@@ -12,9 +12,11 @@ import {
   Anchor,
 } from '@mantine/core';
 import { IconMail, IconAlertCircle, IconCheck } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 
 export function ResendVerification() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const initialEmail = searchParams.get('email') || '';
 
@@ -28,12 +30,12 @@ export function ResendVerification() {
     setError('');
 
     if (!email.trim()) {
-      setError('Email is required');
+      setError(t('loginPage.emailRequired'));
       return;
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Please enter a valid email address');
+      setError(t('resendVerificationPage.invalidEmail'));
       return;
     }
 
@@ -43,11 +45,11 @@ export function ResendVerification() {
       if (response.success) {
         setSuccess(true);
       } else {
-        setError(response.error || 'Failed to resend verification email');
+        setError(response.error || t('resendVerificationPage.resendFailedDefault'));
       }
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } } };
-      setError(error.response?.data?.error || 'Failed to resend verification email');
+      setError(error.response?.data?.error || t('resendVerificationPage.resendFailedDefault'));
     } finally {
       setLoading(false);
     }
@@ -59,16 +61,15 @@ export function ResendVerification() {
         <Paper withBorder shadow="md" p={30} radius="md">
           <Stack align="center" gap="md">
             <IconCheck size={48} color="var(--mantine-color-green-6)" />
-            <Title order={2} ta="center">Email Sent!</Title>
+            <Title order={2} ta="center">{t('resendVerificationPage.emailSentTitle')}</Title>
             <Text c="dimmed" ta="center">
-              We&apos;ve sent a new verification link to <strong>{email}</strong>.
-              Please check your inbox.
+              {t('resendVerificationPage.weSentNewLinkPrefix')} <strong>{email}</strong>{t('resendVerificationPage.weSentNewLinkSuffix')}
             </Text>
             <Text size="sm" c="dimmed" ta="center">
-              The link will expire in 24 hours.
+              {t('resendVerificationPage.linkExpire24h')}
             </Text>
             <Button component={Link} to="/login" variant="light">
-              Back to Login
+              {t('loginPage.backToLogin')}
             </Button>
           </Stack>
         </Paper>
@@ -78,9 +79,9 @@ export function ResendVerification() {
 
   return (
     <Container size={420} my={40}>
-      <Title ta="center">Resend Verification</Title>
+      <Title ta="center">{t('resendVerificationPage.title')}</Title>
       <Text c="dimmed" size="sm" ta="center" mt={5}>
-        Enter your email to receive a new verification link
+        {t('resendVerificationPage.subtitle')}
       </Text>
 
       <Paper withBorder shadow="md" p={30} mt={30} radius="md">
@@ -93,8 +94,8 @@ export function ResendVerification() {
             )}
 
             <TextInput
-              label="Email"
-              placeholder="your@email.com"
+              label={t('loginPage.emailLabel')}
+              placeholder={t('loginPage.emailPlaceholder')}
               leftSection={<IconMail size={16} />}
               value={email}
               onChange={(e) => setEmail(e.currentTarget.value)}
@@ -102,12 +103,12 @@ export function ResendVerification() {
             />
 
             <Button type="submit" fullWidth loading={loading}>
-              Resend Verification Email
+              {t('resendVerificationPage.resendButton')}
             </Button>
 
             <Text size="sm" ta="center">
               <Anchor component={Link} to="/login" size="sm">
-                Back to login
+                {t('forgotPasswordPage.backToLoginLink')}
               </Anchor>
             </Text>
           </Stack>

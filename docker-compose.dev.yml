@@ -9,6 +9,8 @@ services:
       - DATABASE_URL=postgresql://billsuser:billspass@db:5432/billsdb
       - FLASK_SECRET_KEY=dev-secret-key-change-in-prod
       - DEPLOYMENT_MODE=self-hosted
+      - DEFAULT_CURRENCY=${DEFAULT_CURRENCY:-USD}
+      - DEFAULT_LOCALE=${DEFAULT_LOCALE:-en-US}
     depends_on:
       - db
 

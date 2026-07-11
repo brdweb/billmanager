@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import '@mantine/charts/styles.css';
 import { Paper, Title, Text, Stack, Group, Box, ColorSwatch } from '@mantine/core';
 import { PieChart } from '@mantine/charts';
+import { useTranslation } from 'react-i18next';
 import type { AccountStats } from '../../api/client';
 import { formatCurrency } from '../../lib/currency';
 
@@ -25,6 +26,7 @@ const COLORS = [
 ];
 
 export function AccountPieChart({ data, loading }: AccountPieChartProps) {
+  const { t } = useTranslation();
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
 
@@ -42,14 +44,14 @@ export function AccountPieChart({ data, loading }: AccountPieChartProps) {
 
     if (otherTotal > 0) {
       result.push({
-        name: 'Other',
+        name: t('analytics.accountPieChart.other'),
         value: otherTotal,
         color: 'var(--mantine-color-gray-6)',
       });
     }
 
     return result;
-  }, [data]);
+  }, [data, t]);
 
   const total = useMemo(() => {
     return chartData.reduce((sum, item) => sum + item.value, 0);
@@ -58,9 +60,9 @@ export function AccountPieChart({ data, loading }: AccountPieChartProps) {
   if (loading) {
     return (
       <Paper withBorder p="md" radius="md" h={350}>
-        <Title order={5} mb="md">Spending by Account</Title>
+        <Title order={5} mb="md">{t('analytics.accountPieChart.title')}</Title>
         <Box h={250} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Text c="dimmed">Loading...</Text>
+          <Text c="dimmed">{t('common.loading')}</Text>
         </Box>
       </Paper>
     );
@@ -69,9 +71,9 @@ export function AccountPieChart({ data, loading }: AccountPieChartProps) {
   if (chartData.length === 0) {
     return (
       <Paper withBorder p="md" radius="md" h={350}>
-        <Title order={5} mb="md">Spending by Account</Title>
+        <Title order={5} mb="md">{t('analytics.accountPieChart.title')}</Title>
         <Box h={250} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Text c="dimmed">No payment data available</Text>
+          <Text c="dimmed">{t('common.noPaymentData')}</Text>
         </Box>
       </Paper>
     );
@@ -79,7 +81,7 @@ export function AccountPieChart({ data, loading }: AccountPieChartProps) {
 
   return (
     <Paper withBorder p="md" radius="md">
-      <Title order={5} mb="md">Spending by Account</Title>
+      <Title order={5} mb="md">{t('analytics.accountPieChart.title')}</Title>
 
       <Group align="flex-start" gap="xl">
         <PieChart
@@ -114,7 +116,7 @@ export function AccountPieChart({ data, loading }: AccountPieChartProps) {
       </Group>
 
       <Text size="xs" c="dimmed" mt="md" ta="center">
-        Total: {formatCurrency(total)}
+        {t('analytics.accountPieChart.total', { amount: formatCurrency(total) })}
       </Text>
     </Paper>
   );

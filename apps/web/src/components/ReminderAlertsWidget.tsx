@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Affix, Badge, Button, Drawer, Group, Paper, Stack, Text, ThemeIcon, UnstyledButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconAlertTriangle, IconBellRinging } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import type { Bill, ReminderAlert } from '../api/client';
 import { getReminderAlerts } from '../api/client';
 import { formatCurrency } from '../lib/currency';
@@ -17,6 +18,7 @@ function alertColor(alerts: ReminderAlert[]) {
 }
 
 export function ReminderAlertsWidget({ bills, hasDatabase, onPayBill }: ReminderAlertsWidgetProps) {
+  const { t } = useTranslation();
   const [alerts, setAlerts] = useState<ReminderAlert[]>([]);
   const [opened, { open, close }] = useDisclosure(false);
 
@@ -50,32 +52,37 @@ export function ReminderAlertsWidget({ bills, hasDatabase, onPayBill }: Reminder
 
   return (
     <>
-      <Affix position={{ top: 76, right: 24 }} zIndex={210}>
-        <UnstyledButton onClick={open} aria-label="Open reminder alerts">
-          <Paper withBorder shadow="md" radius="md" px="sm" py="xs">
-            <Group gap="xs" wrap="nowrap">
-              <ThemeIcon color={color} variant="light" radius="xl" size="md">
-                <IconBellRinging size={18} />
-              </ThemeIcon>
-              <Stack gap={0}>
-                <Text size="sm" fw={700}>
-                  {alerts.length} Reminder Alert{alerts.length === 1 ? '' : 's'}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  Click to review
-                </Text>
-              </Stack>
-            </Group>
-          </Paper>
-        </UnstyledButton>
-      </Affix>
+      {!opened && (
+        <Affix position={{ bottom: 24, right: 24 }} zIndex={210}>
+          <UnstyledButton onClick={open} aria-label={t('reminderAlertsWidget.openAriaLabel')}>
+            <Paper withBorder shadow="md" radius="md" px="sm" py="xs">
+              <Group gap="xs" wrap="nowrap">
+                <ThemeIcon color={color} variant="light" radius="xl" size="md">
+                  <IconBellRinging size={18} />
+                </ThemeIcon>
+                <Stack gap={0}>
+                  <Text size="sm" fw={700}>
+                    {t('reminderAlertsWidget.alertCount', { count: alerts.length })}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {t('reminderAlertsWidget.clickToReview')}
+                  </Text>
+                </Stack>
+              </Group>
+            </Paper>
+          </UnstyledButton>
+        </Affix>
+      )}
 
       <Drawer
         opened={opened}
         onClose={close}
         position="right"
         size="md"
-        title={`${alerts.length} Reminder Alert${alerts.length === 1 ? '' : 's'}`}
+        closeOnClickOutside={false}
+        closeOnEscape={false}
+        closeButtonProps={{ 'aria-label': t('reminderAlertsWidget.closeAriaLabel') }}
+        title={t('reminderAlertsWidget.alertCount', { count: alerts.length })}
       >
         <Stack gap="sm">
           {alerts.map((alert) => {
@@ -106,7 +113,7 @@ export function ReminderAlertsWidget({ bills, hasDatabase, onPayBill }: Reminder
                       leftSection={<IconAlertTriangle size={14} />}
                       onClick={() => onPayBill(bill)}
                     >
-                      Pay
+                      {t('common.actions.pay')}
                     </Button>
                   )}
                 </Group>

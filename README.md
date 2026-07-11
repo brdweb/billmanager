@@ -6,17 +6,16 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.2.2
+## 🎉 What's New in v4.3.0
 
-**Analytics Workspace and Performance Update** - Analytics now owns planning views, alert handling is less intrusive, and the web app ships smaller initial bundles.
+**Internationalization and Self-Hosted Flexibility** - BillManager now supports English and German, uses the currency and locale configured for your deployment, and keeps reminder alerts out of the way while you work.
 
 ### Highlights
 
-- **Customizable Analytics** - Analytics sections can be collapsed, reordered, and saved per user
-- **Stacked Category Charts** - Category spending now appears in stacked bar and area charts instead of budget cards
-- **Floating Reminder Alerts** - Active reminders use a floating bell indicator with a slide-out alert drawer
-- **Smaller Initial Bundle** - Routes, modals, charts, and export libraries are split into lazy chunks
-- **Runtime Refresh** - Mantine, Recharts, Python dependencies, PostgreSQL defaults, and the production Python runtime were updated
+- **English and German UI** - Choose your preferred interface language in Settings, with locale-aware dates and exports
+- **Configurable Currency** - Self-hosted deployments can set their default currency and locale with `DEFAULT_CURRENCY` and `DEFAULT_LOCALE`
+- **Less Intrusive Alerts** - Reminder alerts sit at the lower-right and hide while their slide-in drawer is open
+- **Dependency and Runtime Refresh** - Web, mobile, Python, Node.js, and PostgreSQL dependencies and runtime support were updated
 
 ---
 
@@ -192,6 +191,8 @@ postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
 | `RESEND_API_KEY` | Resend API key for hosted/existing installs | None |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | Uses `APP_URL` or localhost |
 | `DEPLOYMENT_MODE` | `self-hosted` or `saas` | `self-hosted` |
+| `DEFAULT_CURRENCY` | ISO 4217 currency code used to format bill amounts | `USD` |
+| `DEFAULT_LOCALE` | BCP 47 locale used to format bill amounts | `en-US` |
 | `ENABLE_2FA` | Enable two-factor authentication flows | `false` |
 | `ENABLE_PASSKEYS` | Enable passkey (WebAuthn) support | `false` |
 | `WEBAUTHN_RP_ID` | WebAuthn relying party ID (domain only) | Derived from `APP_URL` |

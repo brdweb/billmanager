@@ -17,11 +17,12 @@ import {
 import { DatePickerInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
 import { IconEdit, IconTrash, IconCheck, IconX } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import type { Payment, Bill } from '../api/client';
 import { getPayments, updatePayment, deletePayment, ApiError } from '../api/client';
 import { PaymentHistoryChart } from './PaymentHistoryChart';
 import { parseLocalDate, formatDateString, formatDateForAPI } from '../utils/date';
-import { formatCurrency, getCurrencySymbol } from '../lib/currency';
+import { formatCurrency, getCurrencyInputProps, getLocale } from '../lib/currency';
 
 interface PaymentHistoryProps {
   opened: boolean;
@@ -42,6 +43,7 @@ export function PaymentHistory({
   shareInfo = null,
   onPaymentsChanged,
 }: PaymentHistoryProps) {
+  const { t } = useTranslation();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -59,9 +61,9 @@ export function PaymentHistory({
       const response = await getPayments(billId);
       setPayments(Array.isArray(response) ? response : []);
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to load payment history';
+      const message = error instanceof ApiError ? error.message : t('paymentHistory.errors.loadFailed');
       notifications.show({
-        title: 'Error loading payments',
+        title: t('paymentHistory.errors.loadFailedTitle'),
         message,
         color: 'red',
       });
@@ -69,7 +71,7 @@ export function PaymentHistory({
     } finally {
       setLoading(false);
     }
-  }, [billId]);
+  }, [billId, t]);
 
   useEffect(() => {
     if (opened && billId) {
@@ -107,16 +109,16 @@ export function PaymentHistory({
         formatDateForAPI(editDate)
       );
       notifications.show({
-        message: 'Payment updated successfully',
+        message: t('paymentHistory.success.updated'),
         color: 'green',
       });
       await fetchPayments();
       onPaymentsChanged();
       handleCancelEdit();
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to update payment';
+      const message = error instanceof ApiError ? error.message : t('paymentHistory.errors.updateFailed');
       notifications.show({
-        title: 'Error updating payment',
+        title: t('paymentHistory.errors.updateFailedTitle'),
         message,
         color: 'red',
       });
@@ -124,20 +126,20 @@ export function PaymentHistory({
   };
 
   const handleDelete = async (paymentId: number) => {
-    if (!confirm('Are you sure you want to delete this payment?')) return;
+    if (!confirm(t('paymentHistory.confirmDelete'))) return;
 
     try {
       await deletePayment(paymentId);
       notifications.show({
-        message: 'Payment deleted successfully',
+        message: t('paymentHistory.success.deleted'),
         color: 'green',
       });
       await fetchPayments();
       onPaymentsChanged();
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : 'Failed to delete payment';
+      const message = error instanceof ApiError ? error.message : t('paymentHistory.errors.deleteFailed');
       notifications.show({
-        title: 'Error deleting payment',
+        title: t('paymentHistory.errors.deleteFailedTitle'),
         message,
         color: 'red',
       });
@@ -151,10 +153,10 @@ export function PaymentHistory({
       onClose={onClose}
       title={
         <Group gap="sm">
-          <Text>Payment History: {billName || ''}</Text>
+          <Text>{t('paymentHistory.titlePrefix', { name: billName || '' })}</Text>
           {isShared && shareInfo && (
             <Badge color="violet" variant="filled">
-              Shared by {shareInfo.owner_name}
+              {t('common.sharedBy', { name: shareInfo.owner_name })}
             </Badge>
           )}
         </Group>
@@ -169,25 +171,28 @@ export function PaymentHistory({
             <Stack gap="xs">
               <Group justify="space-between">
                 <Text size="sm" fw={500}>
-                  Your Portion:{' '}
-                  {shareInfo.my_portion !== null ? formatCurrency(shareInfo.my_portion) : 'N/A'}
+                  {t('paymentHistory.yourPortion', { amount: shareInfo.my_portion !== null ? formatCurrency(shareInfo.my_portion) : t('common.notApplicable') })}
                 </Text>
                 {shareInfo.my_portion_paid ? (
                   <Badge size="sm" color="green" variant="filled">
-                    Paid on {shareInfo.my_portion_paid_date ? new Date(shareInfo.my_portion_paid_date).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric'
-                    }) : 'unknown'}
+                    {t('billModal.paidOn', {
+                      date: shareInfo.my_portion_paid_date
+                        ? new Date(shareInfo.my_portion_paid_date).toLocaleDateString(getLocale(), {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })
+                        : t('paymentHistory.unknownDate')
+                    })}
                   </Badge>
                 ) : (
                   <Badge size="sm" color="gray" variant="light">
-                    Not marked as paid
+                    {t('paymentHistory.notMarkedPaid')}
                   </Badge>
                 )}
               </Group>
               <Text size="xs" c="dimmed">
-                This bill is shared with you. Only the owner can edit payment history.
+                {t('paymentHistory.sharedNotice')}
               </Text>
             </Stack>
           </Paper>
@@ -203,7 +208,7 @@ export function PaymentHistory({
         ) : payments.length === 0 ? (
           <Paper p="xl" withBorder>
             <Text ta="center" c="dimmed">
-              No payments recorded yet
+              {t('paymentHistory.noPayments')}
             </Text>
           </Paper>
         ) : (
@@ -211,9 +216,9 @@ export function PaymentHistory({
           <Table striped highlightOnHover>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Date</Table.Th>
-                <Table.Th>Amount</Table.Th>
-                <Table.Th>Actions</Table.Th>
+                <Table.Th>{t('common.table.date')}</Table.Th>
+                <Table.Th>{t('common.table.amount')}</Table.Th>
+                <Table.Th>{t('common.table.actions')}</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -224,6 +229,7 @@ export function PaymentHistory({
                       <DatePickerInput
                         value={editDate}
                         onChange={(value) => setEditDate(value ? parseLocalDate(value) : null)}
+                        valueFormat={t('common.dateInputFormat')}
                         size="xs"
                         w={140}
                       />
@@ -236,8 +242,7 @@ export function PaymentHistory({
                       <NumberInput
                         value={editAmount}
                         onChange={(val) => setEditAmount(val === '' ? '' : Number(val))}
-                        prefix={getCurrencySymbol()}
-                        decimalScale={2}
+                        {...getCurrencyInputProps()}
                         fixedDecimalScale
                         size="xs"
                         w={100}
@@ -248,14 +253,14 @@ export function PaymentHistory({
                   </Table.Td>
                   <Table.Td>
                     {isShared ? (
-                      <Text size="xs" c="dimmed">Read-only</Text>
+                      <Text size="xs" c="dimmed">{t('paymentHistory.readOnly')}</Text>
                     ) : editingId === payment.id ? (
                       <Group gap="xs">
                         <ActionIcon
                           color="green"
                           variant="subtle"
                           onClick={handleSaveEdit}
-                          title="Save"
+                          title={t('common.actions.save')}
                         >
                           <IconCheck size={18} />
                         </ActionIcon>
@@ -263,7 +268,7 @@ export function PaymentHistory({
                           color="gray"
                           variant="subtle"
                           onClick={handleCancelEdit}
-                          title="Cancel"
+                          title={t('common.actions.cancel')}
                         >
                           <IconX size={18} />
                         </ActionIcon>
@@ -274,7 +279,7 @@ export function PaymentHistory({
                           color="blue"
                           variant="subtle"
                           onClick={() => handleEdit(payment)}
-                          title="Edit"
+                          title={t('common.actions.edit')}
                         >
                           <IconEdit size={18} />
                         </ActionIcon>
@@ -282,7 +287,7 @@ export function PaymentHistory({
                           color="red"
                           variant="subtle"
                           onClick={() => handleDelete(payment.id)}
-                          title="Delete"
+                          title={t('common.actions.delete')}
                         >
                           <IconTrash size={18} />
                         </ActionIcon>
@@ -309,7 +314,7 @@ export function PaymentHistory({
 
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
-            Close
+            {t('paymentHistory.close')}
           </Button>
         </Group>
       </Stack>

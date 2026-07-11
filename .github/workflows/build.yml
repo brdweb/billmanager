@@ -19,7 +19,7 @@ jobs:
       contents: read
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: billsuser
           POSTGRES_PASSWORD: billspass
@@ -40,7 +40,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: '3.14'
           cache: 'pip'
           cache-dependency-path: apps/server/requirements.txt
 
@@ -102,7 +102,7 @@ jobs:
       - name: Run npm audit
         run: |
           cd apps/web
-          npm audit --audit-level=high || true
+          npm audit --audit-level=high
 
   security-scan:
     name: Secrets Scan

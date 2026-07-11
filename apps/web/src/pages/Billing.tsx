@@ -29,9 +29,11 @@ import {
   IconArrowLeft,
   IconServer,
 } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 import type { SubscriptionStatus, BillingUsage } from '../api/client';
 import { useConfig } from '../context/ConfigContext';
+import { formatCurrencyFor, getLocale } from '../lib/currency';
 
 const PRICING = {
   basic: { monthly: 5, annual: 50 },
@@ -39,6 +41,7 @@ const PRICING = {
 };
 
 export function Billing() {
+  const { t } = useTranslation();
   const { isSelfHosted } = useConfig();
   const [status, setStatus] = useState<SubscriptionStatus | null>(null);
   const [usage, setUsage] = useState<BillingUsage | null>(null);
@@ -65,7 +68,7 @@ export function Billing() {
       setStatus(statusRes);
       setUsage(usageRes);
     } catch {
-      setError('Failed to load billing information');
+      setError(t('billingPage.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -79,10 +82,10 @@ export function Billing() {
         window.umami?.track('checkout_started', { tier, interval: billingInterval });
         window.location.href = response.url;
       } else {
-        setError('Failed to create checkout session');
+        setError(t('billingPage.checkoutFailedDefault'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start subscription process');
+      setError(err instanceof Error ? err.message : t('billingPage.checkoutFailedRetryDefault'));
     } finally {
       setActionLoading(false);
     }
@@ -95,10 +98,10 @@ export function Billing() {
       if (response.url) {
         window.location.href = response.url;
       } else {
-        setError('Failed to open billing portal');
+        setError(t('billingPage.portalFailedDefault'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to open billing portal');
+      setError(err instanceof Error ? err.message : t('billingPage.portalFailedRetryDefault'));
     } finally {
       setActionLoading(false);
     }
@@ -125,9 +128,9 @@ export function Billing() {
           leftSection={<IconArrowLeft size={16} />}
           mb="md"
         >
-          Back to Bills
+          {t('billingPage.backToBills')}
         </Button>
-        <Title ta="center" mb="lg">Billing & Subscription</Title>
+        <Title ta="center" mb="lg">{t('billingPage.billingSubscriptionTitle')}</Title>
 
         <Paper withBorder shadow="md" p="xl" radius="md">
           <Stack align="center" gap="lg">
@@ -135,29 +138,28 @@ export function Billing() {
               <IconServer size={40} />
             </ThemeIcon>
             <Stack align="center" gap="xs">
-              <Title order={2}>Self-Hosted Instance</Title>
+              <Title order={2}>{t('billingPage.selfHostedTitle')}</Title>
               <Text size="lg" c="dimmed" ta="center">
-                You are connected to a self-hosted BillManager server.
+                {t('billingPage.selfHostedBody')}
               </Text>
             </Stack>
             <Alert color="green" variant="light" w="100%">
               <Text size="sm">
-                Subscription management is only available for BillManager Cloud users.
-                Self-hosted servers have unlimited access to all features at no additional cost.
+                {t('billingPage.selfHostedAlert')}
               </Text>
             </Alert>
             <Stack gap="xs" w="100%">
-              <Text fw={600} size="lg">Unlimited Features Include:</Text>
+              <Text fw={600} size="lg">{t('billingPage.unlimitedFeaturesTitle')}</Text>
               <List
                 spacing="sm"
                 icon={<IconCheck size={16} color="var(--mantine-color-green-6)" />}
               >
-                <List.Item>Unlimited bills and income tracking</List.Item>
-                <List.Item>Unlimited family members and users</List.Item>
-                <List.Item>Unlimited bill groups</List.Item>
-                <List.Item>Full analytics and reporting</List.Item>
-                <List.Item>Export to CSV/PDF</List.Item>
-                <List.Item>All features included forever</List.Item>
+                <List.Item>{t('billingPage.featureUnlimitedBills')}</List.Item>
+                <List.Item>{t('billingPage.featureUnlimitedMembers')}</List.Item>
+                <List.Item>{t('billingPage.featureUnlimitedGroups')}</List.Item>
+                <List.Item>{t('billingPage.featureFullAnalytics')}</List.Item>
+                <List.Item>{t('billingPage.featureExport')}</List.Item>
+                <List.Item>{t('billingPage.featureAllIncluded')}</List.Item>
               </List>
             </Stack>
           </Stack>
@@ -169,28 +171,28 @@ export function Billing() {
   const getStatusBadge = () => {
     if (!status?.has_subscription) {
       if (status?.is_trialing) {
-        return <Badge color="blue" size="lg">Free Trial</Badge>;
+        return <Badge color="blue" size="lg">{t('billingPage.statusFreeTrial')}</Badge>;
       }
-      return <Badge color="gray" size="lg">Free</Badge>;
+      return <Badge color="gray" size="lg">{t('billingPage.statusFree')}</Badge>;
     }
 
     switch (status.status) {
       case 'active':
-        return <Badge color="green" size="lg">Active</Badge>;
+        return <Badge color="green" size="lg">{t('billingPage.statusActive')}</Badge>;
       case 'trialing':
-        return <Badge color="blue" size="lg">Trial</Badge>;
+        return <Badge color="blue" size="lg">{t('billingPage.statusTrial')}</Badge>;
       case 'past_due':
-        return <Badge color="yellow" size="lg">Past Due</Badge>;
+        return <Badge color="yellow" size="lg">{t('billingPage.statusPastDue')}</Badge>;
       case 'canceled':
-        return <Badge color="red" size="lg">Canceled</Badge>;
+        return <Badge color="red" size="lg">{t('billingPage.statusCanceled')}</Badge>;
       default:
         return <Badge color="gray" size="lg">{status.status}</Badge>;
     }
   };
 
   const formatDate = (dateString?: string) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
+    if (!dateString) return t('common.notApplicable');
+    return new Date(dateString).toLocaleDateString(getLocale(), {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -198,7 +200,7 @@ export function Billing() {
   };
 
   const formatTierName = (tier?: string) => {
-    if (!tier) return 'Free';
+    if (!tier) return t('billingPage.tierFree');
     return tier.charAt(0).toUpperCase() + tier.slice(1);
   };
 
@@ -217,9 +219,9 @@ export function Billing() {
         leftSection={<IconArrowLeft size={16} />}
         mb="md"
       >
-        Back to Bills
+        {t('billingPage.backToBills')}
       </Button>
-      <Title ta="center" mb="lg">Billing & Subscription</Title>
+      <Title ta="center" mb="lg">{t('billingPage.billingSubscriptionTitle')}</Title>
 
       {error && (
         <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" mb="lg" onClose={() => setError('')} withCloseButton>
@@ -232,38 +234,38 @@ export function Billing() {
         <Group justify="space-between" mb="md">
           <Group>
             <IconCreditCard size={24} />
-            <Title order={3}>Current Plan</Title>
+            <Title order={3}>{t('billingPage.currentPlanTitle')}</Title>
           </Group>
           {getStatusBadge()}
         </Group>
 
         {status?.is_trial_expired && (
           <Alert icon={<IconAlertCircle size={16} />} color="orange" variant="light" mb="md">
-            Your trial has expired. Subscribe to continue with full features.
+            {t('billingPage.trialExpiredAlert')}
           </Alert>
         )}
 
         {status?.is_trialing && !status.is_trial_expired && status.trial_days_remaining !== undefined && (
           <Alert icon={<IconCalendar size={16} />} color="blue" variant="light" mb="md">
-            You have {status.trial_days_remaining} days remaining in your free trial.
-            {status.trial_days_remaining <= 3 && ' Subscribe now to keep your data!'}
+            {t('billingPage.trialRemainingAlert', { count: status.trial_days_remaining })}
+            {status.trial_days_remaining <= 3 && ` ${t('billingPage.trialRemainingUrgentSuffix')}`}
           </Alert>
         )}
 
         <Stack gap="xs">
           <Group justify="space-between">
-            <Text c="dimmed">Current Tier</Text>
+            <Text c="dimmed">{t('billingPage.currentTierLabel')}</Text>
             <Text fw={500}>{formatTierName(status?.effective_tier)}</Text>
           </Group>
           {status?.has_subscription && (
             <>
               <Group justify="space-between">
-                <Text c="dimmed">Billing</Text>
-                <Text fw={500} tt="capitalize">{status.billing_interval || 'Monthly'}</Text>
+                <Text c="dimmed">{t('billingPage.billingLabel')}</Text>
+                <Text fw={500} tt="capitalize">{status.billing_interval || t('billingPage.monthlyDefault')}</Text>
               </Group>
               {status.current_period_end && (
                 <Group justify="space-between">
-                  <Text c="dimmed">Renews on</Text>
+                  <Text c="dimmed">{t('billingPage.renewsOnLabel')}</Text>
                   <Text fw={500}>{formatDate(status.current_period_end)}</Text>
                 </Group>
               )}
@@ -278,7 +280,7 @@ export function Billing() {
               onClick={handleManage}
               loading={actionLoading}
             >
-              Manage Subscription
+              {t('billingPage.manageSubscription')}
             </Button>
           </Group>
         )}
@@ -287,13 +289,13 @@ export function Billing() {
       {/* Usage Stats */}
       {usage && (
         <Paper withBorder shadow="sm" p="lg" radius="md" mb="lg">
-          <Title order={4} mb="md">Current Usage</Title>
+          <Title order={4} mb="md">{t('billingPage.currentUsageTitle')}</Title>
           <SimpleGrid cols={2}>
             <div>
               <Group justify="space-between" mb={4}>
-                <Text size="sm">Bills</Text>
+                <Text size="sm">{t('billingPage.billsLabel')}</Text>
                 <Text size="sm" c="dimmed">
-                  {usage.usage.bills.unlimited ? 'Unlimited' : `${usage.usage.bills.used} / ${usage.usage.bills.limit}`}
+                  {usage.usage.bills.unlimited ? t('billingPage.unlimited') : t('billingPage.usedOfLimit', { used: usage.usage.bills.used, limit: usage.usage.bills.limit })}
                 </Text>
               </Group>
               {!usage.usage.bills.unlimited && (
@@ -306,9 +308,9 @@ export function Billing() {
             </div>
             <div>
               <Group justify="space-between" mb={4}>
-                <Text size="sm">Bill Groups</Text>
+                <Text size="sm">{t('billingPage.billGroupsLabel')}</Text>
                 <Text size="sm" c="dimmed">
-                  {usage.usage.bill_groups.unlimited ? 'Unlimited' : `${usage.usage.bill_groups.used} / ${usage.usage.bill_groups.limit}`}
+                  {usage.usage.bill_groups.unlimited ? t('billingPage.unlimited') : t('billingPage.usedOfLimit', { used: usage.usage.bill_groups.used, limit: usage.usage.bill_groups.limit })}
                 </Text>
               </Group>
               {!usage.usage.bill_groups.unlimited && (
@@ -331,8 +333,8 @@ export function Billing() {
               value={billingInterval}
               onChange={(v) => setBillingInterval(v as 'monthly' | 'annual')}
               data={[
-                { value: 'monthly', label: 'Monthly' },
-                { value: 'annual', label: `Annual (Save ${getAnnualSavings('basic')}%)` },
+                { value: 'monthly', label: t('billingPage.monthlyToggle') },
+                { value: 'annual', label: t('billingPage.annualToggle', { percent: getAnnualSavings('basic') }) },
               ]}
             />
           </Group>
@@ -346,19 +348,19 @@ export function Billing() {
                     <ThemeIcon variant="light" color="blue" size="lg">
                       <IconRocket size={20} />
                     </ThemeIcon>
-                    <Text fw={600} size="lg">Basic</Text>
+                    <Text fw={600} size="lg">{t('billingPage.basicPlan')}</Text>
                   </Group>
-                  <Badge color="blue" variant="light">Popular</Badge>
+                  <Badge color="blue" variant="light">{t('billingPage.popular')}</Badge>
                 </Group>
               </Card.Section>
 
               <Card.Section inheritPadding py="md">
                 <Group align="baseline" gap={4}>
-                  <Text size="xl" fw={700}>${billingInterval === 'monthly' ? PRICING.basic.monthly : PRICING.basic.annual}</Text>
-                  <Text size="sm" c="dimmed">/{billingInterval === 'monthly' ? 'month' : 'year'}</Text>
+                  <Text size="xl" fw={700}>{formatCurrencyFor(billingInterval === 'monthly' ? PRICING.basic.monthly : PRICING.basic.annual, 'USD')}</Text>
+                  <Text size="sm" c="dimmed">{billingInterval === 'monthly' ? t('billingPage.perMonth') : t('billingPage.perYear')}</Text>
                 </Group>
                 {billingInterval === 'annual' && (
-                  <Text size="xs" c="dimmed">That's ${(PRICING.basic.annual / 12).toFixed(2)}/month</Text>
+                  <Text size="xs" c="dimmed">{t('billingPage.thatsPerMonth', { amount: formatCurrencyFor(PRICING.basic.annual / 12, 'USD') })}</Text>
                 )}
 
                 <List
@@ -367,11 +369,11 @@ export function Billing() {
                   mt="md"
                   icon={<IconCheck size={16} color="var(--mantine-color-green-6)" />}
                 >
-                  <List.Item>Unlimited bills & income</List.Item>
-                  <List.Item>Up to 2 family members</List.Item>
-                  <List.Item>1 bill group</List.Item>
-                  <List.Item>Export to CSV/PDF</List.Item>
-                  <List.Item>Full analytics</List.Item>
+                  <List.Item>{t('billingPage.basicFeature1')}</List.Item>
+                  <List.Item>{t('billingPage.basicFeature2')}</List.Item>
+                  <List.Item>{t('billingPage.basicFeature3')}</List.Item>
+                  <List.Item>{t('billingPage.basicFeature4')}</List.Item>
+                  <List.Item>{t('billingPage.basicFeature5')}</List.Item>
                 </List>
               </Card.Section>
 
@@ -381,7 +383,7 @@ export function Billing() {
                 loading={actionLoading}
                 leftSection={<IconCrown size={16} />}
               >
-                Get Basic
+                {t('billingPage.getBasic')}
               </Button>
             </Card>
 
@@ -393,19 +395,19 @@ export function Billing() {
                     <ThemeIcon variant="light" color="violet" size="lg">
                       <IconCrown size={20} />
                     </ThemeIcon>
-                    <Text fw={600} size="lg">Plus</Text>
+                    <Text fw={600} size="lg">{t('billingPage.plusPlan')}</Text>
                   </Group>
-                  <Badge color="violet">Best Value</Badge>
+                  <Badge color="violet">{t('billingPage.bestValue')}</Badge>
                 </Group>
               </Card.Section>
 
               <Card.Section inheritPadding py="md">
                 <Group align="baseline" gap={4}>
-                  <Text size="xl" fw={700}>${billingInterval === 'monthly' ? PRICING.plus.monthly : PRICING.plus.annual}</Text>
-                  <Text size="sm" c="dimmed">/{billingInterval === 'monthly' ? 'month' : 'year'}</Text>
+                  <Text size="xl" fw={700}>{formatCurrencyFor(billingInterval === 'monthly' ? PRICING.plus.monthly : PRICING.plus.annual, 'USD')}</Text>
+                  <Text size="sm" c="dimmed">{billingInterval === 'monthly' ? t('billingPage.perMonth') : t('billingPage.perYear')}</Text>
                 </Group>
                 {billingInterval === 'annual' && (
-                  <Text size="xs" c="dimmed">That's ${(PRICING.plus.annual / 12).toFixed(2)}/month</Text>
+                  <Text size="xs" c="dimmed">{t('billingPage.thatsPerMonth', { amount: formatCurrencyFor(PRICING.plus.annual / 12, 'USD') })}</Text>
                 )}
 
                 <List
@@ -414,11 +416,11 @@ export function Billing() {
                   mt="md"
                   icon={<IconCheck size={16} color="var(--mantine-color-green-6)" />}
                 >
-                  <List.Item>Everything in Basic</List.Item>
-                  <List.Item>Up to 5 family members</List.Item>
-                  <List.Item>3 bill groups</List.Item>
-                  <List.Item>Priority support</List.Item>
-                  <List.Item>Early access to new features</List.Item>
+                  <List.Item>{t('billingPage.plusFeature1')}</List.Item>
+                  <List.Item>{t('billingPage.plusFeature2')}</List.Item>
+                  <List.Item>{t('billingPage.plusFeature3')}</List.Item>
+                  <List.Item>{t('billingPage.plusFeature4')}</List.Item>
+                  <List.Item>{t('billingPage.plusFeature5')}</List.Item>
                 </List>
               </Card.Section>
 
@@ -429,13 +431,13 @@ export function Billing() {
                 loading={actionLoading}
                 leftSection={<IconCrown size={16} />}
               >
-                Get Plus
+                {t('billingPage.getPlus')}
               </Button>
             </Card>
           </SimpleGrid>
 
           <Text size="sm" c="dimmed" ta="center">
-            14-day free trial included. Cancel anytime.
+            {t('billingPage.trialFooter')}
           </Text>
         </>
       )}

@@ -13,6 +13,7 @@ import {
   List,
 } from '@mantine/core';
 import { IconLock, IconAlertCircle, IconCheck } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 
 function getPasswordStrength(password: string): number {
@@ -34,6 +35,7 @@ function getPasswordColor(strength: number): string {
 }
 
 export function ResetPassword() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -47,13 +49,13 @@ export function ResetPassword() {
   const passwordStrength = getPasswordStrength(password);
 
   const validatePassword = (): string | null => {
-    if (!password) return 'Password is required';
-    if (password.length < 8) return 'Password must be at least 8 characters';
+    if (!password) return t('loginPage.passwordRequired');
+    if (password.length < 8) return t('loginPage.passwordMinLength');
     if (!/[a-z]/.test(password) || !/[A-Z]/.test(password)) {
-      return 'Password must contain both uppercase and lowercase letters';
+      return t('loginPage.passwordCase');
     }
-    if (!/[0-9]/.test(password)) return 'Password must contain at least one number';
-    if (password !== confirmPassword) return 'Passwords do not match';
+    if (!/[0-9]/.test(password)) return t('loginPage.passwordNumber');
+    if (password !== confirmPassword) return t('loginPage.passwordsMismatch');
     return null;
   };
 
@@ -62,7 +64,7 @@ export function ResetPassword() {
     setError('');
 
     if (!token) {
-      setError('Invalid reset link. No token provided.');
+      setError(t('resetPasswordPage.invalidResetLink'));
       return;
     }
 
@@ -78,11 +80,11 @@ export function ResetPassword() {
       if (response.success) {
         setSuccess(true);
       } else {
-        setError(response.error || 'Password reset failed');
+        setError(response.error || t('resetPasswordPage.resetFailedDefault'));
       }
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } } };
-      setError(error.response?.data?.error || 'Password reset failed. The link may have expired.');
+      setError(error.response?.data?.error || t('resetPasswordPage.resetFailedExpired'));
     } finally {
       setLoading(false);
     }
@@ -94,12 +96,12 @@ export function ResetPassword() {
         <Paper withBorder shadow="md" p={30} radius="md">
           <Stack align="center" gap="md">
             <IconAlertCircle size={48} color="var(--mantine-color-red-6)" />
-            <Title order={2} ta="center">Invalid Link</Title>
+            <Title order={2} ta="center">{t('resetPasswordPage.invalidLinkTitle')}</Title>
             <Text c="dimmed" ta="center">
-              This password reset link is invalid or has expired.
+              {t('resetPasswordPage.invalidLinkBody')}
             </Text>
             <Button component={Link} to="/forgot-password" fullWidth>
-              Request New Reset Link
+              {t('resetPasswordPage.requestNewLink')}
             </Button>
           </Stack>
         </Paper>
@@ -113,13 +115,12 @@ export function ResetPassword() {
         <Paper withBorder shadow="md" p={30} radius="md">
           <Stack align="center" gap="md">
             <IconCheck size={48} color="var(--mantine-color-green-6)" />
-            <Title order={2} ta="center">Password Reset!</Title>
+            <Title order={2} ta="center">{t('resetPasswordPage.passwordResetTitle')}</Title>
             <Text c="dimmed" ta="center">
-              Your password has been successfully reset.
-              You can now sign in with your new password.
+              {t('resetPasswordPage.passwordResetBody')}
             </Text>
             <Button onClick={() => navigate('/login')} fullWidth>
-              Sign In
+              {t('loginPage.signIn')}
             </Button>
           </Stack>
         </Paper>
@@ -129,9 +130,9 @@ export function ResetPassword() {
 
   return (
     <Container size={420} my={40}>
-      <Title ta="center">Reset Password</Title>
+      <Title ta="center">{t('resetPasswordPage.title')}</Title>
       <Text c="dimmed" size="sm" ta="center" mt={5}>
-        Enter your new password below
+        {t('resetPasswordPage.subtitle')}
       </Text>
 
       <Paper withBorder shadow="md" p={30} mt={30} radius="md">
@@ -145,8 +146,8 @@ export function ResetPassword() {
 
             <div>
               <PasswordInput
-                label="New Password"
-                placeholder="Create a strong password"
+                label={t('passwordChangeModal.newPasswordLabel')}
+                placeholder={t('loginPage.createPasswordPlaceholder')}
                 leftSection={<IconLock size={16} />}
                 value={password}
                 onChange={(e) => setPassword(e.currentTarget.value)}
@@ -161,17 +162,17 @@ export function ResetPassword() {
                     mt={5}
                   />
                   <Text size="xs" c="dimmed" mt={5}>
-                    Password requirements:
+                    {t('acceptInvite.passwordRequirements')}
                   </Text>
                   <List size="xs" c="dimmed" spacing={0}>
                     <List.Item c={password.length >= 8 ? 'green' : undefined}>
-                      At least 8 characters
+                      {t('loginPage.atLeast8Chars')}
                     </List.Item>
                     <List.Item c={/[a-z]/.test(password) && /[A-Z]/.test(password) ? 'green' : undefined}>
-                      Upper and lowercase letters
+                      {t('loginPage.upperLowerLetters')}
                     </List.Item>
                     <List.Item c={/[0-9]/.test(password) ? 'green' : undefined}>
-                      At least one number
+                      {t('loginPage.atLeastOneNumber')}
                     </List.Item>
                   </List>
                 </>
@@ -179,17 +180,17 @@ export function ResetPassword() {
             </div>
 
             <PasswordInput
-              label="Confirm Password"
-              placeholder="Confirm your new password"
+              label={t('loginPage.confirmPasswordLabel')}
+              placeholder={t('resetPasswordPage.confirmPasswordPlaceholder2')}
               leftSection={<IconLock size={16} />}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.currentTarget.value)}
-              error={confirmPassword && password !== confirmPassword ? 'Passwords do not match' : undefined}
+              error={confirmPassword && password !== confirmPassword ? t('loginPage.passwordsMismatch') : undefined}
               required
             />
 
             <Button type="submit" fullWidth loading={loading}>
-              Reset Password
+              {t('resetPasswordPage.submitButton')}
             </Button>
           </Stack>
         </form>

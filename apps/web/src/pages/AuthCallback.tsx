@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Center, Loader, Stack, Text, Alert, Button, Box } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../api/client';
 
@@ -28,6 +29,7 @@ function decodeState(stateToken: string): { provider: string; flow: 'login' | 'l
 }
 
 export function AuthCallback() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { loginWithOAuth } = useAuth();
@@ -41,18 +43,18 @@ export function AuthCallback() {
       const errorDescription = searchParams.get('error_description');
 
       if (errorParam) {
-        setError(errorDescription || errorParam || 'Authentication was cancelled');
+        setError(errorDescription || errorParam || t('authCallbackPage.authCancelled'));
         return;
       }
 
       if (!code || !state) {
-        setError('Missing authorization code or state');
+        setError(t('authCallbackPage.missingCode'));
         return;
       }
 
       const decoded = decodeState(state);
       if (!decoded) {
-        setError('Invalid OAuth state. Please try signing in again.');
+        setError(t('authCallbackPage.invalidState'));
         return;
       }
 
@@ -75,14 +77,14 @@ export function AuthCallback() {
           return;
         }
 
-        setError(result.error || 'Failed to complete sign-in. Please try again.');
+        setError(result.error || t('authCallbackPage.completeFailedDefault'));
       } catch {
-        setError('Failed to complete sign-in. Please try again.');
+        setError(t('authCallbackPage.completeFailedDefault'));
       }
     };
 
     handleCallback();
-  }, [searchParams, loginWithOAuth, navigate]);
+  }, [searchParams, loginWithOAuth, navigate, t]);
 
   if (error) {
     return (
@@ -96,11 +98,11 @@ export function AuthCallback() {
         }}
       >
         <Stack gap="lg" align="center" maw={400}>
-          <Alert icon={<IconAlertCircle size={16} />} color="red" title="Sign-in Failed">
+          <Alert icon={<IconAlertCircle size={16} />} color="red" title={t('authCallbackPage.signInFailedTitle')}>
             {error}
           </Alert>
           <Button onClick={() => navigate('/login', { replace: true })} variant="white">
-            Back to Login
+            {t('loginPage.backToLogin')}
           </Button>
         </Stack>
       </Box>
@@ -111,7 +113,7 @@ export function AuthCallback() {
     <Center h="100vh" style={{ background: 'linear-gradient(135deg, #059669 0%, #064e3b 100%)' }}>
       <Stack gap="md" align="center">
         <Loader size="xl" color="white" />
-        <Text c="white" size="lg">Completing sign-in...</Text>
+        <Text c="white" size="lg">{t('authCallbackPage.completingSignIn')}</Text>
       </Stack>
     </Center>
   );

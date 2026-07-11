@@ -16,6 +16,10 @@ services:
       # Deployment mode (self-hosted or saas)
       - DEPLOYMENT_MODE=self-hosted
 
+      # Bill amount formatting (ISO 4217 currency and BCP 47 locale)
+      - DEFAULT_CURRENCY=${DEFAULT_CURRENCY:-USD}
+      - DEFAULT_LOCALE=${DEFAULT_LOCALE:-en-US}
+
       # Registration settings (optional)
       # - ENABLE_REGISTRATION=true  # Allow public registration
       # - REQUIRE_EMAIL_VERIFICATION=true  # Require email verification

@@ -19,11 +19,14 @@ import {
 } from '@mantine/core';
 import { IconEdit, IconCash, IconPlus, IconFilterOff, IconSearch, IconX, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter, IconUsers, IconFilter } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { exportBillsToCSV, exportBillsToPDF, printBills } from '../utils/export';
 import type { Bill } from '../api/client';
 import { getAccounts, getCategories, markSharePaid } from '../api/client';
 import { BillIcon } from './BillIcon';
 import { formatCurrency } from '../lib/currency';
+import { formatDateString } from '../utils/date';
 import type { BillFilter } from '../App';
 
 interface BillListProps {
@@ -44,33 +47,33 @@ interface BillListProps {
   isAllBucketsMode?: boolean;
 }
 
-function getFrequencyText(bill: Bill): string {
+function getFrequencyText(bill: Bill, t: TFunction): string {
   let frequencyConfig: { dates?: number[]; days?: number[] } = {};
   try { frequencyConfig = bill.frequency_config ? JSON.parse(bill.frequency_config) : {}; } catch { /* ignore malformed config */ }
 
   switch (bill.frequency) {
     case 'weekly':
-      return 'Weekly';
+      return t('common.frequency.weekly');
     case 'bi-weekly':
     case 'biweekly':
-      return 'Bi-weekly';
+      return t('common.frequency.biweekly');
     case 'quarterly':
-      return 'Quarterly';
+      return t('common.frequency.quarterly');
     case 'yearly':
-      return 'Yearly';
+      return t('common.frequency.yearly');
     case 'monthly':
       if (bill.frequency_type === 'specific_dates' && frequencyConfig.dates) {
-        const dates = frequencyConfig.dates.join(', ');
-        return `Monthly (${dates}${frequencyConfig.dates.length === 1 ? 'st/nd/rd/th' : ''})`;
+        const dates = frequencyConfig.dates.join(', ') + (frequencyConfig.dates.length === 1 ? 'st/nd/rd/th' : '');
+        return t('common.frequency.monthlyOnDates', { dates });
       }
-      return 'Monthly';
+      return t('common.frequency.monthly');
     case 'custom':
       if (bill.frequency_type === 'multiple_weekly' && frequencyConfig.days) {
-        const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        const days = frequencyConfig.days.map((d: number) => dayNames[d]).join(', ');
-        return `Weekly (${days})`;
+        const dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+        const days = frequencyConfig.days.map((d: number) => t(`common.weekdaysShort.${dayKeys[d]}`)).join(', ');
+        return t('common.frequency.customWeekly', { days });
       }
-      return 'Custom';
+      return t('common.frequency.custom');
     default:
       return bill.frequency;
   }
@@ -80,15 +83,6 @@ function getFrequencyText(bill: Bill): string {
 function parseDate(dateStr: string): Date {
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day);
-}
-
-function formatDate(dateStr: string): string {
-  const date = parseDate(dateStr);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 function getDueBadgeColor(dateStr: string): string {
@@ -124,6 +118,7 @@ export function BillList({
   onRefresh,
   isAllBucketsMode = false,
 }: BillListProps) {
+  const { t } = useTranslation();
   // Accounts list for filtering
   const [accounts, setAccounts] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -144,16 +139,16 @@ export function BillList({
     try {
       await markSharePaid(bill.share_info.share_id);
       notifications.show({
-        title: 'Success',
-        message: bill.share_info.my_portion_paid ? 'Marked as unpaid' : 'Marked as paid',
+        title: t('billList.notifications.success'),
+        message: bill.share_info.my_portion_paid ? t('billList.notifications.markedUnpaid') : t('billList.notifications.markedPaid'),
         color: 'green',
       });
       onRefresh?.();
       setConfirmPayBill(null);
     } catch {
       notifications.show({
-        title: 'Error',
-        message: 'Failed to update payment status',
+        title: t('billList.notifications.error'),
+        message: t('billList.notifications.updateFailed'),
         color: 'red',
       });
     } finally {
@@ -186,7 +181,7 @@ export function BillList({
       <Card p="xl" withBorder>
         <Stack align="center" gap="md">
           <Text size="lg" c="dimmed">
-            Please log in to view your bills
+            {t('billList.pleaseLogIn')}
           </Text>
         </Stack>
       </Card>
@@ -198,11 +193,10 @@ export function BillList({
       <Card p="xl" withBorder>
         <Stack align="center" gap="md">
           <Text size="lg" c="dimmed">
-            No bill group access
+            {t('billList.noAccessTitle')}
           </Text>
           <Text size="sm" c="dimmed" ta="center">
-            Your account does not have access to any bill groups.
-            Please contact an administrator to grant you access.
+            {t('billList.noAccessBody')}
           </Text>
         </Stack>
       </Card>
@@ -216,7 +210,7 @@ export function BillList({
         <Card p="xl" withBorder>
           <Stack align="center" gap="md">
             <Text size="lg" c="dimmed">
-              No bills match your current filter
+              {t('billList.noMatchFilter')}
             </Text>
             {onClearFilter && (
               <Button
@@ -224,7 +218,7 @@ export function BillList({
                 leftSection={<IconFilterOff size={16} />}
                 onClick={onClearFilter}
               >
-                Clear Filter
+                {t('billList.clearFilter')}
               </Button>
             )}
           </Stack>
@@ -236,10 +230,10 @@ export function BillList({
       <Card p="xl" withBorder>
         <Stack align="center" gap="md">
           <Text size="lg" c="dimmed">
-            No bills yet. Add your first bill to get started!
+            {t('billList.empty')}
           </Text>
           <Button leftSection={<IconPlus size={16} />} onClick={onAdd}>
-            Add Entry
+            {t('billList.addEntry')}
           </Button>
         </Stack>
       </Card>
@@ -251,11 +245,11 @@ export function BillList({
       <Group justify="space-between" className="no-print">
         <Group gap="sm">
           <Select
-            placeholder="All types"
+            placeholder={t('billList.allTypes')}
             data={[
-              { value: 'all', label: 'All Transactions' },
-              { value: 'expense', label: 'Expenses Only' },
-              { value: 'deposit', label: 'Deposits Only' }
+              { value: 'all', label: t('billList.allTransactions') },
+              { value: 'expense', label: t('billList.expensesOnly') },
+              { value: 'deposit', label: t('billList.depositsOnly') }
             ]}
             value={filter.type}
             onChange={(value) => onFilterChange({ ...filter, type: (value as 'all' | 'expense' | 'deposit') || 'all' })}
@@ -264,7 +258,7 @@ export function BillList({
             w={180}
           />
           <Select
-            placeholder="All accounts"
+            placeholder={t('billList.allAccounts')}
             data={accounts}
             value={filter.account}
             onChange={(value) => onFilterChange({ ...filter, account: value })}
@@ -274,7 +268,7 @@ export function BillList({
             w={180}
           />
           <Select
-            placeholder="All categories"
+            placeholder={t('billList.allCategories')}
             data={categories}
             value={filter.category}
             onChange={(value) => onFilterChange({ ...filter, category: value })}
@@ -287,7 +281,7 @@ export function BillList({
         <Group gap="sm">
           {onSearchChange && (
             <TextInput
-              placeholder="Search..."
+              placeholder={t('billList.searchPlaceholder')}
               leftSection={<IconSearch size={16} />}
               rightSection={
                 searchQuery && (
@@ -309,42 +303,42 @@ export function BillList({
           <Menu shadow="md" width={200}>
             <Menu.Target>
               <Button variant="light" leftSection={<IconDownload size={16} />} size="sm">
-                Export
+                {t('billList.export')}
               </Button>
             </Menu.Target>
             <Menu.Dropdown>
-              <Menu.Label>Export bills</Menu.Label>
+              <Menu.Label>{t('billList.exportBills')}</Menu.Label>
               <Menu.Item
                 leftSection={<IconFileTypeCsv size={16} />}
                 onClick={() => {
-                  exportBillsToCSV(bills);
+                  exportBillsToCSV(bills, t);
                   window.umami?.track('export_bills', { format: 'csv' });
                 }}
               >
-                Export as CSV
+                {t('billList.exportCsv')}
               </Menu.Item>
               <Menu.Item
                 leftSection={<IconFileTypePdf size={16} />}
                 onClick={() => {
-                  exportBillsToPDF(bills);
+                  exportBillsToPDF(bills, t);
                   window.umami?.track('export_bills', { format: 'pdf' });
                 }}
               >
-                Export as PDF
+                {t('billList.exportPdf')}
               </Menu.Item>
               <Menu.Item
                 leftSection={<IconPrinter size={16} />}
                 onClick={() => {
-                  printBills(bills);
+                  printBills(bills, t);
                   window.umami?.track('print_bills');
                 }}
               >
-                Print
+                {t('billList.print')}
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
           <Button leftSection={<IconPlus size={16} />} onClick={onAdd} size="sm">
-            Add Entry
+            {t('billList.addEntry')}
           </Button>
         </Group>
       </Group>
@@ -356,20 +350,20 @@ export function BillList({
             <Group gap="xs">
               <IconFilter size={14} color="var(--mantine-color-blue-6)" />
               <Text size="sm" c="blue.7" fw={500}>
-                Filtered:{' '}
-                {filter.dateRange === 'overdue' && 'Overdue bills'}
-                {filter.dateRange === 'thisWeek' && 'Due this week'}
-                {filter.dateRange === 'nextWeek' && 'Due next week'}
-                {filter.dateRange === 'next21Days' && 'Due in next 21 days'}
-                {filter.dateRange === 'next30Days' && 'Due in next 30 days'}
-                {filter.selectedDate && `Due on ${filter.selectedDate}`}
-                {filter.searchQuery && `Search "${filter.searchQuery}"`}
-                {filter.category && `Category "${filter.category}"`}
-                {filter.account && `Account "${filter.account}"`}
-                {filter.type !== 'all' && `${filter.type === 'deposit' ? 'Deposits' : 'Expenses'} only`}
-                {filter.dateRange === 'all' && !filter.selectedDate && !filter.searchQuery && !filter.category && !filter.account && filter.type === 'all' && 'Active filters applied'}
+                {t('billList.filtered')}{' '}
+                {filter.dateRange === 'overdue' && t('billList.filterOverdue')}
+                {filter.dateRange === 'thisWeek' && t('billList.filterThisWeek')}
+                {filter.dateRange === 'nextWeek' && t('billList.filterNextWeek')}
+                {filter.dateRange === 'next21Days' && t('billList.filterNext21Days')}
+                {filter.dateRange === 'next30Days' && t('billList.filterNext30Days')}
+                {filter.selectedDate && t('billList.filterSelectedDate', { date: filter.selectedDate })}
+                {filter.searchQuery && t('billList.filterSearch', { query: filter.searchQuery })}
+                {filter.category && t('billList.filterCategory', { category: filter.category })}
+                {filter.account && t('billList.filterAccount', { account: filter.account })}
+                {filter.type !== 'all' && (filter.type === 'deposit' ? t('billList.filterDepositsOnly') : t('billList.filterExpensesOnly'))}
+                {filter.dateRange === 'all' && !filter.selectedDate && !filter.searchQuery && !filter.category && !filter.account && filter.type === 'all' && t('billList.filterActive')}
               </Text>
-              <Badge size="sm" variant="light" color="blue">{bills.length} result{bills.length !== 1 ? 's' : ''}</Badge>
+              <Badge size="sm" variant="light" color="blue">{t('billList.results', { count: bills.length })}</Badge>
             </Group>
             {onClearFilter && (
               <Button
@@ -379,7 +373,7 @@ export function BillList({
                 leftSection={<IconFilterOff size={14} />}
                 onClick={onClearFilter}
               >
-                Clear
+                {t('billList.clear')}
               </Button>
             )}
           </Group>
@@ -390,12 +384,12 @@ export function BillList({
         <Table striped highlightOnHover>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Name</Table.Th>
-              <Table.Th>Amount</Table.Th>
-              <Table.Th>Due Date</Table.Th>
-              <Table.Th>Frequency</Table.Th>
-              {isAllBucketsMode && <Table.Th>Bucket</Table.Th>}
-              <Table.Th className="no-print">Actions</Table.Th>
+              <Table.Th>{t('common.table.name')}</Table.Th>
+              <Table.Th>{t('common.table.amount')}</Table.Th>
+              <Table.Th>{t('common.table.dueDate')}</Table.Th>
+              <Table.Th>{t('common.table.frequency')}</Table.Th>
+              {isAllBucketsMode && <Table.Th>{t('billList.bucketColumn')}</Table.Th>}
+              <Table.Th className="no-print">{t('common.table.actions')}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -422,8 +416,8 @@ export function BillList({
                           <Tooltip
                             label={
                               bill.is_shared
-                                ? `Shared with you by ${bill.share_info?.owner_name}`
-                                : `Shared with ${bill.share_count} ${bill.share_count === 1 ? 'person' : 'people'}`
+                                ? t('common.sharedWithYouBy', { name: bill.share_info?.owner_name })
+                                : t('common.sharedWithCount', { count: bill.share_count ?? 0 })
                             }
                             withArrow
                           >
@@ -445,11 +439,11 @@ export function BillList({
                           color={bill.type === 'deposit' ? 'green' : 'blue'}
                           variant="light"
                         >
-                          {bill.type === 'deposit' ? 'Deposit' : 'Expense'}
+                          {bill.type === 'deposit' ? t('common.billType.deposit') : t('common.billType.expense')}
                         </Badge>
                         {bill.is_shared && bill.share_info && (
                           <Badge size="xs" color="violet" variant="filled">
-                            From {bill.share_info.owner_name}
+                            {t('common.fromOwner', { name: bill.share_info.owner_name })}
                           </Badge>
                         )}
                         {bill.account && (
@@ -464,22 +458,22 @@ export function BillList({
                         )}
                         {!!bill.archived && (
                           <Badge size="xs" color="gray" variant="filled">
-                            Archived
+                            {t('common.archived')}
                           </Badge>
                         )}
                         {!!bill.auto_payment && !bill.archived && (
                           <Badge size="xs" color="green" variant="light">
-                            Auto-pay
+                            {t('common.autoPay')}
                           </Badge>
                         )}
                         {bill.reminder_enabled === false && !bill.archived && (
                           <Badge size="xs" color="gray" variant="light">
-                            Reminders off
+                            {t('billList.reminderOff')}
                           </Badge>
                         )}
                         {bill.is_shared && bill.share_info?.my_portion_paid && (
                           <Badge size="xs" color="green" variant="filled">
-                            My portion paid
+                            {t('billList.myPortionPaid')}
                           </Badge>
                         )}
                       </Group>
@@ -489,7 +483,7 @@ export function BillList({
                 <Table.Td>
                   {bill.varies ? (
                     <Text c={bill.type === 'deposit' ? 'green' : 'red'}>
-                      Varies{' '}
+                      {t('common.varies')}{' '}
                       <Text span size="xs">
                         (~{formatCurrency(bill.avg_amount || 0)})
                       </Text>
@@ -501,7 +495,7 @@ export function BillList({
                       </Text>
                       {bill.is_shared && bill.share_info?.my_portion !== null && bill.share_info?.my_portion !== undefined && (
                         <Text size="xs" c="dimmed">
-                          My portion: {formatCurrency(bill.share_info.my_portion)}
+                          {t('billList.myPortion', { amount: formatCurrency(bill.share_info.my_portion) })}
                         </Text>
                       )}
                     </>
@@ -509,18 +503,18 @@ export function BillList({
                 </Table.Td>
                 <Table.Td>
                   <Badge color={getDueBadgeColor(bill.next_due)} variant="light">
-                    {formatDate(bill.next_due)}
+                    {formatDateString(bill.next_due)}
                   </Badge>
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm" c="dimmed">
-                    {getFrequencyText(bill)}
+                    {getFrequencyText(bill, t)}
                   </Text>
                 </Table.Td>
                 {isAllBucketsMode && (
                   <Table.Td>
                     <Badge size="sm" variant="outline" color="gray">
-                      {bill.database_name || 'Unknown'}
+                      {bill.database_name || t('billList.unknownBucket')}
                     </Badge>
                   </Table.Td>
                 )}
@@ -532,7 +526,7 @@ export function BillList({
                           variant="subtle"
                           color="blue"
                           onClick={() => onEdit(bill)}
-                          title="Edit"
+                          title={t('common.actions.edit')}
                         >
                           <IconEdit size={18} />
                         </ActionIcon>
@@ -540,7 +534,7 @@ export function BillList({
                           variant="filled"
                           color="green"
                           onClick={() => onPay(bill)}
-                          title="Pay"
+                          title={t('common.actions.pay')}
                         >
                           <IconCash size={18} />
                         </ActionIcon>
@@ -551,7 +545,7 @@ export function BillList({
                         variant={bill.share_info.my_portion_paid ? 'light' : 'filled'}
                         color="green"
                         onClick={() => setConfirmPayBill(bill)}
-                        title={bill.share_info.my_portion_paid ? 'Mark as unpaid' : 'Mark my portion as paid'}
+                        title={bill.share_info.my_portion_paid ? t('common.markAsUnpaid') : t('common.markMyPortionPaid')}
                       >
                         <IconCash size={18} />
                       </ActionIcon>
@@ -579,7 +573,7 @@ export function BillList({
       <Modal
         opened={!!confirmPayBill}
         onClose={() => setConfirmPayBill(null)}
-        title={confirmPayBill?.share_info?.my_portion_paid ? 'Mark as Unpaid' : 'Confirm Payment'}
+        title={confirmPayBill?.share_info?.my_portion_paid ? t('billList.markUnpaidTitle') : t('billList.confirmPaymentTitle')}
         centered
         size="sm"
       >
@@ -587,27 +581,27 @@ export function BillList({
           <Stack gap="md">
             <Text>
               {confirmPayBill.share_info.my_portion_paid
-                ? `Mark your portion of "${confirmPayBill.name}" as unpaid?`
-                : `Confirm that you have paid your portion of "${confirmPayBill.name}"?`}
+                ? t('billList.confirmMarkUnpaid', { name: confirmPayBill.name })
+                : t('billList.confirmMarkPaid', { name: confirmPayBill.name })}
             </Text>
             {!confirmPayBill.share_info.my_portion_paid && confirmPayBill.share_info.my_portion !== null && (
               <Paper p="md" withBorder bg="gray.0">
                 <Group justify="space-between">
-                  <Text size="sm" c="dimmed">Your portion:</Text>
+                  <Text size="sm" c="dimmed">{t('billList.yourPortion')}</Text>
                   <Text fw={600} size="lg">{formatCurrency(confirmPayBill.share_info.my_portion)}</Text>
                 </Group>
               </Paper>
             )}
             <Group justify="flex-end" gap="sm">
               <Button variant="default" onClick={() => setConfirmPayBill(null)}>
-                Cancel
+                {t('common.actions.cancel')}
               </Button>
               <Button
                 color={confirmPayBill.share_info.my_portion_paid ? 'orange' : 'green'}
                 onClick={() => handleMarkPaid(confirmPayBill)}
                 loading={paymentLoading}
               >
-                {confirmPayBill.share_info.my_portion_paid ? 'Mark Unpaid' : 'Confirm Paid'}
+                {confirmPayBill.share_info.my_portion_paid ? t('billList.markUnpaidButton') : t('billList.confirmPaidButton')}
               </Button>
             </Group>
           </Stack>

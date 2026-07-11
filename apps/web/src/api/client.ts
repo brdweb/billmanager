@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import type { AxiosRequestConfig } from 'axios';
+import i18n from '../i18n';
 import { TokenStorage } from '../utils/tokenStorage';
 
 const api = axios.create({
@@ -57,38 +58,38 @@ function getErrorMessage(error: AxiosError): string {
 
   // Network errors
   if (error.code === 'ECONNABORTED') {
-    return 'Request timed out. Please check your connection and try again.';
+    return i18n.t('apiErrors.timeout');
   }
   if (!error.response) {
-    return 'Unable to connect to server. Please check your internet connection.';
+    return i18n.t('apiErrors.offline');
   }
 
   // HTTP status code based messages
   switch (status) {
     case 400:
-      return 'Invalid request. Please check your input and try again.';
+      return i18n.t('apiErrors.badRequest');
     case 401:
-      return 'Your session has expired. Please log in again.';
+      return i18n.t('apiErrors.unauthorized');
     case 403:
-      return 'You do not have permission to perform this action.';
+      return i18n.t('apiErrors.forbidden');
     case 404:
-      return 'The requested resource was not found.';
+      return i18n.t('apiErrors.notFound');
     case 405:
-      return 'This operation is not allowed. Please contact support if this persists.';
+      return i18n.t('apiErrors.notAllowed');
     case 409:
-      return 'This action conflicts with existing data.';
+      return i18n.t('apiErrors.conflict');
     case 422:
-      return 'The provided data is invalid. Please check your input.';
+      return i18n.t('apiErrors.invalidData');
     case 429:
-      return 'Too many requests. Please wait a moment and try again.';
+      return i18n.t('apiErrors.rateLimited');
     case 500:
-      return 'Server error. Please try again later.';
+      return i18n.t('apiErrors.server');
     case 502:
     case 503:
     case 504:
-      return 'Service temporarily unavailable. Please try again later.';
+      return i18n.t('apiErrors.unavailable');
     default:
-      return 'An unexpected error occurred. Please try again.';
+      return i18n.t('apiErrors.unexpected');
   }
 }
 
@@ -166,7 +167,7 @@ const unwrap = async <T>(promise: Promise<{ data: ApiResponse<T> }>) => {
   const apiResponse = response.data;
 
   if (!apiResponse.success) {
-    throw new Error(apiResponse.error || 'API request failed');
+    throw new Error(apiResponse.error || i18n.t('apiErrors.requestFailed'));
   }
 
   return apiResponse.data as T;
@@ -388,7 +389,7 @@ export const getInviteInfo = async (token: string) => {
     `/invite-info?token=${encodeURIComponent(token)}`
   );
   if (!response.data.success) {
-    throw new Error(response.data.error || 'Failed to get invitation info');
+    throw new Error(response.data.error || i18n.t('apiErrors.invitationLoadFailed'));
   }
   return response.data.data!;
 };
@@ -399,7 +400,7 @@ export const acceptInvite = async (token: string, username: string, password: st
     { token, username, password }
   );
   if (!response.data.success) {
-    throw new Error(response.data.error || 'Failed to accept invitation');
+    throw new Error(response.data.error || i18n.t('apiErrors.invitationAcceptFailed'));
   }
   return response.data.data!;
 };
@@ -960,7 +961,7 @@ export const oauthCallback = async (provider: string, code: string, state: strin
 
   const apiResponse = response.data;
   if (!apiResponse.success) {
-    throw new Error(apiResponse.error || 'OAuth callback failed');
+    throw new Error(apiResponse.error || i18n.t('apiErrors.oauthCallbackFailed'));
   }
 
   const result = apiResponse.data as OAuthCallbackResponse;
@@ -1091,7 +1092,7 @@ export const loginWith2FA = async (username: string, password: string): Promise<
     }
 
     if (!apiResponse.success) {
-      throw new Error(apiResponse.error || 'Login failed');
+      throw new Error(apiResponse.error || i18n.t('apiErrors.loginFailed'));
     }
 
     const result = apiResponse.data as LoginResponse;

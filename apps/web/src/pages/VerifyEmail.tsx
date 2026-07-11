@@ -11,9 +11,11 @@ import {
   Center,
 } from '@mantine/core';
 import { IconCheck, IconX } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 
 export function VerifyEmail() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
@@ -22,7 +24,7 @@ export function VerifyEmail() {
   useEffect(() => {
     if (!token) {
       setStatus('error');
-      setMessage('Invalid verification link. No token provided.');
+      setMessage(t('verifyEmailPage.invalidLink'));
       return;
     }
 
@@ -31,20 +33,20 @@ export function VerifyEmail() {
         const response = await api.verifyEmail(token);
         if (response.success) {
           setStatus('success');
-          setMessage(response.message || 'Your email has been verified!');
+          setMessage(response.message || t('verifyEmailPage.verifiedDefault'));
         } else {
           setStatus('error');
-          setMessage(response.error || 'Verification failed');
+          setMessage(response.error || t('verifyEmailPage.verificationFailedDefault'));
         }
       } catch (err: unknown) {
         const error = err as { response?: { data?: { error?: string } } };
         setStatus('error');
-        setMessage(error.response?.data?.error || 'Verification failed. The link may have expired.');
+        setMessage(error.response?.data?.error || t('verifyEmailPage.verificationFailedExpired'));
       }
     };
 
     verify();
-  }, [token]);
+  }, [token, t]);
 
   return (
     <Container size={420} my={40}>
@@ -53,7 +55,7 @@ export function VerifyEmail() {
           <Center py="xl">
             <Stack align="center" gap="md">
               <Loader size="lg" />
-              <Text>Verifying your email...</Text>
+              <Text>{t('verifyEmailPage.verifyingEmail')}</Text>
             </Stack>
           </Center>
         )}
@@ -61,13 +63,13 @@ export function VerifyEmail() {
         {status === 'success' && (
           <Stack align="center" gap="md">
             <IconCheck size={64} color="var(--mantine-color-green-6)" />
-            <Title order={2} ta="center">Email Verified!</Title>
+            <Title order={2} ta="center">{t('verifyEmailPage.emailVerifiedTitle')}</Title>
             <Text c="dimmed" ta="center">{message}</Text>
             <Text ta="center">
-              Your account is now active. You can start using BillManager to track your bills and income.
+              {t('verifyEmailPage.accountActiveBody')}
             </Text>
             <Button component={Link} to="/login" fullWidth>
-              Sign In
+              {t('loginPage.signIn')}
             </Button>
           </Stack>
         )}
@@ -75,17 +77,17 @@ export function VerifyEmail() {
         {status === 'error' && (
           <Stack align="center" gap="md">
             <IconX size={64} color="var(--mantine-color-red-6)" />
-            <Title order={2} ta="center">Verification Failed</Title>
+            <Title order={2} ta="center">{t('verifyEmailPage.verificationFailedTitle')}</Title>
             <Text c="dimmed" ta="center">{message}</Text>
             <Text size="sm" ta="center">
-              If your verification link has expired, you can request a new one.
+              {t('verifyEmailPage.expiredNotice')}
             </Text>
             <Stack w="100%" gap="xs">
               <Button component={Link} to="/resend-verification" variant="light" fullWidth>
-                Resend Verification Email
+                {t('resendVerificationPage.resendButton')}
               </Button>
               <Button component={Link} to="/login" variant="subtle" fullWidth>
-                Back to Login
+                {t('loginPage.backToLogin')}
               </Button>
             </Stack>
           </Stack>

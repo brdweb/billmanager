@@ -46,6 +46,27 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.3.0',
+    date: '2026-07-10',
+    title: 'Internationalization and Self-Hosted Flexibility',
+    sections: [
+      {
+        heading: 'New Features',
+        items: [
+          'Choose English or German in Settings; interface text, dates, exports, and print output follow your selected language',
+          'Self-hosted deployments can set DEFAULT_CURRENCY and DEFAULT_LOCALE to format amounts for their region',
+        ],
+      },
+      {
+        heading: 'Improvements',
+        items: [
+          'Reminder alerts now sit at the lower-right and hide while their slide-out drawer is open',
+          'Web and mobile libraries, Python tooling, and supported Node.js and PostgreSQL runtimes were refreshed',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.2.2',
     date: '2026-07-08',
     title: 'Analytics Workspace and Performance Update',

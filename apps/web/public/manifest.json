@@ -1,6 +1,7 @@
 {
   "name": "BillManager",
   "short_name": "BillManager",
+  "lang": "en",
   "description": "Track your bills and income with ease",
   "start_url": "/",
   "display": "standalone",

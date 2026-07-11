@@ -1,5 +1,6 @@
 import { Paper, Text, Group, SimpleGrid, ThemeIcon, Stack } from '@mantine/core';
 import { IconReceipt, IconCalendar, IconAlertTriangle, IconCoin } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import type { Bill } from '../../api/client';
 import { formatCurrency } from '../../lib/currency';
 
@@ -10,6 +11,8 @@ interface StatCardsProps {
 }
 
 export function StatCards({ bills, monthlyPaid, onStatClick }: StatCardsProps) {
+  const { t } = useTranslation();
+
   // Get today's date at midnight for comparison
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -60,7 +63,7 @@ export function StatCards({ bills, monthlyPaid, onStatClick }: StatCardsProps) {
         <Group justify="space-between">
           <div>
             <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-              Total Bills
+              {t('dashboard.statCards.totalBills')}
             </Text>
             <Text fw={700} size="xl">
               {totalBills}
@@ -76,7 +79,7 @@ export function StatCards({ bills, monthlyPaid, onStatClick }: StatCardsProps) {
         <Group justify="space-between">
           <div>
             <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-              Due This Week
+              {t('dashboard.statCards.dueThisWeek')}
             </Text>
             <Text fw={700} size="xl">
               {dueThisWeek}
@@ -92,7 +95,7 @@ export function StatCards({ bills, monthlyPaid, onStatClick }: StatCardsProps) {
         <Group justify="space-between">
           <div>
             <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-              Overdue
+              {t('dashboard.statCards.overdue')}
             </Text>
             <Text fw={700} size="xl" c={overdue > 0 ? 'red' : undefined}>
               {overdue}
@@ -108,15 +111,15 @@ export function StatCards({ bills, monthlyPaid, onStatClick }: StatCardsProps) {
         <Group justify="space-between" align="flex-start">
           <Stack gap={2}>
             <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-              Monthly Total
+              {t('dashboard.statCards.monthlyTotal')}
             </Text>
             <Text fw={700} size="xl" c="green">
               {formatCurrency(monthlyTotal)}
             </Text>
             <Group gap="xs">
-              <Text size="xs" c="green.6" fw={500}>{formatCurrency(monthlyPaid)} paid</Text>
+              <Text size="xs" c="green.6" fw={500}>{t('dashboard.statCards.paid', { amount: formatCurrency(monthlyPaid) })}</Text>
               <Text size="xs" c="dimmed">|</Text>
-              <Text size="xs" c="orange.6" fw={500}>{formatCurrency(monthlyRemaining)} remaining</Text>
+              <Text size="xs" c="orange.6" fw={500}>{t('dashboard.statCards.remaining', { amount: formatCurrency(monthlyRemaining) })}</Text>
             </Group>
           </Stack>
           <ThemeIcon color="green" variant="light" size="lg" radius="md">

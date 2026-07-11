@@ -20,10 +20,12 @@ import {
   IconKey,
   IconLifebuoy,
 } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../api/client';
 
 export function TwoFactorVerify() {
+  const { t } = useTranslation();
   const { pending2FA, complete2FA, cancel2FA } = useAuth();
 
   const [method, setMethod] = useState<string>(
@@ -64,7 +66,7 @@ export function TwoFactorVerify() {
       await api.request2FAChallenge(pending2FA.sessionToken, 'email_otp');
       setCodeSent(true);
     } catch {
-      setError('Failed to send verification code. Please try again.');
+      setError(t('twoFactorVerifyPage.sendCodeFailedRetry'));
     } finally {
       setSendingCode(false);
     }
@@ -78,21 +80,21 @@ export function TwoFactorVerify() {
 
       if (method === 'email_otp') {
         if (!code || code.length !== 6) {
-          setError('Please enter the 6-digit code');
+          setError(t('twoFactorVerifyPage.enterCode'));
           setLoading(false);
           return;
         }
         payload = { code };
       } else if (method === 'recovery') {
         if (!recoveryCode.trim()) {
-          setError('Please enter a recovery code');
+          setError(t('twoFactorVerifyPage.enterRecoveryCode'));
           setLoading(false);
           return;
         }
         payload = { recovery_code: recoveryCode.trim() };
       } else if (method === 'passkey') {
         if (!window.PublicKeyCredential || !navigator.credentials) {
-          setError('Passkeys are not supported by this browser/device');
+          setError(t('twoFactorSettings.passkeysNotSupported'));
           setLoading(false);
           return;
         }
@@ -113,7 +115,7 @@ export function TwoFactorVerify() {
         })) as PublicKeyCredential | null;
 
         if (!assertion) {
-          setError('No passkey credential selected');
+          setError(t('twoFactorVerifyPage.noCredentialSelected'));
           setLoading(false);
           return;
         }
@@ -137,11 +139,11 @@ export function TwoFactorVerify() {
 
       const result = await complete2FA(method, payload);
       if (!result.success) {
-        setError(result.error || 'Verification failed');
+        setError(result.error || t('verifyEmailPage.verificationFailedDefault'));
       }
       // On success, AuthContext will update state and trigger navigation
     } catch {
-      setError('Verification failed. Please try again.');
+      setError(t('twoFactorVerifyPage.verificationFailedRetry'));
     } finally {
       setLoading(false);
     }
@@ -149,13 +151,13 @@ export function TwoFactorVerify() {
 
   const methodOptions = [];
   if (pending2FA.methods.includes('email_otp')) {
-    methodOptions.push({ label: 'Email Code', value: 'email_otp' });
+    methodOptions.push({ label: t('twoFactorVerifyPage.emailCodeOption'), value: 'email_otp' });
   }
   if (pending2FA.methods.includes('passkey')) {
-    methodOptions.push({ label: 'Passkey', value: 'passkey' });
+    methodOptions.push({ label: t('twoFactorVerifyPage.passkeyOption'), value: 'passkey' });
   }
   if (pending2FA.methods.includes('recovery')) {
-    methodOptions.push({ label: 'Recovery', value: 'recovery' });
+    methodOptions.push({ label: t('twoFactorVerifyPage.recoveryOption'), value: 'recovery' });
   }
 
   return (
@@ -172,9 +174,9 @@ export function TwoFactorVerify() {
         <Paper withBorder shadow="xl" p={30} radius="md">
           <Stack gap="lg" align="center">
             <IconShieldCheck size={48} color="var(--mantine-color-green-6)" />
-            <Title order={2} ta="center">Two-Factor Authentication</Title>
+            <Title order={2} ta="center">{t('twoFactorSettings.title')}</Title>
             <Text c="dimmed" size="sm" ta="center">
-              Your account is protected with 2FA. Please verify your identity.
+              {t('twoFactorVerifyPage.subtitle')}
             </Text>
 
             {methodOptions.length > 1 && (
@@ -201,12 +203,12 @@ export function TwoFactorVerify() {
                     onClick={handleSendCode}
                     loading={sendingCode}
                   >
-                    Send Code to Email
+                    {t('twoFactorVerifyPage.sendCodeButton')}
                   </Button>
                 ) : (
                   <>
                     <Text size="sm" c="dimmed" ta="center">
-                      Enter the 6-digit code sent to your email
+                      {t('twoFactorVerifyPage.enterCodeSentBody')}
                     </Text>
                     <PinInput
                       length={6}
@@ -222,7 +224,7 @@ export function TwoFactorVerify() {
                       loading={loading}
                       disabled={code.length !== 6}
                     >
-                      Verify Code
+                      {t('twoFactorVerifyPage.verifyCodeButton')}
                     </Button>
                     <Anchor
                       component="button"
@@ -230,7 +232,7 @@ export function TwoFactorVerify() {
                       ta="center"
                       onClick={handleSendCode}
                     >
-                      Resend code
+                      {t('twoFactorVerifyPage.resendCode')}
                     </Anchor>
                   </>
                 )}
@@ -240,7 +242,7 @@ export function TwoFactorVerify() {
             {method === 'passkey' && (
               <Stack gap="md" w="100%">
                 <Text size="sm" c="dimmed" ta="center">
-                  Use your passkey to verify your identity.
+                  {t('twoFactorVerifyPage.usePasskeyBody')}
                 </Text>
                 <Button
                   fullWidth
@@ -248,7 +250,7 @@ export function TwoFactorVerify() {
                   onClick={handleVerify}
                   loading={loading}
                 >
-                  Use Passkey
+                  {t('twoFactorVerifyPage.usePasskeyButton')}
                 </Button>
               </Stack>
             )}
@@ -256,11 +258,11 @@ export function TwoFactorVerify() {
             {method === 'recovery' && (
               <Stack gap="md" w="100%">
                 <Text size="sm" c="dimmed" ta="center">
-                  Enter one of your recovery codes
+                  {t('twoFactorVerifyPage.enterRecoveryCodeBody')}
                 </Text>
                 <TextInput
                   leftSection={<IconLifebuoy size={16} />}
-                  placeholder="XXXXXXXX"
+                  placeholder={t('twoFactorVerifyPage.recoveryCodePlaceholder')}
                   value={recoveryCode}
                   onChange={(e) => setRecoveryCode(e.currentTarget.value)}
                   styles={{ input: { textTransform: 'uppercase', letterSpacing: '2px', fontFamily: 'monospace' } }}
@@ -271,13 +273,13 @@ export function TwoFactorVerify() {
                   loading={loading}
                   disabled={!recoveryCode.trim()}
                 >
-                  Verify Recovery Code
+                  {t('twoFactorVerifyPage.verifyRecoveryButton')}
                 </Button>
               </Stack>
             )}
 
             <Anchor component="button" size="sm" onClick={cancel2FA}>
-              Cancel and go back
+              {t('twoFactorVerifyPage.cancelGoBack')}
             </Anchor>
           </Stack>
         </Paper>

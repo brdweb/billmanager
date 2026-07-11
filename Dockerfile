@@ -12,7 +12,7 @@ COPY apps/web/ ./
 RUN npm run build && ls -la dist/ && test -f dist/index.html
 
 # Stage 2: Python backend with built frontend
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 

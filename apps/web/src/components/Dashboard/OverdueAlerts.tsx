@@ -1,5 +1,6 @@
 import { Paper, Text, Group, Button, Stack, Box, Alert } from '@mantine/core';
 import { IconAlertTriangle, IconCoin } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import type { Bill } from '../../api/client';
 import { formatCurrency } from '../../lib/currency';
 
@@ -9,6 +10,8 @@ interface OverdueAlertsProps {
 }
 
 export function OverdueAlerts({ bills, onPay }: OverdueAlertsProps) {
+  const { t } = useTranslation();
+
   // Get today's date at midnight
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -46,7 +49,7 @@ export function OverdueAlerts({ bills, onPay }: OverdueAlertsProps) {
       color="red"
       variant="light"
       icon={<IconAlertTriangle size={20} />}
-      title={`${overdueBills.length} Overdue Bill${overdueBills.length > 1 ? 's' : ''}`}
+      title={t('dashboard.overdueAlerts.title', { count: overdueBills.length })}
     >
       <Stack gap="xs" mt="sm">
         {overdueBills.slice(0, 5).map((bill) => {
@@ -61,7 +64,7 @@ export function OverdueAlerts({ bills, onPay }: OverdueAlertsProps) {
                     {bill.name}
                   </Text>
                   <Text size="xs" c="red">
-                    {daysOverdue} day{daysOverdue > 1 ? 's' : ''} overdue - {formatCurrency(amount)}
+                    {t('dashboard.overdueAlerts.daysOverdue', { count: daysOverdue, amount: formatCurrency(amount) })}
                   </Text>
                 </Box>
                 <Button
@@ -71,7 +74,7 @@ export function OverdueAlerts({ bills, onPay }: OverdueAlertsProps) {
                   leftSection={<IconCoin size={14} />}
                   onClick={() => onPay(bill)}
                 >
-                  Pay Now
+                  {t('common.actions.payNow')}
                 </Button>
               </Group>
             </Paper>
@@ -79,7 +82,7 @@ export function OverdueAlerts({ bills, onPay }: OverdueAlertsProps) {
         })}
         {overdueBills.length > 5 && (
           <Text size="xs" c="dimmed" ta="center">
-            + {overdueBills.length - 5} more overdue bills
+            {t('dashboard.overdueAlerts.moreOverdue', { count: overdueBills.length - 5 })}
           </Text>
         )}
       </Stack>

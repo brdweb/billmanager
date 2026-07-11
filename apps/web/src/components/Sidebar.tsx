@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Stack, Title, Text, Group, Badge, Divider, NavLink } from '@mantine/core';
 import { IconCalendar, IconHome, IconReceipt, IconChartPie, IconListDetails, IconShare } from '@tabler/icons-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import type { Bill } from '../api/client';
 import type { BillFilter, DateRangeFilter } from '../App';
 
@@ -13,6 +14,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ bills, isLoggedIn, filter, onFilterChange }: SidebarProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -87,42 +89,42 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange }: SidebarPr
       {isLoggedIn && (
         <>
           <NavLink
-            label="Dashboard"
+            label={t('sidebar.navDashboard')}
             leftSection={<IconHome size={16} />}
             active={location.pathname === '/'}
             onClick={() => navigate('/')}
             variant="light"
           />
           <NavLink
-            label="Bills"
+            label={t('sidebar.navBills')}
             leftSection={<IconReceipt size={16} />}
             active={location.pathname === '/bills'}
             onClick={() => navigate('/bills')}
             variant="light"
           />
           <NavLink
-            label="Payment History"
+            label={t('sidebar.navPaymentHistory')}
             leftSection={<IconListDetails size={16} />}
             active={location.pathname === '/all-payments'}
             onClick={() => navigate('/all-payments')}
             variant="light"
           />
           <NavLink
-            label="Calendar"
+            label={t('sidebar.navCalendar')}
             leftSection={<IconCalendar size={16} />}
             active={location.pathname === '/calendar'}
             onClick={() => navigate('/calendar')}
             variant="light"
           />
           <NavLink
-            label="Analytics"
+            label={t('sidebar.navAnalytics')}
             leftSection={<IconChartPie size={16} />}
             active={location.pathname === '/analytics'}
             onClick={() => navigate('/analytics')}
             variant="light"
           />
           <NavLink
-            label="Settlements"
+            label={t('sidebar.navSettlements')}
             leftSection={<IconShare size={16} />}
             active={location.pathname === '/settlements'}
             onClick={() => navigate('/settlements')}
@@ -135,7 +137,7 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange }: SidebarPr
       <Title order={6}>
         <Group gap="xs">
           <IconCalendar size={14} />
-          Upcoming Bills
+          {t('sidebar.upcomingBillsTitle')}
         </Group>
       </Title>
 
@@ -147,7 +149,7 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange }: SidebarPr
             onClick={() => handleDateRangeClick('overdue')}
           >
             <Text size="sm" fw={isRangeActive('overdue') ? 700 : 400} c="red">
-              Overdue
+              {t('dashboard.statCards.overdue')}
             </Text>
             <Badge
               color="red"
@@ -165,7 +167,7 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange }: SidebarPr
           onClick={() => handleDateRangeClick('thisWeek')}
         >
           <Text size="sm" fw={isRangeActive('thisWeek') ? 700 : 400}>
-            This week
+            {t('sidebar.thisWeek')}
           </Text>
           <Badge
             color="red"
@@ -182,7 +184,7 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange }: SidebarPr
           onClick={() => handleDateRangeClick('nextWeek')}
         >
           <Text size="sm" fw={isRangeActive('nextWeek') ? 700 : 400}>
-            Next week
+            {t('sidebar.nextWeek')}
           </Text>
           <Badge
             color="orange"
@@ -199,7 +201,7 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange }: SidebarPr
           onClick={() => handleDateRangeClick('next21Days')}
         >
           <Text size="sm" fw={isRangeActive('next21Days') ? 700 : 400}>
-            Next 21 days
+            {t('sidebar.next21Days')}
           </Text>
           <Badge
             color="yellow"
@@ -216,7 +218,7 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange }: SidebarPr
           onClick={() => handleDateRangeClick('next30Days')}
         >
           <Text size="sm" fw={isRangeActive('next30Days') ? 700 : 400}>
-            Next 30 days
+            {t('sidebar.next30Days')}
           </Text>
           <Badge
             color="blue"

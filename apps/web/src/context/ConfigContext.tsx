@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import * as api from '../api/client';
 import { setCurrencyConfig } from '../lib/currency';
+import i18n, { applyLocaleDefault } from '../i18n';
 
 export interface OAuthProviderInfo {
   id: string;
@@ -75,12 +76,13 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         response.default_locale ?? 'en-US',
         response.default_currency ?? 'USD'
       );
+      applyLocaleDefault(response.default_locale ?? 'en-US');
       setError(null);
     } catch (err) {
       console.error('Failed to fetch app config:', err);
       // Fall back to default config on error
       setConfig(defaultConfig);
-      setError('Failed to load configuration');
+      setError(i18n.t('apiErrors.configLoadFailed'));
     } finally {
       setLoading(false);
     }

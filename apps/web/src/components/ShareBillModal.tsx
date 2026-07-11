@@ -16,10 +16,31 @@ import {
   Autocomplete,
 } from '@mantine/core';
 import { IconShare, IconTrash, IconAlertCircle, IconCheck, IconEdit } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import * as api from '../api/client';
 import type { Bill, BillShare, UserSearchResult } from '../api/client';
 import { useConfig } from '../context/ConfigContext';
-import { formatCurrency, getCurrencySymbol } from '../lib/currency';
+import {
+  formatCurrency,
+  getCurrencyInputPlaceholder,
+  getCurrencyInputProps,
+} from '../lib/currency';
+
+function getStatusLabel(status: string, t: TFunction): string {
+  switch (status) {
+    case 'accepted':
+      return t('shareBillModal.status.accepted');
+    case 'pending':
+      return t('shareBillModal.status.pending');
+    case 'declined':
+      return t('shareBillModal.status.declined');
+    case 'revoked':
+      return t('shareBillModal.status.revoked');
+    default:
+      return status;
+  }
+}
 
 interface ShareBillModalProps {
   opened: boolean;
@@ -28,6 +49,7 @@ interface ShareBillModalProps {
 }
 
 export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
+  const { t } = useTranslation();
   const { config } = useConfig();
   const isSaas = config?.deployment_mode === 'saas';
 
@@ -99,7 +121,7 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
 
   const handleShare = async () => {
     if (!bill || !identifier.trim()) {
-      setError('Please enter a username' + (isSaas ? ' or email' : ''));
+      setError(isSaas ? t('shareBillModal.errorUsernameOrEmail') : t('shareBillModal.errorUsername'));
       return;
     }
 
@@ -121,7 +143,7 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
       loadShares();
     } catch (err) {
       const error = err as { message?: string };
-      setError(error.message || 'Failed to share bill');
+      setError(error.message || t('shareBillModal.shareFailedDefault'));
     } finally {
       setLoading(false);
     }
@@ -133,7 +155,7 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
       loadShares();
     } catch (err) {
       const error = err as { message?: string };
-      setError(error.message || 'Failed to revoke share');
+      setError(error.message || t('shareBillModal.revokeFailedDefault'));
     }
   };
 
@@ -161,14 +183,14 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
         split_type: editSplitType,
         split_value: editSplitValue ?? null,
       });
-      setSuccess('Split configuration updated');
+      setSuccess(t('shareBillModal.splitUpdated'));
       setEditingShareId(null);
       setEditSplitType(null);
       setEditSplitValue(undefined);
       loadShares();
     } catch (err) {
       const error = err as { message?: string };
-      setError(error.message || 'Failed to update share');
+      setError(error.message || t('shareBillModal.updateFailedDefault'));
     } finally {
       setLoading(false);
     }
@@ -207,7 +229,7 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
       title={
         <Group gap="xs">
           <IconShare size={20} />
-          <Text fw={600}>Share Bill: {bill?.name}</Text>
+          <Text fw={600}>{t('shareBillModal.titlePrefix', { name: bill?.name })}</Text>
         </Group>
       }
       size="md"
@@ -229,46 +251,46 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
         <Paper withBorder p="sm">
           <Stack gap="xs">
             <Text size="sm" fw={500}>
-              Share with another user
+              {t('shareBillModal.shareWithUser')}
             </Text>
 
             {isSaas ? (
               <TextInput
-                label="Email address"
-                placeholder="roommate@example.com"
+                label={t('shareBillModal.emailLabel')}
+                placeholder={t('shareBillModal.emailPlaceholder')}
                 value={identifier}
                 onChange={(e) => setIdentifier(e.currentTarget.value)}
-                description="They'll receive an email invitation"
+                description={t('shareBillModal.emailDescription')}
               />
             ) : (
               <Autocomplete
-                label="Username"
-                placeholder="Search for a user..."
+                label={t('shareBillModal.usernameLabel')}
+                placeholder={t('shareBillModal.usernamePlaceholder')}
                 value={identifier}
                 onChange={handleSearch}
                 data={searchResults.map((u) => u.username)}
                 rightSection={searchLoading ? <Loader size="xs" /> : null}
-                description="Start typing to search for users"
+                description={t('shareBillModal.usernameDescription')}
               />
             )}
 
             <Select
-              label="Split type"
-              placeholder="No split (full amount)"
+              label={t('shareBillModal.splitTypeLabel')}
+              placeholder={t('shareBillModal.splitTypePlaceholder')}
               value={splitType}
               onChange={setSplitType}
               data={[
-                { value: 'equal', label: 'Equal (50/50)' },
-                { value: 'percentage', label: 'Percentage' },
-                { value: 'fixed', label: 'Fixed amount' },
+                { value: 'equal', label: t('shareBillModal.splitTypeEqual') },
+                { value: 'percentage', label: t('shareBillModal.splitTypePercentage') },
+                { value: 'fixed', label: t('shareBillModal.splitTypeFixed') },
               ]}
               clearable
-              description="How to split this bill"
+              description={t('shareBillModal.splitTypeDescription')}
             />
 
             {splitType === 'percentage' && (
               <NumberInput
-                label="Their percentage"
+                label={t('shareBillModal.theirPercentageLabel')}
                 placeholder="50"
                 value={splitValue}
                 onChange={(val) => setSplitValue(typeof val === 'number' ? val : undefined)}
@@ -280,19 +302,18 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
 
             {splitType === 'fixed' && (
               <NumberInput
-                label="Their fixed amount"
-                placeholder="0.00"
+                label={t('shareBillModal.theirFixedLabel')}
+                placeholder={getCurrencyInputPlaceholder()}
                 value={splitValue}
                 onChange={(val) => setSplitValue(typeof val === 'number' ? val : undefined)}
                 min={0}
-                decimalScale={2}
-                prefix={getCurrencySymbol()}
+                {...getCurrencyInputProps()}
               />
             )}
 
             {portion !== null && bill?.amount && (
               <Text size="sm" c="dimmed">
-                Their portion: {formatCurrency(portion)} of {formatCurrency(bill.amount)}
+                {t('shareBillModal.theirPortion', { portion: formatCurrency(portion), total: formatCurrency(bill.amount) })}
               </Text>
             )}
 
@@ -302,7 +323,7 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
               loading={loading}
               disabled={!identifier.trim()}
             >
-              Share Bill
+              {t('shareBillModal.shareBillButton')}
             </Button>
           </Stack>
         </Paper>
@@ -316,7 +337,7 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
           <Paper withBorder p="sm">
             <Stack gap="xs">
               <Text size="sm" fw={500}>
-                Currently shared with
+                {t('shareBillModal.currentlySharedWith')}
               </Text>
               {shares.map((share) => (
                 <div key={share.id}>
@@ -326,19 +347,19 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
                       <Group gap="xs">
                         <Text size="sm" fw={500}>{share.shared_with}</Text>
                         <Badge size="xs" color={getStatusColor(share.status)}>
-                          {share.status}
+                          {getStatusLabel(share.status, t)}
                         </Badge>
                       </Group>
 
                       <Select
-                        label="Split type"
-                        placeholder="No split (full amount)"
+                        label={t('shareBillModal.splitTypeLabel')}
+                        placeholder={t('shareBillModal.splitTypePlaceholder')}
                         value={editSplitType}
                         onChange={setEditSplitType}
                         data={[
-                          { value: 'equal', label: 'Equal (50/50)' },
-                          { value: 'percentage', label: 'Percentage' },
-                          { value: 'fixed', label: 'Fixed amount' },
+                          { value: 'equal', label: t('shareBillModal.splitTypeEqual') },
+                          { value: 'percentage', label: t('shareBillModal.splitTypePercentage') },
+                          { value: 'fixed', label: t('shareBillModal.splitTypeFixed') },
                         ]}
                         clearable
                         size="xs"
@@ -346,7 +367,7 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
 
                       {editSplitType === 'percentage' && (
                         <NumberInput
-                          label="Their percentage"
+                          label={t('shareBillModal.theirPercentageLabel')}
                           value={editSplitValue}
                           onChange={(val) => setEditSplitValue(typeof val === 'number' ? val : undefined)}
                           min={0}
@@ -358,22 +379,21 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
 
                       {editSplitType === 'fixed' && (
                         <NumberInput
-                          label="Their fixed amount"
+                          label={t('shareBillModal.theirFixedLabel')}
                           value={editSplitValue}
                           onChange={(val) => setEditSplitValue(typeof val === 'number' ? val : undefined)}
                           min={0}
-                          decimalScale={2}
-                          prefix={getCurrencySymbol()}
+                          {...getCurrencyInputProps()}
                           size="xs"
                         />
                       )}
 
                       <Group gap="xs" justify="flex-end">
                         <Button size="xs" variant="default" onClick={handleCancelEdit}>
-                          Cancel
+                          {t('common.actions.cancel')}
                         </Button>
                         <Button size="xs" onClick={() => handleSaveEdit(share.id)} loading={loading}>
-                          Save
+                          {t('common.actions.save')}
                         </Button>
                       </Group>
                     </Stack>
@@ -383,7 +403,7 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
                       <Group gap="xs">
                         <Text size="sm">{share.shared_with}</Text>
                         <Badge size="xs" color={getStatusColor(share.status)}>
-                          {share.status}
+                          {getStatusLabel(share.status, t)}
                         </Badge>
                         {share.split_type && (
                           <Badge size="xs" variant="light">
@@ -401,7 +421,7 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
                             color="blue"
                             variant="subtle"
                             onClick={() => handleEdit(share)}
-                            title="Edit split configuration"
+                            title={t('shareBillModal.editSplitConfig')}
                           >
                             <IconEdit size={16} />
                           </ActionIcon>
@@ -409,7 +429,7 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
                             color="red"
                             variant="subtle"
                             onClick={() => handleRevoke(share.id)}
-                            title="Revoke share"
+                            title={t('shareBillModal.revokeShare')}
                           >
                             <IconTrash size={16} />
                           </ActionIcon>
@@ -423,7 +443,7 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
           </Paper>
         ) : (
           <Text size="sm" c="dimmed" ta="center">
-            This bill is not shared with anyone yet.
+            {t('shareBillModal.notSharedYet')}
           </Text>
         )}
       </Stack>

@@ -25,13 +25,19 @@ import { BarChart } from '@mantine/charts';
 import { IconSearch, IconX, IconArrowLeft, IconChartBar, IconChevronDown, IconChevronUp, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter, IconArrowUpRight, IconArrowDownRight, IconFilter, IconFilterOff } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { notifications } from '@mantine/notifications';
+import { useTranslation } from 'react-i18next';
 import { getAllPayments, updatePayment, deletePayment } from '../api/client';
 import type { PaymentWithBill } from '../api/client';
 import { BillIcon } from '../components/BillIcon';
 import { IconEdit, IconTrash, IconCheck } from '@tabler/icons-react';
 import { exportPaymentsToCSV, exportPaymentsToPDF, printPayments } from '../utils/export';
 import { parseLocalDate, formatDateString, formatDateForAPI } from '../utils/date';
-import { formatCurrency, formatCurrencyAxis, getCurrencySymbol } from '../lib/currency';
+import {
+  formatCurrency,
+  formatCurrencyAxis,
+  getCurrencyInputProps,
+  getLocale,
+} from '../lib/currency';
 
 interface MonthlyChartData {
   month: string;
@@ -40,6 +46,7 @@ interface MonthlyChartData {
 }
 
 export function AllPayments() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [payments, setPayments] = useState<PaymentWithBill[]>([]);
   const [loading, setLoading] = useState(true);
@@ -195,25 +202,25 @@ export function AllPayments() {
 
     try {
       await updatePayment(editingId, editAmount as number, formatDateForAPI(editDate));
-      notifications.show({ message: 'Payment updated', color: 'green', autoClose: 3000 });
+      notifications.show({ message: t('allPaymentsPage.updateSuccess'), color: 'green', autoClose: 3000 });
       await fetchPayments();
       handleCancelEdit();
     } catch (error) {
       console.error('Failed to update payment:', error);
-      notifications.show({ title: 'Update failed', message: String(error), color: 'red', autoClose: 5000 });
+      notifications.show({ title: t('allPaymentsPage.updateFailedTitle'), message: String(error), color: 'red', autoClose: 5000 });
     }
   };
 
   const handleDelete = async (paymentId: number) => {
-    if (!confirm('Are you sure you want to delete this payment?')) return;
+    if (!confirm(t('paymentHistory.confirmDelete'))) return;
 
     try {
       await deletePayment(paymentId);
-      notifications.show({ message: 'Payment deleted', color: 'green', autoClose: 3000 });
+      notifications.show({ message: t('allPaymentsPage.deleteSuccess'), color: 'green', autoClose: 3000 });
       setPayments((prev) => prev.filter((p) => p.id !== paymentId));
     } catch (error) {
       console.error('Failed to delete payment:', error);
-      notifications.show({ title: 'Delete failed', message: String(error), color: 'red', autoClose: 5000 });
+      notifications.show({ title: t('allPaymentsPage.deleteFailedTitle'), message: String(error), color: 'red', autoClose: 5000 });
     }
   };
 
@@ -240,7 +247,7 @@ export function AllPayments() {
         const date = new Date(parseInt(year), parseInt(m) - 1, 1);
         return {
           month,
-          label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+          label: date.toLocaleDateString(getLocale(), { month: 'short', year: '2-digit' }),
           total,
         };
       });
@@ -253,40 +260,40 @@ export function AllPayments() {
           <ActionIcon variant="subtle" size="lg" onClick={() => navigate('/')}>
             <IconArrowLeft size={20} />
           </ActionIcon>
-          <Title order={2}>All Payments</Title>
+          <Title order={2}>{t('allPaymentsPage.title')}</Title>
         </Group>
         <Group gap="sm">
           <Badge size="lg" variant="light">
-            {filteredPayments.length} payments · {formatCurrency(totalAmount)} total
+            {t('allPaymentsPage.summaryBadge', { count: filteredPayments.length, amount: formatCurrency(totalAmount) })}
           </Badge>
           <Menu shadow="md" width={200}>
             <Menu.Target>
               <Button variant="light" leftSection={<IconDownload size={16} />} size="sm">
-                Export
+                {t('billList.export')}
               </Button>
             </Menu.Target>
             <Menu.Dropdown>
-              <Menu.Label>Export payments</Menu.Label>
+              <Menu.Label>{t('allPaymentsPage.exportPayments')}</Menu.Label>
               <Menu.Item
                 leftSection={<IconFileTypeCsv size={16} />}
-                onClick={() => exportPaymentsToCSV(filteredPayments, { from: dateFrom || undefined, to: dateTo || undefined })}
+                onClick={() => exportPaymentsToCSV(filteredPayments, t, { from: dateFrom || undefined, to: dateTo || undefined })}
               >
-                Export as CSV
+                {t('billList.exportCsv')}
               </Menu.Item>
               <Menu.Item
                 leftSection={<IconFileTypePdf size={16} />}
-                onClick={() => exportPaymentsToPDF(filteredPayments, { from: dateFrom || undefined, to: dateTo || undefined })}
+                onClick={() => exportPaymentsToPDF(filteredPayments, t, { from: dateFrom || undefined, to: dateTo || undefined })}
               >
-                Export as PDF
+                {t('billList.exportPdf')}
               </Menu.Item>
               <Menu.Item
                 leftSection={<IconPrinter size={16} />}
                 onClick={() => {
-                  printPayments(filteredPayments, { from: dateFrom || undefined, to: dateTo || undefined });
+                  printPayments(filteredPayments, t, { from: dateFrom || undefined, to: dateTo || undefined });
                   window.umami?.track('print_payments');
                 }}
               >
-                Print
+                {t('billList.print')}
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
@@ -298,7 +305,7 @@ export function AllPayments() {
         <Stack gap="sm">
           <Group grow>
             <TextInput
-              placeholder="Search by bill name..."
+              placeholder={t('allPaymentsPage.searchPlaceholder')}
               leftSection={<IconSearch size={16} />}
               value={searchName}
               onChange={(e) => setSearchName(e.target.value)}
@@ -311,47 +318,47 @@ export function AllPayments() {
               }
             />
             <Select
-              placeholder="Sort by"
+              placeholder={t('allPaymentsPage.sortByPlaceholder')}
               value={sortBy}
               onChange={setSortBy}
               data={[
-                { value: 'date_desc', label: 'Date (newest first)' },
-                { value: 'date_asc', label: 'Date (oldest first)' },
-                { value: 'amount_desc', label: 'Amount (high to low)' },
-                { value: 'amount_asc', label: 'Amount (low to high)' },
-                { value: 'name_asc', label: 'Bill name (A-Z)' },
-                { value: 'name_desc', label: 'Bill name (Z-A)' },
+                { value: 'date_desc', label: t('allPaymentsPage.sortDateDesc') },
+                { value: 'date_asc', label: t('allPaymentsPage.sortDateAsc') },
+                { value: 'amount_desc', label: t('allPaymentsPage.sortAmountDesc') },
+                { value: 'amount_asc', label: t('allPaymentsPage.sortAmountAsc') },
+                { value: 'name_asc', label: t('allPaymentsPage.sortNameAsc') },
+                { value: 'name_desc', label: t('allPaymentsPage.sortNameDesc') },
               ]}
             />
           </Group>
 
           <Group grow>
             <DatePickerInput
-              placeholder="From date"
+              placeholder={t('allPaymentsPage.fromDatePlaceholder')}
               value={dateFrom}
               onChange={(val) => setDateFrom(val ? parseLocalDate(val) : null)}
+              valueFormat={t('common.dateInputFormat')}
               clearable
             />
             <DatePickerInput
-              placeholder="To date"
+              placeholder={t('allPaymentsPage.toDatePlaceholder')}
               value={dateTo}
               onChange={(val) => setDateTo(val ? parseLocalDate(val) : null)}
+              valueFormat={t('common.dateInputFormat')}
               clearable
             />
             <NumberInput
-              placeholder="Min amount"
-              prefix={getCurrencySymbol()}
+              placeholder={t('allPaymentsPage.minAmountPlaceholder')}
+              {...getCurrencyInputProps()}
               value={amountMin}
               onChange={(val) => setAmountMin(val === '' ? '' : Number(val))}
-              decimalScale={2}
               min={0}
             />
             <NumberInput
-              placeholder="Max amount"
-              prefix={getCurrencySymbol()}
+              placeholder={t('allPaymentsPage.maxAmountPlaceholder')}
+              {...getCurrencyInputProps()}
               value={amountMax}
               onChange={(val) => setAmountMax(val === '' ? '' : Number(val))}
-              decimalScale={2}
               min={0}
             />
           </Group>
@@ -365,17 +372,17 @@ export function AllPayments() {
             <Group gap="xs">
               <IconFilter size={14} color="var(--mantine-color-blue-6)" />
               <Text size="sm" c="blue.7" fw={500}>
-                Filtered:{' '}
+                {t('billList.filtered')}{' '}
                 {[
-                  searchName && `"${searchName}"`,
-                  dateFrom && `from ${formatDateString(formatDateForAPI(dateFrom))}`,
-                  dateTo && `to ${formatDateString(formatDateForAPI(dateTo))}`,
-                  amountMin !== '' && `min ${getCurrencySymbol()}${amountMin}`,
-                  amountMax !== '' && `max ${getCurrencySymbol()}${amountMax}`,
+                  searchName && t('allPaymentsPage.filterQuoted', { query: searchName }),
+                  dateFrom && t('allPaymentsPage.filterFrom', { date: formatDateString(formatDateForAPI(dateFrom)) }),
+                  dateTo && t('allPaymentsPage.filterTo', { date: formatDateString(formatDateForAPI(dateTo)) }),
+                  amountMin !== '' && t('allPaymentsPage.filterMin', { amount: formatCurrency(Number(amountMin)) }),
+                  amountMax !== '' && t('allPaymentsPage.filterMax', { amount: formatCurrency(Number(amountMax)) }),
                 ].filter(Boolean).join(', ')}
               </Text>
               <Badge size="sm" variant="light" color="blue">
-                {filteredPayments.length} result{filteredPayments.length !== 1 ? 's' : ''}
+                {t('billList.results', { count: filteredPayments.length })}
               </Badge>
             </Group>
             <Button
@@ -385,7 +392,7 @@ export function AllPayments() {
               leftSection={<IconFilterOff size={14} />}
               onClick={clearFilters}
             >
-              Clear
+              {t('billList.clear')}
             </Button>
           </Group>
         </Paper>
@@ -398,7 +405,7 @@ export function AllPayments() {
             <Group gap="xs">
               <IconChartBar size={18} />
               <Text fw={500} size="sm">
-                Monthly Totals {hasActiveFilters && '(Filtered)'}
+                {t('allPaymentsPage.monthlyTotals')} {hasActiveFilters && t('allPaymentsPage.filteredSuffix')}
               </Text>
             </Group>
             <Button
@@ -407,7 +414,7 @@ export function AllPayments() {
               onClick={toggleChart}
               rightSection={chartOpened ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
             >
-              {chartOpened ? 'Hide' : 'Show'}
+              {chartOpened ? t('allPaymentsPage.hide') : t('allPaymentsPage.show')}
             </Button>
           </Group>
           <Collapse expanded={chartOpened}>
@@ -415,7 +422,7 @@ export function AllPayments() {
               h={200}
               data={monthlyChartData}
               dataKey="label"
-              series={[{ name: 'total', color: 'violet.6', label: 'Total Paid' }]}
+              series={[{ name: 'total', color: 'violet.6', label: t('monthlyTotalsChart.totalPaidSeries') }]}
               withTooltip
               tooltipProps={{
                 content: ({ payload }) => {
@@ -447,7 +454,7 @@ export function AllPayments() {
       ) : filteredPayments.length === 0 ? (
         <Paper p="xl" withBorder>
           <Text ta="center" c="dimmed">
-            {hasActiveFilters ? 'No payments match your filters' : 'No payments recorded yet'}
+            {hasActiveFilters ? t('allPaymentsPage.noMatchFilters') : t('paymentHistory.noPayments')}
           </Text>
         </Paper>
       ) : (
@@ -455,11 +462,11 @@ export function AllPayments() {
           <Table striped highlightOnHover>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Bill</Table.Th>
-                <Table.Th>Type</Table.Th>
-                <Table.Th>Date</Table.Th>
-                <Table.Th>Amount</Table.Th>
-                <Table.Th className="no-print">Actions</Table.Th>
+                <Table.Th>{t('dashboard.cashFlowForecast.columns.bill')}</Table.Th>
+                <Table.Th>{t('common.table.type')}</Table.Th>
+                <Table.Th>{t('common.table.date')}</Table.Th>
+                <Table.Th>{t('common.table.amount')}</Table.Th>
+                <Table.Th className="no-print">{t('common.table.actions')}</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -488,7 +495,7 @@ export function AllPayments() {
                         color={isDeposit ? 'green' : 'red'}
                         leftSection={isDeposit ? <IconArrowDownRight size={12} /> : <IconArrowUpRight size={12} />}
                       >
-                        {isDeposit ? 'Income' : 'Expense'}
+                        {isDeposit ? t('allPaymentsPage.income') : t('common.billType.expense')}
                       </Badge>
                     </Table.Td>
                     <Table.Td>
@@ -496,6 +503,7 @@ export function AllPayments() {
                         <DatePickerInput
                           value={editDate}
                           onChange={(val) => setEditDate(val ? parseLocalDate(val) : null)}
+                          valueFormat={t('common.dateInputFormat')}
                           size="xs"
                           w={140}
                         />
@@ -508,8 +516,7 @@ export function AllPayments() {
                         <NumberInput
                           value={editAmount}
                           onChange={(val) => setEditAmount(val === '' ? '' : Number(val))}
-                          prefix={getCurrencySymbol()}
-                          decimalScale={2}
+                          {...getCurrencyInputProps()}
                           fixedDecimalScale
                           size="xs"
                           w={100}
@@ -523,10 +530,10 @@ export function AllPayments() {
                     <Table.Td className="no-print">
                       {editingId === payment.id ? (
                         <Group gap="xs">
-                          <ActionIcon color="green" variant="subtle" onClick={handleSaveEdit} title="Save">
+                          <ActionIcon color="green" variant="subtle" onClick={handleSaveEdit} title={t('common.actions.save')}>
                             <IconCheck size={18} />
                           </ActionIcon>
-                          <ActionIcon color="gray" variant="subtle" onClick={handleCancelEdit} title="Cancel">
+                          <ActionIcon color="gray" variant="subtle" onClick={handleCancelEdit} title={t('common.actions.cancel')}>
                             <IconX size={18} />
                           </ActionIcon>
                         </Group>
@@ -536,7 +543,7 @@ export function AllPayments() {
                             color="blue"
                             variant="subtle"
                             onClick={() => handleEdit(payment)}
-                            title="Edit"
+                            title={t('common.actions.edit')}
                           >
                             <IconEdit size={18} />
                           </ActionIcon>
@@ -544,13 +551,13 @@ export function AllPayments() {
                             color="red"
                             variant="subtle"
                             onClick={() => handleDelete(payment.id)}
-                            title="Delete"
+                            title={t('common.actions.delete')}
                           >
                             <IconTrash size={18} />
                           </ActionIcon>
                         </Group>
                       ) : (
-                        <Text size="xs" c="dimmed">View only</Text>
+                        <Text size="xs" c="dimmed">{t('allPaymentsPage.viewOnly')}</Text>
                       )}
                     </Table.Td>
                   </Table.Tr>

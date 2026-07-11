@@ -1,3 +1,5 @@
+import { getLocale } from '../lib/currency';
+
 /**
  * Parse a YYYY-MM-DD date string as a local date.
  *
@@ -29,7 +31,7 @@ export function parseLocalDate(dateStr: string): Date | null {
 }
 
 /**
- * Format a YYYY-MM-DD date string for display.
+ * Format a YYYY-MM-DD date string for display (e.g. "Jan 15, 2026").
  * Uses local date parsing to avoid timezone shifts.
  * Returns the original string if parsing fails.
  */
@@ -37,10 +39,26 @@ export function formatDateString(dateStr: string): string {
   const date = parseLocalDate(dateStr);
   if (!date) return dateStr; // Return original if parsing fails
 
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(getLocale(), {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+  });
+}
+
+/**
+ * Format a YYYY-MM-DD date string without the year (e.g. "Jan 15"),
+ * for compact contexts like chart axes and forecast tables.
+ * Uses local date parsing to avoid timezone shifts.
+ * Returns the original string if parsing fails.
+ */
+export function formatDateShort(dateStr: string): string {
+  const date = parseLocalDate(dateStr);
+  if (!date) return dateStr; // Return original if parsing fails
+
+  return date.toLocaleDateString(getLocale(), {
+    month: 'short',
+    day: 'numeric',
   });
 }
 
