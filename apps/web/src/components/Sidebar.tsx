@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Stack, Title, Text, Group, Badge, Divider, NavLink } from '@mantine/core';
-import { IconCalendar, IconHome, IconReceipt, IconChartPie, IconListDetails, IconShare } from '@tabler/icons-react';
+import { IconCalendar, IconHome, IconReceipt, IconChartPie, IconListDetails, IconShare, IconSettings } from '@tabler/icons-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { Bill } from '../api/client';
@@ -128,6 +128,13 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange }: SidebarPr
             leftSection={<IconShare size={16} />}
             active={location.pathname === '/settlements'}
             onClick={() => navigate('/settlements')}
+            variant="light"
+          />
+          <NavLink
+            label={t('sidebar.navSettings')}
+            leftSection={<IconSettings size={16} />}
+            active={location.pathname === '/settings'}
+            onClick={() => navigate('/settings')}
             variant="light"
           />
           <Divider my="xs" />
