@@ -8245,8 +8245,23 @@ def jwt_update_user(target_user_id):
         if user.created_by_id is not None and user.created_by_id != current_user_id:
             return jsonify({"success": False, "error": "Access denied"}), 403
     data = request.get_json()
-    if "role" in data and data["role"] in ["admin", "user"]:
-        user.role = data["role"]
+    if "role" in data:
+        new_role = data["role"]
+        if new_role not in ["admin", "user"]:
+            return jsonify(
+                {"success": False, "error": 'Invalid role. Must be "admin" or "user"'}
+            ), 400
+        # Prevent demoting yourself
+        if user.id == current_user_id and new_role != "admin":
+            return jsonify(
+                {"success": False, "error": "Cannot change your own role"}
+            ), 400
+        # In SaaS mode, prevent changing account owner's role
+        if is_saas() and user.is_account_owner and new_role != "admin":
+            return jsonify(
+                {"success": False, "error": "Cannot demote account owner"}
+            ), 400
+        user.role = new_role
     if "email" in data:
         new_email = data["email"].strip() if data["email"] else None
         if new_email and new_email != user.email:
@@ -8498,6 +8513,7 @@ def jwt_get_databases():
                 "id": d.id,
                 "name": d.name,
                 "display_name": d.display_name,
+                "description": d.description,
                 "users": users_with_access,
             }
         )
@@ -8539,7 +8555,11 @@ def jwt_create_database():
             }
         ), 403
 
-    new_db = Database(name=name, display_name=display_name)
+    new_db = Database(
+        name=name,
+        display_name=display_name,
+        description=data.get("description", ""),
+    )
     if is_saas():
         new_db.owner_id = current_user_id
 
@@ -8554,6 +8574,7 @@ def jwt_create_database():
                 "id": new_db.id,
                 "name": new_db.name,
                 "display_name": new_db.display_name,
+                "description": new_db.description,
             },
         }
     ), 201
@@ -8639,11 +8660,19 @@ def jwt_database_access(database_id):
 
     target_user = db.get_or_404(User, target_user_id)
 
-    if target_user in database.users:
-        return jsonify({"success": False, "error": "User already has access"}), 400
+    # In SaaS mode, only allow granting access to users you created
+    if (
+        is_saas()
+        and target_user.created_by_id != current_user_id
+        and target_user.id != current_user_id
+    ):
+        return jsonify(
+            {"success": False, "error": "Cannot grant access to users outside your account"}
+        ), 403
 
-    database.users.append(target_user)
-    db.session.commit()
+    if target_user not in database.users:
+        database.users.append(target_user)
+        db.session.commit()
     return jsonify({"success": True, "data": {"message": "Access granted"}})
 
 
@@ -8661,11 +8690,9 @@ def jwt_remove_database_access(database_id, target_user_id):
 
     target_user = db.get_or_404(User, target_user_id)
 
-    if target_user not in database.users:
-        return jsonify({"success": False, "error": "User does not have access"}), 400
-
-    database.users.remove(target_user)
-    db.session.commit()
+    if target_user in database.users:
+        database.users.remove(target_user)
+        db.session.commit()
     return jsonify({"success": True, "data": {"message": "Access revoked"}})
 
 
