@@ -499,9 +499,8 @@ export const getMonthlyComparison = () =>
 export const getAllPayments = () =>
   unwrap(api.get<ApiResponse<PaymentWithBill[]>>('/payments'));
 
-// Note: This endpoint has no v2 equivalent - may need to filter client-side or add v2 endpoint
-export const getBillMonthlyPayments = (billName: string) =>
-  unwrap(api.get<ApiResponse<MonthlyBillPayment[]>>(`/payments/bill/${encodeURIComponent(billName)}/monthly`));
+export const getBillMonthlyPayments = (billId: number) =>
+  unwrap(api.get<ApiResponse<MonthlyBillPayment[]>>(`/bills/${billId}/payments/monthly`));
 
 // Auto-payment API
 export const processAutoPayments = () =>

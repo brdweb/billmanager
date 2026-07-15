@@ -4373,6 +4373,45 @@ def jwt_get_bill_payments(bill_id):
     return jsonify({"success": True, "data": result})
 
 
+@api_v2_bp.route("/bills/<int:bill_id>/payments/monthly", methods=["GET"])
+@limiter.limit("60 per minute")
+@jwt_required
+def jwt_get_bill_monthly_payments(bill_id):
+    """Get monthly payment totals for a single bill (JWT version)."""
+    if not g.jwt_db_name:
+        return jsonify({"success": False, "error": "X-Database header required"}), 400
+
+    bill = db.get_or_404(Bill, bill_id)
+
+    has_access = check_bill_access(bill) is True
+    if not has_access:
+        share = BillShare.query.filter_by(
+            bill_id=bill_id, shared_with_user_id=g.jwt_user_id, status="accepted"
+        ).first()
+        has_access = share is not None
+
+    if not has_access:
+        return jsonify({"success": False, "error": "Access denied"}), 403
+
+    results = (
+        db.session.query(
+            func.to_char(
+                func.to_date(Payment.payment_date, "YYYY-MM-DD"), "YYYY-MM"
+            ).label("month"),
+            func.sum(Payment.amount),
+            func.count(Payment.id),
+        )
+        .filter(Payment.bill_id == bill_id)
+        .group_by("month")
+        .order_by(desc("month"))
+        .limit(12)
+        .all()
+    )
+    data = [{"month": r[0], "total": float(r[1]), "count": r[2]} for r in results]
+
+    return jsonify({"success": True, "data": data})
+
+
 @api_v2_bp.route("/payments", methods=["GET"])
 @limiter.limit("60 per minute")
 @jwt_required

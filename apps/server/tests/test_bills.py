@@ -150,6 +150,21 @@ class TestBillPayments:
         assert isinstance(data.get('data'), list)
         assert len(data['data']) >= 1
 
+    def test_get_bill_monthly_payments(self, client, auth_headers_with_db, test_bill):
+        """Regression: /bills/<id>/payments/monthly previously had no v2 route at
+        all (web called a v1-only path via the /api/v2 baseURL, a permanent 404).
+        """
+        client.post(f'/api/v2/bills/{test_bill.id}/pay',
+                    headers=auth_headers_with_db,
+                    json={'amount': 100.00, 'payment_date': '2025-01-15'})
+
+        response = client.get(f'/api/v2/bills/{test_bill.id}/payments/monthly',
+                              headers=auth_headers_with_db)
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data.get('success') is True
+        assert data['data'] == [{'month': '2025-01', 'total': 100.0, 'count': 1}]
+
 
 class TestBillTypes:
     """Test different bill types (expense vs deposit)."""
