@@ -707,3 +707,36 @@ class TestBillValidation:
                                })
         # Should either reject or handle appropriately
         assert response.status_code in [400, 201]
+
+
+class TestBillShareCreation:
+    """Regression coverage for POST /bills/<id>/share request field names.
+
+    The web and mobile clients both send `identifier` (username or email),
+    matching the v1 session-based route. The v2 route had drifted to expect
+    `shared_with` instead, silently rejecting every share request from both
+    clients with "identifier is required".
+    """
+
+    def test_share_by_username_accepts_identifier_field(
+        self, client, auth_headers_with_db, test_bill, regular_user
+    ):
+        response = client.post(
+            f'/api/v2/bills/{test_bill.id}/share',
+            headers=auth_headers_with_db,
+            json={'identifier': regular_user.username},
+        )
+        assert response.status_code == 201
+        data = json.loads(response.data)
+        assert data['success'] is True
+        assert data['data']['shared_with_identifier'] == regular_user.username
+
+    def test_share_missing_identifier_is_rejected(self, client, auth_headers_with_db, test_bill):
+        response = client.post(
+            f'/api/v2/bills/{test_bill.id}/share',
+            headers=auth_headers_with_db,
+            json={},
+        )
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'identifier' in data['error']

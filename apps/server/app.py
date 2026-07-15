@@ -4584,13 +4584,13 @@ def jwt_share_bill(bill_id):
         return access
 
     # Get share parameters
-    identifier = data.get("shared_with", "").strip().lower()  # username or email
+    identifier = data.get("identifier", "").strip().lower()  # username or email
     split_type = data.get("split_type")  # None, 'percentage', 'fixed', 'equal'
     split_value = data.get("split_value")
 
     if not identifier:
         return jsonify(
-            {"success": False, "error": "shared_with (username or email) is required"}
+            {"success": False, "error": "identifier (username or email) is required"}
         ), 400
 
     # Validate split configuration
