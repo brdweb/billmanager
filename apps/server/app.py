@@ -4373,6 +4373,54 @@ def jwt_get_bill_payments(bill_id):
     return jsonify({"success": True, "data": result})
 
 
+@api_v2_bp.route("/bills/<int:bill_id>/payments/monthly", methods=["GET"])
+@limiter.limit("60 per minute")
+@jwt_required
+def jwt_get_bill_monthly_payments(bill_id):
+    """Get up to 12 monthly payment totals for one bill."""
+    if not g.jwt_db_name:
+        return jsonify({"success": False, "error": "X-Database header required"}), 400
+
+    bill = db.get_or_404(Bill, bill_id)
+
+    # Keep the same ownership and shared-bill authorization semantics as the
+    # bill payment-history endpoint above.
+    has_access = check_bill_access(bill) is True
+    if not has_access:
+        share = BillShare.query.filter_by(
+            bill_id=bill_id, shared_with_user_id=g.jwt_user_id, status="accepted"
+        ).first()
+        has_access = share is not None
+
+    if not has_access:
+        return jsonify({"success": False, "error": "Access denied"}), 403
+
+    results = (
+        db.session.query(
+            func.to_char(
+                func.to_date(Payment.payment_date, "YYYY-MM-DD"), "YYYY-MM"
+            ).label("month"),
+            func.sum(Payment.amount),
+            func.count(Payment.id),
+        )
+        .filter(Payment.bill_id == bill_id)
+        .group_by("month")
+        .order_by(desc("month"))
+        .limit(12)
+        .all()
+    )
+
+    return jsonify(
+        {
+            "success": True,
+            "data": [
+                {"month": row[0], "total": float(row[1]), "count": row[2]}
+                for row in results
+            ],
+        }
+    )
+
+
 @api_v2_bp.route("/payments", methods=["GET"])
 @limiter.limit("60 per minute")
 @jwt_required
@@ -8448,6 +8496,101 @@ def jwt_create_invitation():
     ), 201
 
 
+@api_v2_bp.route("/invitations/info", methods=["GET"])
+@limiter.limit("20 per minute")
+def jwt_get_invitation_info():
+    """Get public user-invitation details by token."""
+    token = request.args.get("token", "").strip()
+    if not token:
+        return jsonify({"success": False, "error": "Token is required"}), 400
+
+    invite = UserInvite.find_by_token(token)
+    if not invite or not invite.verify_token(token):
+        return jsonify({"success": False, "error": "Invalid invitation token"}), 404
+    if invite.is_accepted:
+        return jsonify(
+            {"success": False, "error": "Invitation has already been accepted"}
+        ), 400
+    if invite.is_expired:
+        return jsonify({"success": False, "error": "Invitation has expired"}), 400
+
+    inviter = db.session.get(User, invite.invited_by_id)
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "email": invite.email,
+                "invited_by": inviter.username if inviter else "Unknown",
+                "expires_at": invite.expires_at.isoformat(),
+            },
+        }
+    )
+
+
+@api_v2_bp.route("/invitations/accept", methods=["POST"])
+@limiter.limit("10 per minute")
+def jwt_accept_invitation():
+    """Accept a public user invitation and create the invited account."""
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "").strip()
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+
+    if not token or not username or not password:
+        return jsonify(
+            {
+                "success": False,
+                "error": "Token, username, and password are required",
+            }
+        ), 400
+
+    invite = UserInvite.find_by_token(token)
+    if not invite or not invite.verify_token(token):
+        return jsonify({"success": False, "error": "Invalid invitation token"}), 400
+    if invite.is_accepted:
+        return jsonify(
+            {"success": False, "error": "Invitation has already been accepted"}
+        ), 400
+    if invite.is_expired:
+        return jsonify({"success": False, "error": "Invitation has expired"}), 400
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({"success": False, "error": "Username is already taken"}), 400
+
+    new_user = User(
+        username=username,
+        email=invite.email,
+        role=invite.role,
+        created_by_id=invite.invited_by_id,
+        # An invite can only be accepted by someone who received its email.
+        email_verified_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    new_user.set_password(password)
+    db.session.add(new_user)
+
+    if invite.database_ids:
+        for db_id_str in invite.database_ids.split(","):
+            try:
+                database = db.session.get(Database, int(db_id_str))
+            except ValueError:
+                continue
+            if database:
+                new_user.accessible_databases.append(database)
+
+    invite.accepted_at = datetime.datetime.now(datetime.timezone.utc)
+    db.session.commit()
+
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "message": "Account created successfully",
+                "username": username,
+            },
+        }
+    ), 201
+
+
 @api_v2_bp.route("/invitations/<int:invite_id>", methods=["DELETE"])
 @jwt_admin_required
 def jwt_delete_invitation(invite_id):
@@ -8727,6 +8870,12 @@ def jwt_get_version():
             },
         }
     )
+
+
+@api_v2_bp.route("/ping", methods=["GET"])
+def jwt_ping():
+    """Return a lightweight unauthenticated liveness response."""
+    return jsonify({"success": True, "data": {"status": "ok"}})
 
 
 @api_v2_bp.route("/config", methods=["GET"])

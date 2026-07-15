@@ -35,6 +35,8 @@ tags:
     description: Share bills with other users and manage shared bill payments
   - name: Payments
     description: Payment recording and history
+  - name: Invitations
+    description: User invitation management and public invitation acceptance
   - name: Statistics
     description: Analytics and reporting
   - name: Utilities
@@ -872,6 +874,40 @@ paths:
                     items:
                       $ref: '#/components/schemas/Payment'
 
+  /bills/{bill_id}/payments/monthly:
+    get:
+      tags: [Payments]
+      summary: Get monthly payment totals for a bill
+      description: Returns up to 12 months of payment totals for the selected bill.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XDatabase'
+        - $ref: '#/components/parameters/BillId'
+      responses:
+        '200':
+          description: Monthly payment totals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [month, total, count]
+                      properties:
+                        month:
+                          type: string
+                          example: "2026-07"
+                        total:
+                          type: number
+                        count:
+                          type: integer
+
   /payments:
     get:
       tags: [Payments]
@@ -1003,6 +1039,95 @@ paths:
                       "2024-01": {"expenses": 1500.00, "deposits": 3000.00}
                       "2024-02": {"expenses": 1200.00, "deposits": 3000.00}
 
+  /invitations/info:
+    get:
+      tags: [Invitations]
+      summary: Get user invitation details by token
+      description: Public endpoint used before an invited user has an account.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User invitation details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      email:
+                        type: string
+                        format: email
+                      invited_by:
+                        type: string
+                      expires_at:
+                        type: string
+                        format: date-time
+        '400':
+          description: Invitation was already accepted or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Invitation token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /invitations/accept:
+    post:
+      tags: [Invitations]
+      summary: Accept a user invitation
+      description: Public endpoint that creates the invited user's account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, username, password]
+              properties:
+                token:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+                  format: password
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                      username:
+                        type: string
+        '400':
+          description: Invalid, expired, or previously accepted invitation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /process-auto-payments:
     post:
       tags: [Utilities]
@@ -1069,6 +1194,27 @@ paths:
                         type: array
                         items:
                           type: string
+
+  /ping:
+    get:
+      tags: [Utilities]
+      summary: Check API liveness
+      responses:
+        '200':
+          description: API is reachable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: ok
 
 components:
   securitySchemes:
