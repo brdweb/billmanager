@@ -735,7 +735,7 @@ class TestBillShareCreation:
         response = client.post(
             f'/api/v2/bills/{test_bill.id}/share',
             headers=auth_headers_with_db,
-            json={},
+            json={'split_type': None},
         )
         assert response.status_code == 400
         data = json.loads(response.data)
