@@ -194,6 +194,31 @@ class TestBillTypes:
         get_data = json.loads(get_resp.data)
         assert get_data['data']['type'] == 'deposit'
 
+    def test_get_bills_filters_by_type(self, client, auth_headers_with_db):
+        """Regression: the web client's `type` filter on GET /bills was never
+        read by the backend - it was a silent no-op."""
+        client.post('/api/v2/bills', headers=auth_headers_with_db, json={
+            'name': 'Rent', 'amount': 1500.00, 'frequency': 'monthly',
+            'next_due': '2025-01-01', 'type': 'expense',
+        })
+        client.post('/api/v2/bills', headers=auth_headers_with_db, json={
+            'name': 'Salary', 'amount': 5000.00, 'frequency': 'monthly',
+            'next_due': '2025-01-15', 'type': 'deposit',
+        })
+
+        expense_resp = client.get('/api/v2/bills?type=expense', headers=auth_headers_with_db)
+        expense_data = json.loads(expense_resp.data)['data']
+        assert len(expense_data) == 1
+        assert expense_data[0]['name'] == 'Rent'
+
+        deposit_resp = client.get('/api/v2/bills?type=deposit', headers=auth_headers_with_db)
+        deposit_data = json.loads(deposit_resp.data)['data']
+        assert len(deposit_data) == 1
+        assert deposit_data[0]['name'] == 'Salary'
+
+        all_resp = client.get('/api/v2/bills', headers=auth_headers_with_db)
+        assert len(json.loads(all_resp.data)['data']) == 2
+
     def test_create_variable_amount_bill(self, client, auth_headers_with_db):
         """Test creating a bill with variable amount."""
         response = client.post('/api/v2/bills',

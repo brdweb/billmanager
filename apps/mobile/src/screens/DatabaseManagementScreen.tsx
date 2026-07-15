@@ -33,6 +33,7 @@ export default function DatabaseManagementScreen({ navigation }: Props) {
   const [editingDatabase, setEditingDatabase] = useState<DatabaseWithAccess | null>(null);
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // User access modal state
@@ -87,6 +88,7 @@ export default function DatabaseManagementScreen({ navigation }: Props) {
     setEditingDatabase(null);
     setName('');
     setDisplayName('');
+    setDescription('');
     setShowModal(true);
   };
 
@@ -94,6 +96,7 @@ export default function DatabaseManagementScreen({ navigation }: Props) {
     setEditingDatabase(db);
     setName(db.name);
     setDisplayName(db.display_name);
+    setDescription(db.description || '');
     setShowModal(true);
   };
 
@@ -112,9 +115,9 @@ export default function DatabaseManagementScreen({ navigation }: Props) {
 
     let result;
     if (editingDatabase) {
-      result = await api.updateDatabase(editingDatabase.id, displayName.trim());
+      result = await api.updateDatabase(editingDatabase.id, displayName.trim(), description.trim());
     } else {
-      result = await api.createDatabase(name.trim(), displayName.trim());
+      result = await api.createDatabase(name.trim(), displayName.trim(), description.trim());
     }
 
     setIsSubmitting(false);
@@ -378,6 +381,20 @@ export default function DatabaseManagementScreen({ navigation }: Props) {
               onChangeText={setDisplayName}
               placeholder="Personal Bills, Business Expenses, etc."
               placeholderTextColor={colors.textMuted}
+            />
+
+            <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Description (optional)</Text>
+            <TextInput
+              style={[styles.input, {
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+                color: colors.text,
+              }]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="What this bill group is for"
+              placeholderTextColor={colors.textMuted}
+              multiline
             />
 
             <View style={styles.modalButtons}>

@@ -561,11 +561,12 @@ export class BillManagerApi {
     }
   }
 
-  async createDatabase(name: string, displayName: string): Promise<ApiResponse<{ id: number }>> {
+  async createDatabase(name: string, displayName: string, description?: string): Promise<ApiResponse<{ id: number }>> {
     try {
       const response = await this.client.post<ApiResponse<{ id: number }>>('/databases', {
         name,
         display_name: displayName,
+        description,
       });
       return response.data;
     } catch (error) {
@@ -573,10 +574,11 @@ export class BillManagerApi {
     }
   }
 
-  async updateDatabase(databaseId: number, displayName: string): Promise<ApiResponse<void>> {
+  async updateDatabase(databaseId: number, displayName: string, description?: string): Promise<ApiResponse<void>> {
     try {
       const response = await this.client.put<ApiResponse<void>>(`/databases/${databaseId}`, {
         display_name: displayName,
+        description,
       });
       return response.data;
     } catch (error) {

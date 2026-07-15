@@ -3848,6 +3848,9 @@ def jwt_get_bills():
 
     current_user_id = g.jwt_user_id
     include_archived = request.args.get("include_archived", "false").lower() == "true"
+    bill_type = request.args.get("type")
+    if bill_type not in ("expense", "deposit"):
+        bill_type = None
 
     # Handle "all databases" mode
     result = resolve_accessible_db_ids()
@@ -3859,6 +3862,8 @@ def jwt_get_bills():
     query = Bill.query.filter(Bill.database_id.in_(accessible_db_ids))
     if not include_archived:
         query = query.filter_by(archived=False)
+    if bill_type:
+        query = query.filter_by(type=bill_type)
     owned_bills = query.order_by(Bill.due_date).all()
 
     # Get share counts for owned bills (how many people each bill is shared with)
@@ -3887,6 +3892,8 @@ def jwt_get_bills():
     )
     if not include_archived:
         shared_bill_query = shared_bill_query.filter(Bill.archived == False)
+    if bill_type:
+        shared_bill_query = shared_bill_query.filter(Bill.type == bill_type)
     shared_bills_data = shared_bill_query.order_by(Bill.due_date).all()
 
     # Create a lookup for share info
