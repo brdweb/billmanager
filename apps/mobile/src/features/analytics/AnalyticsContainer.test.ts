@@ -56,4 +56,16 @@ describe('recurrence-aware analytics forecast', () => {
     );
     expect(projected.size).toBe(0);
   });
+
+  it('projects a one-time bill only in its due month', () => {
+    const projected = projectRecurringBills(
+      [recurringBill({ frequency: 'once', amount: 400 })],
+      new Date(2026, 7, 1),
+      new Date(2026, 9, 31, 23, 59),
+    );
+
+    expect(projected.get('2026-08')).toEqual({ income: 0, expenses: 400 });
+    expect(projected.has('2026-09')).toBe(false);
+    expect(projected.has('2026-10')).toBe(false);
+  });
 });

@@ -10,6 +10,7 @@ import type { ServerCapabilities } from '../../../domain/serverProfile';
 import { typography } from '../../../design/tokens';
 import { useAdaptiveTheme } from '../../../design/useAdaptiveTheme';
 import { formatCurrency } from '../../../i18n/format';
+import { getShareInviteDisplay } from '../shareInviteModel';
 import type { ShareInviteInfo, TeamInviteInfo } from '../types';
 import { inviteAcceptanceSchema, validationErrors } from '../validation';
 import {
@@ -239,6 +240,7 @@ export function ShareInviteAcceptanceScreen({
     setNotice({ kind: 'success', message: response.data.message });
     onAccepted?.(response.data.share_id);
   };
+  const inviteDisplay = invite ? getShareInviteDisplay(invite) : null;
 
   return (
     <AuthScaffold title={t('mobileAuth.shareInvite.title')} subtitle={t('mobileAuth.shareInvite.subtitle')}>
@@ -250,10 +252,12 @@ export function ShareInviteAcceptanceScreen({
             {invite.bill_name}
           </Text>
           <Text style={[typography.body, { color: theme.colors.textSecondary }]}>
-            {t('mobileAuth.shareInvite.sharedBy', {
-              owner: invite.owner_username,
-              email: invite.shared_with_email,
-            })}
+            {inviteDisplay?.recipient
+              ? t('mobileAuth.shareInvite.sharedBy', {
+                owner: inviteDisplay.owner,
+                email: inviteDisplay.recipient,
+              })
+              : t('mobileAuth.shareInvite.sharedByOwner', { owner: inviteDisplay?.owner })}
           </Text>
           {invite.my_portion != null ? (
             <Text style={[typography.headline, { color: theme.colors.text }]}>

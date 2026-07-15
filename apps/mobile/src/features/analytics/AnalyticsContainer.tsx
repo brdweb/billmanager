@@ -48,7 +48,7 @@ export function projectRecurringBills(bills: Bill[], start: Date, end: Date) {
         projected.set(key, point);
       }
       const next = nextOccurrence(bill, occurrence);
-      if (next <= occurrence) break;
+      if (!next || next <= occurrence) break;
       occurrence = next;
       guard += 1;
     }

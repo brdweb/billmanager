@@ -21,18 +21,14 @@ import { useMobileRuntime } from '../context/MobileRuntimeContext';
 import { Bill, type BillFrequency, type BillFrequencyType } from '../types';
 import IconPicker from '../components/IconPicker';
 import { BillIcon } from '../components/BillIcon';
+import {
+  BILL_FREQUENCY_OPTIONS,
+  billFrequencyFields,
+  frequencyTypeForSelection,
+} from '../features/bills/formModels';
 import { billMoveChanges } from '../features/bills/listModels';
 
 type Props = NativeStackScreenProps<any, 'AddBill'>;
-
-const FREQUENCY_OPTIONS: { labelKey: string; value: BillFrequency }[] = [
-  { labelKey: 'common.frequency.weekly', value: 'weekly' },
-  { labelKey: 'common.frequency.biweekly', value: 'bi-weekly' },
-  { labelKey: 'common.frequency.monthly', value: 'monthly' },
-  { labelKey: 'common.frequency.quarterly', value: 'quarterly' },
-  { labelKey: 'common.frequency.yearly', value: 'yearly' },
-  { labelKey: 'common.frequency.custom', value: 'custom' },
-];
 
 const WEEKDAYS = [
   { labelKey: 'common.weekdaysShort.mon', value: 0 },
@@ -173,9 +169,7 @@ export default function AddBillScreen({ navigation, route }: Props) {
     setIsSubmitting(true);
 
     let nextDueValue = formatDateForApi(nextDue);
-    let frequencyConfig: { dates?: number[]; days?: number[] } = {};
     if (frequency === 'monthly' && frequencyType === 'specific_dates') {
-      frequencyConfig = { dates: specificDates };
       const now = new Date();
       const nextDay = specificDates.find((day) => day > now.getDate());
       const year = nextDay ? now.getFullYear() : (now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear());
@@ -183,17 +177,21 @@ export default function AddBillScreen({ navigation, route }: Props) {
       const requestedDay = nextDay ?? specificDates[0];
       const maximumDay = new Date(year, month + 1, 0).getDate();
       nextDueValue = formatDateForApi(new Date(year, month, Math.min(requestedDay, maximumDay)));
-    } else if (frequency === 'custom') {
-      frequencyConfig = { days: [...weeklyDays].sort((left, right) => left - right) };
     }
+
+    const normalizedFrequency = billFrequencyFields(
+      frequency,
+      frequencyType,
+      specificDates,
+      weeklyDays,
+    );
 
     const billData: Partial<Bill> = {
       name: name.trim(),
       amount: varies ? null : parseFloat(amount),
       varies,
       frequency,
-      frequency_type: frequency === 'custom' ? 'multiple_weekly' : frequencyType,
-      frequency_config: JSON.stringify(frequencyConfig),
+      ...normalizedFrequency,
       next_due: nextDueValue,
       type,
       account: account.trim() || null,
@@ -316,7 +314,7 @@ export default function AddBillScreen({ navigation, route }: Props) {
         {/* Frequency */}
         <Text style={styles.label}>{t('billModal.frequencyLabel')}</Text>
         <View style={styles.frequencyContainer}>
-          {FREQUENCY_OPTIONS.map((option) => (
+          {BILL_FREQUENCY_OPTIONS.map((option) => (
             <TouchableOpacity
               key={option.value}
               style={[
@@ -325,7 +323,7 @@ export default function AddBillScreen({ navigation, route }: Props) {
               ]}
               onPress={() => {
                 setFrequency(option.value);
-                setFrequencyType(option.value === 'custom' ? 'multiple_weekly' : 'simple');
+                setFrequencyType(frequencyTypeForSelection(option.value));
               }}
             >
               <Text style={[

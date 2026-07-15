@@ -79,4 +79,14 @@ describe('calendar recurrence projection', () => {
       '2026-08-15',
     ]);
   });
+
+  it('projects a one-time bill only on its original due date', () => {
+    const occurrences = expandCalendarOccurrences(
+      [preview(bill({ frequency: 'once' }))],
+      new Date(2026, 6, 1),
+      new Date(2026, 11, 31, 23, 59, 59),
+    );
+
+    expect(occurrences.map((item) => item.dueDate)).toEqual(['2026-07-15']);
+  });
 });

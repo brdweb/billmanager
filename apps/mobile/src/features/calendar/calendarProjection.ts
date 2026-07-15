@@ -28,7 +28,7 @@ export function expandCalendarOccurrences(
         occurrences.push({ ...bill, dueDate: dateKey(occurrence) });
       }
       const next = nextOccurrence(bill.source, occurrence);
-      if (next <= occurrence) break;
+      if (!next || next <= occurrence) break;
       occurrence = next;
       guard += 1;
     }

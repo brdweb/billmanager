@@ -34,7 +34,15 @@ describe('local reminder scheduling', () => {
 
   it('clamps recurring dates at month boundaries', () => {
     const january31 = new Date(2027, 0, 31, 9);
-    expect(nextOccurrence(bill, january31).getDate()).toBe(28);
+    expect(nextOccurrence(bill, january31)?.getDate()).toBe(28);
+  });
+
+  it('schedules a one-time bill only for its original due date', () => {
+    const oneTimeBill = { ...bill, frequency: 'once' as const };
+    const reminders = buildReminderSchedule([oneTimeBill], new Date(2026, 6, 10, 10), 60);
+
+    expect([...new Set(reminders.map((item) => item.dueDate))]).toEqual(['2026-07-15']);
+    expect(nextOccurrence(oneTimeBill, new Date(2026, 6, 15, 9))).toBeNull();
   });
 
   it('does not schedule archived or disabled bills', () => {

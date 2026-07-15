@@ -882,20 +882,41 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [success, data]
                 properties:
                   success:
                     type: boolean
                     example: true
                   data:
                     type: object
+                    required:
+                      - bill_name
+                      - bill_amount
+                      - owner
+                      - owner_username
+                      - shared_with_email
+                      - split_type
+                      - split_value
+                      - my_portion
+                      - expires_at
+                      - updated_at
                     properties:
                       bill_name:
                         type: string
                       bill_amount:
                         type: number
+                        nullable: true
                       owner:
                         type: string
-                        description: Username of bill owner
+                        deprecated: true
+                        description: Backward-compatible alias for owner_username
+                      owner_username:
+                        type: string
+                        description: Username of the bill owner
+                      shared_with_email:
+                        type: string
+                        format: email
+                        description: Email address that received the invitation
                       split_type:
                         type: string
                         enum: [percentage, fixed, equal]
@@ -911,6 +932,10 @@ paths:
                         type: string
                         format: date-time
                         nullable: true
+                      updated_at:
+                        type: string
+                        format: date-time
+        '400': {$ref: '#/components/responses/BadRequest'}
         '404':
           description: Invalid or expired invitation
           content:

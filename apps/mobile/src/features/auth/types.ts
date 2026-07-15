@@ -27,11 +27,16 @@ export interface TeamInviteAcceptance {
 export interface ShareInviteInfo {
   bill_name: string;
   bill_amount: number | null;
-  owner_username: string;
-  shared_with_email: string;
+  /** Present on current servers. Older v2 servers returned only `owner`. */
+  owner_username?: string;
+  /** Backward-compatible server alias for `owner_username`. */
+  owner?: string;
+  shared_with_email?: string;
   split_type: string | null;
   split_value: number | null;
   my_portion: number | null;
+  expires_at?: string | null;
+  updated_at?: string;
 }
 
 export interface ShareInviteAcceptance {

@@ -22,6 +22,7 @@ import {
   type SyncEntity,
   type SyncOperation,
 } from '../domain/sync';
+import { optimisticBillAfterPayment } from '../domain/optimisticPayment';
 import { formatCurrency, formatDate } from '../i18n/format';
 import {
   configureLocalNotifications,
@@ -29,7 +30,6 @@ import {
   subscribeToNotificationActions,
 } from '../native/localNotifications';
 import { registerBackgroundSync } from '../native/backgroundSync';
-import { nextOccurrence } from '../native/reminderSchedule';
 import { updateWidgetSnapshot } from '../native/widgetSnapshot';
 import { getWidgetAmountsVisible, setWidgetAmountsVisible } from '../native/widgetPrivacy';
 import { ApiOutboxMutationExecutor } from '../services/apiOutboxExecutor';
@@ -112,17 +112,6 @@ function queryKeys(profileId: string, databaseId: string) {
 function todayIso(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
-
-function advanceBillDueDate(bill: Bill): Bill {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(bill.next_due);
-  if (!match) return bill;
-  const current = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 9);
-  const next = nextOccurrence(bill, current);
-  return {
-    ...bill,
-    next_due: `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`,
-  };
 }
 
 function runtimeError(reason: unknown): string {
@@ -452,8 +441,9 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
       baseUpdatedAt: bill.last_updated ?? null,
       dependsOn,
     });
-    if (advanceDue) {
-      await cacheRepository.upsertBills(scope, [advanceBillDueDate(bill)], { dirty: true });
+    const updatedBill = optimisticBillAfterPayment(bill, advanceDue);
+    if (updatedBill) {
+      await cacheRepository.upsertBills(scope, [updatedBill], { dirty: true });
     }
     await refreshLocalQueries();
   }, [
@@ -784,7 +774,10 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
           baseUpdatedAt: bill.last_updated ?? null,
           dependsOn,
         }));
-        await cacheRepository.upsertBills(target, [advanceBillDueDate(bill)], { dirty: true });
+        const updatedBill = optimisticBillAfterPayment(bill, true);
+        if (updatedBill) {
+          await cacheRepository.upsertBills(target, [updatedBill], { dirty: true });
+        }
         await activateScope(target);
         await Linking.openURL(`billmanager://bills/${billId}`);
       },

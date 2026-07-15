@@ -4050,7 +4050,12 @@ def jwt_get_share_info():
             "data": {
                 "bill_name": share.bill.name,
                 "bill_amount": share.bill.amount,
+                # ``owner`` is retained for clients released against the
+                # original v2 response. Web and mobile clients use the more
+                # explicit owner_username/shared_with_email names.
                 "owner": share.owner.username,
+                "owner_username": share.owner.username,
+                "shared_with_email": share.shared_with_identifier,
                 "split_type": share.split_type,
                 "split_value": share.split_value,
                 "my_portion": share.calculate_portion(),

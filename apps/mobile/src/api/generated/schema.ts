@@ -3436,23 +3436,36 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @example true */
-                        success?: boolean;
-                        data?: {
-                            bill_name?: string;
-                            bill_amount?: number;
-                            /** @description Username of bill owner */
-                            owner?: string;
+                        success: boolean;
+                        data: {
+                            bill_name: string;
+                            bill_amount: number | null;
+                            /**
+                             * @deprecated
+                             * @description Backward-compatible alias for owner_username
+                             */
+                            owner: string;
+                            /** @description Username of the bill owner */
+                            owner_username: string;
+                            /**
+                             * Format: email
+                             * @description Email address that received the invitation
+                             */
+                            shared_with_email: string;
                             /** @enum {string|null} */
-                            split_type?: "percentage" | "fixed" | "equal" | null;
-                            split_value?: number | null;
+                            split_type: "percentage" | "fixed" | "equal" | null;
+                            split_value: number | null;
                             /** @description Calculated portion amount */
-                            my_portion?: number | null;
+                            my_portion: number | null;
                             /** Format: date-time */
-                            expires_at?: string | null;
+                            expires_at: string | null;
+                            /** Format: date-time */
+                            updated_at: string;
                         };
                     };
                 };
             };
+            400: components["responses"]["BadRequest"];
             /** @description Invalid or expired invitation */
             404: {
                 headers: {

@@ -38,10 +38,11 @@ function parseFrequencyConfig(value: Bill['frequency_config']): Record<string, u
   }
 }
 
-export function nextOccurrence(bill: Bill, current: Date): Date {
+export function nextOccurrence(bill: Bill, current: Date): Date | null {
   const frequency = bill.frequency.toLowerCase();
   const config = parseFrequencyConfig(bill.frequency_config);
 
+  if (frequency === 'once') return null;
   if (frequency === 'weekly') return addWeeks(current, 1);
   if (frequency === 'biweekly' || frequency === 'bi-weekly') return addWeeks(current, 2);
   if (frequency === 'quarterly') return addMonths(current, 3);
@@ -121,7 +122,7 @@ export function buildReminderSchedule(
       }
 
       const next = nextOccurrence(bill, dueDate);
-      if (!isAfter(next, dueDate)) break;
+      if (!next || !isAfter(next, dueDate)) break;
       dueDate = next;
       occurrenceCount += 1;
     }

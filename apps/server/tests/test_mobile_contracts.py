@@ -828,6 +828,42 @@ def test_share_create_replays_without_duplicate_or_duplicate_audit(
         ).count() == 1
 
 
+def test_share_info_returns_owner_and_recipient_contract(
+    client,
+    test_bill,
+    admin_user,
+    regular_user,
+    app,
+    db_session,
+):
+    share = BillShare(
+        bill_id=test_bill.id,
+        owner_user_id=admin_user.id,
+        shared_with_user_id=regular_user.id,
+        shared_with_identifier=regular_user.email,
+        identifier_type="email",
+        status="pending",
+        split_type="equal",
+        expires_at=datetime.datetime.now(datetime.timezone.utc)
+        + datetime.timedelta(days=7),
+    )
+    invite_token = share.set_invite_token()
+    with app.app_context():
+        db_session.add(share)
+        db_session.commit()
+
+    response = client.get("/api/v2/share-info", query_string={"token": invite_token})
+
+    assert response.status_code == 200
+    data = response.get_json()["data"]
+    assert data["owner_username"] == admin_user.username
+    assert data["shared_with_email"] == regular_user.email
+    assert data["owner"] == data["owner_username"]
+    assert data["bill_name"] == test_bill.name
+    assert data["my_portion"] == test_bill.amount / 2
+    assert data["updated_at"]
+
+
 def test_share_mark_paid_replays_instead_of_toggling_back(
     client,
     user_auth_headers,
