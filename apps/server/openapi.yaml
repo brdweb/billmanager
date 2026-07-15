@@ -177,19 +177,33 @@ paths:
   /auth/change-password:
     post:
       tags: [Authentication]
-      summary: Change password using change token
+      summary: Change a password
+      description: |
+        Supports either an unauthenticated forced-change flow using
+        `change_token`, or an authenticated self-service flow using
+        `current_password` and a bearer token.
+      security:
+        - {}
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [change_token, new_password]
+              required: [new_password]
+              oneOf:
+                - required: [change_token]
+                - required: [current_password]
               properties:
                 change_token:
                   type: string
+                current_password:
+                  type: string
+                  format: password
                 new_password:
                   type: string
+                  format: password
                   minLength: 8
                 device_info:
                   type: string
@@ -436,9 +450,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [shared_with, split_type]
+              required: [identifier]
               properties:
-                shared_with:
+                identifier:
                   type: string
                   description: Username or email of user to share with
                   example: "john@example.com"
@@ -1327,7 +1341,7 @@ components:
           description: Average payment amount (only for variable bills)
         frequency:
           type: string
-          enum: [weekly, bi-weekly, biweekly, monthly, quarterly, yearly, custom]
+          enum: [once, weekly, bi-weekly, biweekly, monthly, quarterly, yearly, custom]
         frequency_type:
           type: string
           enum: [simple, specific_dates, multiple_weekly]
@@ -1392,6 +1406,7 @@ components:
           default: false
         frequency:
           type: string
+          enum: [once, weekly, bi-weekly, biweekly, monthly, quarterly, yearly, custom]
           default: monthly
         frequency_type:
           type: string
