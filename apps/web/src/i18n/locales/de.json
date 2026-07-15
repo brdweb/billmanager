@@ -205,7 +205,9 @@
       "pending": "ausstehend",
       "declined": "abgelehnt",
       "revoked": "widerrufen"
-    }
+    },
+    "paid": "Bezahlt",
+    "unpaid": "Unbezahlt"
   },
   "sharedBillsSection": {
     "title": "Geteilte Rechnungen",

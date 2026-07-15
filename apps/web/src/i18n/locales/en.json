@@ -205,7 +205,9 @@
       "pending": "pending",
       "declined": "declined",
       "revoked": "revoked"
-    }
+    },
+    "paid": "Paid",
+    "unpaid": "Unpaid"
   },
   "sharedBillsSection": {
     "title": "Shared Bills",
