@@ -767,6 +767,37 @@ class TestBillShareCreation:
         data = json.loads(response.data)
         assert 'identifier' in data['error']
 
+    def test_get_bill_shares_reflects_recipient_paid_status(
+        self, client, auth_headers_with_db, user_auth_headers, db_session, test_bill, admin_user, regular_user
+    ):
+        """Regression (Codex review on #64): jwt_get_bill_shares dropped
+        recipient_paid_date from its response, so the owner-facing paid/unpaid
+        badge in ShareBillModal always showed "unpaid" regardless of reality.
+        """
+        share = BillShare(
+            bill_id=test_bill.id,
+            owner_user_id=admin_user.id,
+            shared_with_user_id=regular_user.id,
+            shared_with_identifier=regular_user.username,
+            identifier_type='username',
+            status='accepted',
+            accepted_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+        db_session.add(share)
+        db_session.commit()
+        db_session.refresh(share)
+
+        before = client.get(f'/api/v2/bills/{test_bill.id}/shares', headers=auth_headers_with_db)
+        before_data = json.loads(before.data)['data']
+        assert before_data[0]['recipient_paid_date'] is None
+
+        mark_response = client.post(f'/api/v2/shares/{share.id}/mark-paid', headers=user_auth_headers)
+        assert mark_response.status_code == 200
+
+        after = client.get(f'/api/v2/bills/{test_bill.id}/shares', headers=auth_headers_with_db)
+        after_data = json.loads(after.data)['data']
+        assert after_data[0]['recipient_paid_date'] is not None
+
 
 class TestOneTimeBills:
     """Regression coverage for frequency='once' bills.

@@ -4836,6 +4836,9 @@ def jwt_get_bill_shares(bill_id):
             "split_value": s.split_value,
             "created_at": s.created_at.isoformat() if s.created_at else None,
             "accepted_at": s.accepted_at.isoformat() if s.accepted_at else None,
+            "recipient_paid_date": s.recipient_paid_date.isoformat()
+            if s.recipient_paid_date
+            else None,
         }
         for s in filtered_shares
     ]
