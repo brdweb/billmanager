@@ -180,6 +180,58 @@ class TestPasswordChange:
             assert me_data.get("role") == "admin"
             assert me_data.get("current_db") == "testdb"
 
+    def test_v2_authenticated_change_password_with_current_password(
+        self, client, admin_auth_headers, admin_user
+    ):
+        """Mobile's Settings screen sends current_password, not change_token."""
+        response = client.post(
+            "/api/v2/auth/change-password",
+            headers=admin_auth_headers,
+            json={
+                "current_password": "testpassword123",
+                "new_password": "Newsecurepassword123",
+            },
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert "access_token" in data["data"]
+
+        # Old password no longer works, new one does
+        old_login = client.post(
+            "/api/v2/auth/login",
+            json={"username": admin_user.username, "password": "testpassword123"},
+        )
+        assert old_login.status_code == 401
+
+        new_login = client.post(
+            "/api/v2/auth/login",
+            json={"username": admin_user.username, "password": "Newsecurepassword123"},
+        )
+        assert new_login.status_code == 200
+
+    def test_v2_authenticated_change_password_rejects_wrong_current_password(
+        self, client, admin_auth_headers
+    ):
+        response = client.post(
+            "/api/v2/auth/change-password",
+            headers=admin_auth_headers,
+            json={
+                "current_password": "totally-wrong-password",
+                "new_password": "Newsecurepassword123",
+            },
+        )
+        assert response.status_code == 401
+        data = json.loads(response.data)
+        assert data["success"] is False
+
+    def test_v2_change_password_requires_token_or_current_password(self, client):
+        response = client.post(
+            "/api/v2/auth/change-password",
+            json={"new_password": "Newsecurepassword123"},
+        )
+        assert response.status_code == 400
+
 
 class TestLogout:
     """Test logout functionality."""

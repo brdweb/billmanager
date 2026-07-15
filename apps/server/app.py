@@ -6294,33 +6294,59 @@ def jwt_process_auto_payments():
 @api_v2_bp.route("/auth/change-password", methods=["POST"])
 @limiter.limit("20 per minute;60 per hour")
 def jwt_change_password():
-    """Change password (for users with password_change_required or via change_token)."""
+    """Change password.
+
+    Supports two modes:
+    - `change_token` (unauthenticated): for the forced first-login /
+      password-reset flow.
+    - `current_password` (authenticated via Authorization header): for a
+      logged-in user voluntarily changing their own password.
+    """
     data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"success": False, "error": "Invalid JSON body"}), 400
 
     change_token = data.get("change_token")
+    current_password = data.get("current_password")
     new_password = data.get("new_password")
 
-    if not change_token or not new_password:
+    if not new_password or not (change_token or current_password):
         return jsonify(
-            {"success": False, "error": "change_token and new_password are required"}
+            {
+                "success": False,
+                "error": "new_password and either change_token or current_password are required",
+            }
         ), 400
 
     is_valid, error = validate_password(new_password)
     if not is_valid:
         return jsonify({"success": False, "error": error}), 400
 
-    user = User.find_by_change_token(change_token)
-    if not user:
-        return jsonify({"success": False, "error": "Invalid change token"}), 401
-    if not user.verify_change_token(change_token):
-        return jsonify({"success": False, "error": "Change token expired"}), 401
+    if change_token:
+        user = User.find_by_change_token(change_token)
+        if not user:
+            return jsonify({"success": False, "error": "Invalid change token"}), 401
+        if not user.verify_change_token(change_token):
+            return jsonify({"success": False, "error": "Change token expired"}), 401
+        user.password_change_required = False
+        user.change_token = None
+        user.change_token_expires = None
+    else:
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return jsonify(
+                {"success": False, "error": "Missing or invalid Authorization header"}
+            ), 401
+        payload = verify_access_token(auth_header.split(" ")[1])
+        if not payload:
+            return jsonify({"success": False, "error": "Invalid or expired token"}), 401
+        user = db.session.get(User, payload["user_id"])
+        if not user or not user.check_password(current_password):
+            return jsonify(
+                {"success": False, "error": "Current password is incorrect"}
+            ), 401
 
     user.set_password(new_password)
-    user.password_change_required = False
-    user.change_token = None
-    user.change_token_expires = None
     db.session.commit()
 
     # Optionally auto-login after password change
