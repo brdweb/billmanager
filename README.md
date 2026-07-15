@@ -6,16 +6,15 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.3.0
+## 🎉 What's New in v4.3.1
 
-**Internationalization and Self-Hosted Flexibility** - BillManager now supports English and German, uses the currency and locale configured for your deployment, and keeps reminder alerts out of the way while you work.
+**Unified Settings and Localization Fixes** - Account settings and administration now live on one full page, language selection uses the expected default currency, and bill-group administration is reliable again.
 
 ### Highlights
 
-- **English and German UI** - Choose your preferred interface language in Settings, with locale-aware dates and exports
-- **Configurable Currency** - Self-hosted deployments can set their default currency and locale with `DEFAULT_CURRENCY` and `DEFAULT_LOCALE`
-- **Less Intrusive Alerts** - Reminder alerts sit at the lower-right and hide while their slide-in drawer is open
-- **Dependency and Runtime Refresh** - Web, mobile, Python, Node.js, and PostgreSQL dependencies and runtime support were updated
+- **Full-Page Settings** - Regular users can open Settings from the header, while admins also receive Users and Bill Groups tabs in the same workspace
+- **Language-Aware Currency** - Choosing English uses USD and choosing German uses EUR, including after a reload
+- **Reliable Bill-Group Administration** - The v2 database-access endpoint once again lists affected users before a bill group is deleted
 
 ---
 

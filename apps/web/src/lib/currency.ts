@@ -122,6 +122,15 @@ export function setCurrencyConfig(locale: string, currency: string): void {
   }
 }
 
+/**
+ * Changes the active currency while preserving the configured deployment
+ * locale. Used when a user explicitly selects a UI language with a different
+ * default currency.
+ */
+export function setCurrency(currency: string): void {
+  setCurrencyConfig(configuredLocale, currency);
+}
+
 export function setFormattingLanguage(language: string): void {
   const normalizedLanguage = language.split(/[-_]/)[0].toLowerCase();
   if (normalizedLanguage === currentLanguage) return;

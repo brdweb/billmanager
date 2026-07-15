@@ -77,8 +77,8 @@ test.describe('Two-Factor Authentication', () => {
     await page.goto('/settings');
     await page.waitForLoadState('domcontentloaded');
 
-    // Security Settings heading should still be visible
-    await expect(page.getByText('Security Settings')).toBeVisible({ timeout: 10000 });
+    // Settings heading should still be visible
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10000 });
 
     // Two-Factor heading should NOT be visible when feature is disabled
     // (TwoFactorSettings returns null when !config.twofa_enabled)

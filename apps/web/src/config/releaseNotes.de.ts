@@ -2,6 +2,26 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.3.1',
+    date: '2026-07-15',
+    title: 'Einheitliche Einstellungen und Lokalisierungsfehlerbehebungen',
+    sections: [
+      {
+        heading: 'Verbesserungen',
+        items: [
+          'Kontoeinstellungen und Verwaltung befinden sich jetzt in einem gemeinsamen ganzseitigen Arbeitsbereich; reguläre Nutzer sehen die Einstellungen, während Administratoren zusätzlich auf die Tabs Nutzer und Rechnungsgruppen zugreifen können',
+        ],
+      },
+      {
+        heading: 'Fehlerbehebungen',
+        items: [
+          'Bei der Auswahl von Englisch wird jetzt USD und bei der Auswahl von Deutsch EUR verwendet, auch wenn eine gespeicherte Spracheinstellung nach dem Neuladen wiederhergestellt wird',
+          'Beim Löschen einer Rechnungsgruppe können die betroffenen Nutzer vor der Bestätigung wieder über den v2-Datenbankzugriffs-Endpunkt aufgelistet werden',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.3.0',
     date: '2026-07-10',
     title: 'Internationalisierung und Flexibilität für Self-Hosting',

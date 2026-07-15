@@ -6,7 +6,9 @@
  * 1. Add a new entry at the TOP of the `releaseNotes` array (newest first)
  * 2. Update the version number in these files:
  *    - apps/server/app.py (search for 'version': - two occurrences)
+ *    - apps/server/openapi.yaml
  *    - apps/web/package.json
+ *    - apps/web/package-lock.json
  *    - README.md (What's New section)
  * 3. The `currentVersion` export automatically uses the first entry's version
  *
@@ -45,6 +47,26 @@ export interface ReleaseNote {
 }
 
 export const releaseNotes: ReleaseNote[] = [
+  {
+    version: '4.3.1',
+    date: '2026-07-15',
+    title: 'Unified Settings and Localization Fixes',
+    sections: [
+      {
+        heading: 'Improvements',
+        items: [
+          'Account settings and administration now share a full-page workspace; regular users see Settings, while admins also receive Users and Bill Groups tabs',
+        ],
+      },
+      {
+        heading: 'Bug Fixes',
+        items: [
+          'Choosing English now uses USD and choosing German uses EUR, including when a saved language preference is restored after a reload',
+          'Bill-group deletion can once again list affected users through the v2 database-access endpoint before confirmation',
+        ],
+      },
+    ],
+  },
   {
     version: '4.3.0',
     date: '2026-07-10',

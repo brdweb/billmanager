@@ -351,6 +351,7 @@
     "toggleColorScheme": "Farbschema umschalten",
     "billing": "Abrechnung",
     "admin": "Admin",
+    "settings": "Einstellungen",
     "logout": "Abmelden",
     "scrollToTop": "Nach oben scrollen"
   },
@@ -1026,8 +1027,11 @@
     "acceptInvitationButton": "Einladung annehmen"
   },
   "settingsPage": {
-    "title": "Sicherheitseinstellungen",
-    "languageLabel": "Sprache"
+    "title": "Einstellungen",
+    "languageLabel": "Sprache",
+    "tabs": {
+      "settings": "Einstellungen"
+    }
   },
   "dashboardPage": {
     "noBillGroupTitle": "Keine Rechnungsgruppe ausgewählt",

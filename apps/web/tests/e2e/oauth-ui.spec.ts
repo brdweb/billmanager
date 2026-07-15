@@ -94,47 +94,31 @@ test.describe('OAuth UI - Auth Callback', () => {
   });
 });
 
-test.describe('OAuth UI - Admin Panel Security Tab', () => {
+test.describe('OAuth UI - Settings Page', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
   });
 
-  test('admin modal has Users and Bill Groups tabs', async ({ page }) => {
+  test('admin settings page has Settings, Users, and Bill Groups tabs', async ({ page }) => {
     const adminButton = page.locator('button:has-text("Admin")');
     await expect(adminButton).toBeVisible({ timeout: 5000 });
     await adminButton.click();
 
-    const modal = page.locator('[role="dialog"]');
-    await expect(modal).toBeVisible({ timeout: 5000 });
+    await expect(page).toHaveURL(/\/settings\?tab=users/);
 
-    // Users and Bill Groups tabs should always be present
-    await expect(modal.locator('[role="tab"]:has-text("Users")')).toBeVisible();
-    await expect(modal.locator('[role="tab"]').filter({ hasText: /bill group/i })).toBeVisible();
+    await expect(page.locator('[role="tab"]:has-text("Settings")')).toBeVisible();
+    await expect(page.locator('[role="tab"]:has-text("Users")')).toBeVisible();
+    await expect(page.locator('[role="tab"]').filter({ hasText: /bill group/i })).toBeVisible();
   });
 
-  test('admin modal Security tab visibility depends on config', async ({ page }) => {
+  test('Settings tab exposes configured account security controls', async ({ page }) => {
     const adminButton = page.locator('button:has-text("Admin")');
     await expect(adminButton).toBeVisible({ timeout: 5000 });
     await adminButton.click();
 
-    const modal = page.locator('[role="dialog"]');
-    await expect(modal).toBeVisible({ timeout: 5000 });
-
-    // Security tab may or may not be present depending on server config
-    // (shown when twofa_enabled or oauth_providers configured)
-    const securityTab = modal.locator('[role="tab"]:has-text("Security")');
-    const securityTabCount = await securityTab.count();
-
-    if (securityTabCount > 0) {
-      // If present, clicking it should show security content
-      await securityTab.click();
-      await page.waitForTimeout(500);
-
-      // Should show 2FA or linked accounts content
-      const hasSecurityContent =
-        await modal.getByText(/two-factor|linked accounts/i).first().isVisible().catch(() => false);
-      expect(hasSecurityContent).toBeTruthy();
-    }
-    // Either way, test passes - we're just verifying the tab behaves correctly
+    const settingsTab = page.locator('[role="tab"]:has-text("Settings")');
+    await settingsTab.click();
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page.getByLabel('Language')).toBeVisible();
   });
 });

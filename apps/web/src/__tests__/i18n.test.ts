@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n, { applyLocaleDefault, setLanguage } from '../i18n';
-import { getLocale, setCurrencyConfig } from '../lib/currency';
+import {
+  formatCurrency,
+  getCurrencySymbol,
+  getLocale,
+  setCurrencyConfig,
+} from '../lib/currency';
 
 function addMetadataElements() {
   document.head.innerHTML = `
@@ -21,7 +26,7 @@ afterEach(async () => {
 describe('language switching', () => {
   it('updates document metadata, locale formatting, and the saved preference', async () => {
     addMetadataElements();
-    setCurrencyConfig('en-DE', 'EUR');
+    setCurrencyConfig('en-US', 'USD');
 
     setLanguage('de');
     await vi.waitFor(() => expect(i18n.language).toBe('de'));
@@ -36,7 +41,23 @@ describe('language switching', () => {
       'content',
       'Behalten Sie Ihre Rechnungen und Einnahmen mühelos im Blick'
     );
-    expect(getLocale()).toBe('de-DE');
+    expect(getLocale()).toBe('de-US');
+    expect(getCurrencySymbol()).toBe('€');
+    expect(formatCurrency(1234.56)).toBe(
+      new Intl.NumberFormat('de-US', {
+        style: 'currency',
+        currency: 'EUR',
+      }).format(1234.56)
+    );
+  });
+
+  it('reapplies a saved language currency after deployment config loads', () => {
+    vi.mocked(window.localStorage.getItem).mockReturnValue('de');
+    setCurrencyConfig('en-US', 'USD');
+
+    applyLocaleDefault('en-US');
+
+    expect(getCurrencySymbol()).toBe('€');
   });
 
   it('uses the server locale when there is no saved browser preference', async () => {

@@ -6,18 +6,18 @@ test.describe('Security Settings Page', () => {
     await login(page);
   });
 
-  test('settings page renders Security Settings heading', async ({ page }) => {
+  test('settings page renders Settings heading', async ({ page }) => {
     await page.goto('/settings');
     await page.waitForLoadState('domcontentloaded');
 
-    await expect(page.getByText('Security Settings')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10000 });
   });
 
   test('settings page renders TwoFactorSettings section based on config', async ({ page }) => {
     await page.goto('/settings');
     await page.waitForLoadState('domcontentloaded');
 
-    await expect(page.getByText('Security Settings')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10000 });
 
     // Fetch config to know what to expect
     const response = await page.request.get('/api/v2/config');
@@ -39,7 +39,7 @@ test.describe('Security Settings Page', () => {
     await page.goto('/settings');
     await page.waitForLoadState('domcontentloaded');
 
-    await expect(page.getByText('Security Settings')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10000 });
 
     // Fetch config to know what to expect
     const response = await page.request.get('/api/v2/config');
@@ -65,7 +65,7 @@ test.describe('Security Settings Page', () => {
     await page.waitForLoadState('domcontentloaded');
 
     // Should render without redirect to login
-    await expect(page.getByText('Security Settings')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10000 });
 
     // Should NOT show login form
     const loginButton = page.locator('button[type="submit"]:has-text("Sign In")');
@@ -91,11 +91,11 @@ test.describe('Security Settings Page', () => {
     await page.goto('/settings');
     await page.waitForLoadState('domcontentloaded');
 
-    await expect(page.getByText('Security Settings')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10000 });
 
     // The Settings page has a Divider component between TwoFactorSettings and LinkedAccounts
     // Verify the page structure renders correctly by checking the container
-    const settingsContainer = page.locator('[class*="Container"]').filter({ hasText: 'Security Settings' });
+    const settingsContainer = page.locator('[class*="Container"]').filter({ hasText: 'Settings' });
     await expect(settingsContainer).toBeVisible();
   });
 });
