@@ -81,7 +81,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Change a password using a change token or the authenticated current password */
+        /**
+         * Change a password
+         * @description Supports either an unauthenticated forced-change flow using
+         *     `change_token`, or an authenticated self-service flow using
+         *     `current_password` and a bearer token.
+         */
         post: operations["changeForcedPassword"];
         delete?: never;
         options?: never;
@@ -432,6 +437,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bills/{bill_id}/payments/monthly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get monthly payment totals for a bill
+         * @description Returns up to 12 months of payment totals for the selected bill.
+         */
+        get: operations["getBillMonthlyPayments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/payments": {
         parameters: {
             query?: never;
@@ -501,6 +526,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/invitations/info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get user invitation details by token
+         * @description Public endpoint used before an invited user has an account.
+         */
+        get: operations["getUserInvitationInfo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a user invitation
+         * @description Public endpoint that creates the invited user's account.
+         */
+        post: operations["acceptUserInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/process-auto-payments": {
         parameters: {
             query?: never;
@@ -512,40 +577,6 @@ export interface paths {
         put?: never;
         /** Process auto-payments for due bills */
         post: operations["processAutoPayments"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/invite-info": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get a team invitation by token */
-        get: operations["getTeamInvitationInfo"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/accept-invite": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Accept a team invitation and create an account */
-        post: operations["acceptTeamInvitation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1771,6 +1802,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check API liveness */
+        get: operations["pingServer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2017,6 +2065,7 @@ export interface components {
             id?: number;
             name?: string;
             display_name?: string;
+            description?: string | null;
         };
         Bill: {
             id?: number;
@@ -2026,7 +2075,7 @@ export interface components {
             /** @description Average payment amount (only for variable bills) */
             avg_amount?: number;
             /** @enum {string} */
-            frequency?: "weekly" | "bi-weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "custom";
+            frequency?: "once" | "weekly" | "bi-weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "custom";
             /** @enum {string} */
             frequency_type?: "simple" | "specific_dates" | "multiple_weekly";
             /** @description JSON configuration for complex frequencies */
@@ -2076,7 +2125,7 @@ export interface components {
              * @default monthly
              * @enum {string}
              */
-            frequency: "weekly" | "bi-weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "custom";
+            frequency: "once" | "weekly" | "bi-weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "custom";
             /**
              * @default simple
              * @enum {string}
@@ -2193,7 +2242,7 @@ export interface components {
         };
         BillShareCreateInput: components["schemas"]["MutationControl"] & {
             /** @description Recipient username or email address */
-            shared_with: string;
+            identifier: string;
             /** @enum {string|null} */
             split_type?: "percentage" | "fixed" | "equal" | null;
             split_value?: number | null;
@@ -2704,13 +2753,13 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description Required for a forced-password-change flow. */
                     change_token?: string;
-                    /** @description Requires a valid bearer token and changes the signed-in user's password. */
+                    /** Format: password */
                     current_password?: string;
+                    /** Format: password */
                     new_password: string;
                     device_info?: string;
-                } | unknown | unknown;
+                } & (unknown | unknown);
             };
         };
         responses: {
@@ -2798,6 +2847,8 @@ export interface operations {
         parameters: {
             query?: {
                 include_archived?: boolean;
+                /** @description Optionally filter bills by transaction type. */
+                type?: "expense" | "deposit";
             };
             header: {
                 /**
@@ -3551,6 +3602,43 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    getBillMonthlyPayments: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Database/workspace name to operate on. Use `_all_` only on endpoints
+                 *     that explicitly support cross-workspace access. Mutation idempotency is
+                 *     isolated by authenticated user and the affected database.
+                 */
+                "X-Database": components["parameters"]["XDatabase"];
+            };
+            path: {
+                bill_id: components["parameters"]["BillId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Monthly payment totals */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        data?: {
+                            /** @example 2026-07 */
+                            month: string;
+                            total: number;
+                            count: number;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
     listPayments: {
         parameters: {
             query?: never;
@@ -3752,6 +3840,99 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    getUserInvitationInfo: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User invitation details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        data?: {
+                            /** Format: email */
+                            email?: string;
+                            invited_by?: string;
+                            /** Format: date-time */
+                            expires_at?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invitation was already accepted or expired */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invitation token is invalid */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    acceptUserInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                    username: string;
+                    /** Format: password */
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Account created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        data?: {
+                            message?: string;
+                            username?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid, expired, or previously accepted invitation */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     processAutoPayments: {
         parameters: {
             query?: never;
@@ -3790,57 +3971,6 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-        };
-    };
-    getTeamInvitationInfo: {
-        parameters: {
-            query: {
-                token: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Invitation email, inviter, and expiration */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ObjectDataResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            404: components["responses"]["NotFound"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    acceptTeamInvitation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["InvitationAcceptanceInput"];
-            };
-        };
-        responses: {
-            /** @description Invitation accepted and account created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ObjectDataResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            429: components["responses"]["RateLimited"];
         };
     };
     registerAccount: {
@@ -5971,6 +6101,32 @@ export interface operations {
                             license_url?: string;
                             features?: string[];
                             mobile?: components["schemas"]["MobileCapabilities"];
+                        };
+                    };
+                };
+            };
+        };
+    };
+    pingServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description API is reachable */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        data?: {
+                            /** @example ok */
+                            status?: string;
                         };
                     };
                 };

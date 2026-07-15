@@ -40,7 +40,6 @@ def app():
     application = create_app()
     application.config.update({
         'TESTING': True,
-        'WTF_CSRF_ENABLED': False,
     })
 
     with application.app_context():

@@ -34,6 +34,7 @@ export interface DatabaseInfo {
   id: number;
   name: string;
   display_name: string;
+  description?: string | null;
 }
 
 // Bill types

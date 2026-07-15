@@ -43,6 +43,8 @@ tags:
     description: Payment recording and history
   - name: Budgets
     description: Category budget targets and summaries
+  - name: Invitations
+    description: User invitation management and public invitation acceptance
   - name: Statistics
     description: Analytics and reporting
   - name: Administration
@@ -198,8 +200,15 @@ paths:
   /auth/change-password:
     post:
       tags: [Authentication]
-      summary: Change a password using a change token or the authenticated current password
+      summary: Change a password
       operationId: changeForcedPassword
+      description: |
+        Supports either an unauthenticated forced-change flow using
+        `change_token`, or an authenticated self-service flow using
+        `current_password` and a bearer token.
+      security:
+        - {}
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -207,21 +216,21 @@ paths:
             schema:
               type: object
               required: [new_password]
+              oneOf:
+                - required: [change_token]
+                - required: [current_password]
               properties:
                 change_token:
                   type: string
-                  description: Required for a forced-password-change flow.
                 current_password:
                   type: string
-                  description: Requires a valid bearer token and changes the signed-in user's password.
+                  format: password
                 new_password:
                   type: string
+                  format: password
                   minLength: 8
                 device_info:
                   type: string
-              anyOf:
-                - required: [change_token]
-                - required: [current_password]
       responses:
         '200':
           description: Password changed; a change-token flow also returns new tokens
@@ -324,6 +333,12 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: type
+          in: query
+          description: Optionally filter bills by transaction type.
+          schema:
+            type: string
+            enum: [expense, deposit]
       responses:
         '200':
           description: List of bills
@@ -1037,6 +1052,41 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
 
+  /bills/{bill_id}/payments/monthly:
+    get:
+      tags: [Payments]
+      summary: Get monthly payment totals for a bill
+      operationId: getBillMonthlyPayments
+      description: Returns up to 12 months of payment totals for the selected bill.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XDatabase'
+        - $ref: '#/components/parameters/BillId'
+      responses:
+        '200':
+          description: Monthly payment totals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [month, total, count]
+                      properties:
+                        month:
+                          type: string
+                          example: "2026-07"
+                        total:
+                          type: number
+                        count:
+                          type: integer
+
   /payments:
     get:
       tags: [Payments]
@@ -1207,6 +1257,99 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
 
+  /invitations/info:
+    get:
+      tags: [Invitations]
+      summary: Get user invitation details by token
+      operationId: getUserInvitationInfo
+      description: Public endpoint used before an invited user has an account.
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User invitation details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      email:
+                        type: string
+                        format: email
+                      invited_by:
+                        type: string
+                      expires_at:
+                        type: string
+                        format: date-time
+        '400':
+          description: Invitation was already accepted or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Invitation token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /invitations/accept:
+    post:
+      tags: [Invitations]
+      summary: Accept a user invitation
+      operationId: acceptUserInvitation
+      description: Public endpoint that creates the invited user's account.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, username, password]
+              properties:
+                token:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+                  format: password
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                      username:
+                        type: string
+        '400':
+          description: Invalid, expired, or previously accepted invitation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /process-auto-payments:
     post:
       tags: [Utilities]
@@ -1245,49 +1388,6 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
-
-  /invite-info:
-    get:
-      tags: [Authentication]
-      summary: Get a team invitation by token
-      operationId: getTeamInvitationInfo
-      x-capability: administration
-      security: []
-      parameters:
-        - name: token
-          in: query
-          required: true
-          schema: {type: string}
-      responses:
-        '200':
-          description: Invitation email, inviter, and expiration
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ObjectDataResponse'}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '429': {$ref: '#/components/responses/RateLimited'}
-
-  /accept-invite:
-    post:
-      tags: [Authentication]
-      summary: Accept a team invitation and create an account
-      operationId: acceptTeamInvitation
-      x-capability: administration
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/InvitationAcceptanceInput'}
-      responses:
-        '201':
-          description: Invitation accepted and account created
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ObjectDataResponse'}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '429': {$ref: '#/components/responses/RateLimited'}
 
   /auth/register:
     post:
@@ -2963,6 +3063,29 @@ paths:
                       mobile:
                         $ref: '#/components/schemas/MobileCapabilities'
 
+  /ping:
+    get:
+      tags: [Utilities]
+      summary: Check API liveness
+      operationId: pingServer
+      security: []
+      responses:
+        '200':
+          description: API is reachable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: ok
+
 components:
   securitySchemes:
     bearerAuth:
@@ -3492,6 +3615,9 @@ components:
           type: string
         display_name:
           type: string
+        description:
+          type: string
+          nullable: true
 
     Bill:
       type: object
@@ -3510,7 +3636,7 @@ components:
           description: Average payment amount (only for variable bills)
         frequency:
           type: string
-          enum: [weekly, bi-weekly, biweekly, monthly, quarterly, yearly, custom]
+          enum: [once, weekly, bi-weekly, biweekly, monthly, quarterly, yearly, custom]
         frequency_type:
           type: string
           enum: [simple, specific_dates, multiple_weekly]
@@ -3595,7 +3721,7 @@ components:
               default: false
             frequency:
               type: string
-              enum: [weekly, bi-weekly, biweekly, monthly, quarterly, yearly, custom]
+              enum: [once, weekly, bi-weekly, biweekly, monthly, quarterly, yearly, custom]
               default: monthly
             frequency_type:
               type: string
@@ -3678,7 +3804,6 @@ components:
             notes:
               type: string
               nullable: true
-
     Payment:
       type: object
       properties:
@@ -3789,9 +3914,9 @@ components:
       allOf:
         - $ref: '#/components/schemas/MutationControl'
         - type: object
-          required: [shared_with]
+          required: [identifier]
           properties:
-            shared_with:
+            identifier:
               type: string
               description: Recipient username or email address
             split_type:

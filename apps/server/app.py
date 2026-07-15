@@ -16,7 +16,6 @@ from flask import (
     request,
     jsonify,
     send_from_directory,
-    session,
     g,
     Blueprint,
     redirect,
@@ -146,7 +145,6 @@ CHANGE_TOKEN_EXPIRES = timedelta(minutes=15)
 REFRESH_TOKEN_COOKIE_NAME = "bm_refresh_token"  # nosec B105
 
 # --- Blueprints ---
-api_bp = Blueprint("api", __name__)
 api_v2_bp = Blueprint("api_v2", __name__, url_prefix="/api/v2")
 spa_bp = Blueprint("spa", __name__)
 
@@ -201,107 +199,6 @@ def _get_refresh_token_from_request():
     """Resolve refresh token from JSON body first, then HttpOnly cookie."""
     data = request.get_json(silent=True) or {}
     return data.get("refresh_token") or request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
-
-
-# --- CSRF Protection ---
-
-
-def issue_csrf_token():
-    """Generate and persist CSRF token for session-authenticated routes."""
-    token = secrets.token_urlsafe(32)
-    session["csrf_token"] = token
-    return token
-
-
-# --- CSRF Protection ---
-
-
-def check_csrf():
-    """
-    Check Origin/Referer and synchronizer token for CSRF protection.
-    Requires both:
-    1) Allowed Origin/Referer
-    2) Matching X-CSRF-Token header against session token
-    """
-    if request.method in ("GET", "HEAD", "OPTIONS"):
-        return True  # Safe methods don't need CSRF check
-
-    # Build allowed origins dynamically based on request host and env
-    app_url = os.environ.get("APP_URL", "")
-    host = request.headers.get("Host", "")
-
-    allowed_origins = {
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:5175",  # Vite dev server (alternate port)
-        "http://localhost:5001",  # Flask dev server
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5175",
-        "http://127.0.0.1:5001",
-    }
-
-    # Add APP_URL if set
-    if app_url:
-        allowed_origins.add(app_url)
-
-    # Dynamically allow the request's own host (same-origin)
-    if host:
-        allowed_origins.add(f"https://{host}")
-        allowed_origins.add(f"http://{host}")
-
-    origin = request.headers.get("Origin")
-    referer = request.headers.get("Referer")
-
-    # Require an origin signal (Origin preferred, Referer fallback)
-    request_origin = None
-    if origin:
-        request_origin = origin
-    elif referer:
-        from urllib.parse import urlparse
-
-        parsed = urlparse(referer)
-        if not parsed.scheme or not parsed.netloc:
-            return False
-        request_origin = f"{parsed.scheme}://{parsed.netloc}"
-    else:
-        # Reject state-changing requests that omit both headers.
-        return False
-
-    if request_origin not in allowed_origins:
-        return False
-
-    csrf_session_token = session.get("csrf_token")
-    csrf_header_token = request.headers.get("X-CSRF-Token")
-    if not csrf_session_token or not csrf_header_token:
-        return False
-
-    return secrets.compare_digest(csrf_session_token, csrf_header_token)
-
-
-# --- Decorators ---
-
-
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if "user_id" not in session:
-            return jsonify({"error": "Authentication required"}), 401
-        if not check_csrf():
-            return jsonify({"error": "CSRF validation failed"}), 403
-        return f(*args, **kwargs)
-
-    return decorated_function
-
-
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if "role" not in session or session["role"] != "admin":
-            return jsonify({"error": "Admin access required"}), 403
-        if not check_csrf():
-            return jsonify({"error": "CSRF validation failed"}), 403
-        return f(*args, **kwargs)
-
-    return decorated_function
 
 
 # --- JWT Helper Functions ---
@@ -1046,40 +943,6 @@ def jwt_admin_required(f):
     return decorated_function
 
 
-def auth_required(f):
-    """Decorator that accepts both session auth (web) and JWT auth (mobile).
-    Sets g.auth_user_id regardless of auth method used."""
-
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Try JWT auth first (check Authorization header)
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
-            payload = verify_access_token(token)
-            if payload:
-                g.auth_user_id = payload["user_id"]
-                g.auth_role = payload["role"]
-                g.auth_method = "jwt"
-                return f(*args, **kwargs)
-            return jsonify({"success": False, "error": "Invalid or expired token"}), 401
-
-        # Fall back to session auth
-        if "user_id" in session:
-            if not check_csrf():
-                return jsonify(
-                    {"success": False, "error": "CSRF validation failed"}
-                ), 403
-            g.auth_user_id = session["user_id"]
-            g.auth_role = session.get("role", "user")
-            g.auth_method = "session"
-            return f(*args, **kwargs)
-
-        return jsonify({"success": False, "error": "Authentication required"}), 401
-
-    return decorated_function
-
-
 # --- Subscription & Tier Helpers ---
 
 
@@ -1266,7 +1129,9 @@ def calculate_next_due_date(
     else:
         current_date = current_due
 
-    if frequency == "weekly":
+    if frequency == "once":
+        return current_date
+    elif frequency == "weekly":
         return current_date + timedelta(days=7)
     elif frequency in ("bi-weekly", "biweekly"):
         return current_date + timedelta(days=14)
@@ -1388,9 +1253,6 @@ def forecast_bill_occurrences(bill, amount, start_date, end_date, source, db_nam
     return occurrences
 
 
-# --- API Routes ---
-
-
 def _record_login_if_due(user, now=None):
     """Record a successful login at most once per rolling 24-hour period."""
     current = now or datetime.datetime.now(datetime.timezone.utc)
@@ -1405,1794 +1267,6 @@ def _record_login_if_due(user, now=None):
 
     user.last_login_at = current_naive
     return True
-
-
-@api_bp.route("/login", methods=["POST"])
-@limiter.limit("20 per minute")
-def login():
-    data = request.get_json() or {}
-    username = data.get("username")
-    password = data.get("password")
-    if not username or not password:
-        return jsonify({"error": "Username and password are required"}), 400
-    user = User.query.filter_by(username=username).first()
-    if user and user.check_password(password):
-        # Commit any password hash migration that occurred during check_password
-        db.session.commit()
-        log_auth_event("login", success=True, user_id=user.id, username=user.username)
-        if user.password_change_required:
-            token = user.generate_change_token(CHANGE_TOKEN_EXPIRES)
-            db.session.commit()
-            return jsonify(
-                {
-                    "password_change_required": True,  # nosec B105
-                    "user_id": user.id,
-                    "change_token": token,
-                    "role": user.role,
-                }
-            )  # nosec B105
-        if _record_login_if_due(user):
-            db.session.commit()
-        session["user_id"] = user.id
-        session["role"] = user.role
-        csrf_token = issue_csrf_token()
-        dbs = [
-            {"id": d.id, "name": d.name, "display_name": d.display_name}
-            for d in user.accessible_databases
-        ]
-        if dbs:
-            session["db_name"] = dbs[0]["name"]
-        return jsonify(
-            {
-                "message": "Login successful",
-                "role": user.role,
-                "databases": dbs,
-                "csrf_token": csrf_token,
-            }
-        )
-    log_auth_event("login", success=False, username=username)
-    return jsonify({"error": "Invalid username or password"}), 401
-
-
-@api_bp.route("/change-password", methods=["POST"])
-@limiter.limit("20 per minute")
-def change_password():
-    """Change password for users with password_change_required flag (first login)."""
-    data = request.get_json() or {}
-    change_token = data.get("change_token")
-    new_password = data.get("new_password")
-
-    if not change_token or not new_password:
-        return jsonify({"error": "change_token and new_password are required"}), 400
-
-    is_valid, error = validate_password(new_password)
-    if not is_valid:
-        return jsonify({"error": error}), 400
-
-    user = User.find_by_change_token(change_token)
-    if not user:
-        return jsonify({"error": "Invalid change token"}), 401
-    if not user.verify_change_token(change_token):
-        return jsonify({"error": "Change token expired"}), 401
-
-    user.set_password(new_password)
-    user.password_change_required = False
-    user.change_token = None
-    user.change_token_expires = None
-    db.session.commit()
-
-    log_auth_event(
-        "password_change",
-        success=True,
-        user_id=user.id,
-        username=user.username,
-        first_login=True,
-    )
-
-    # Set up session (like normal login)
-    session["user_id"] = user.id
-    session["role"] = user.role
-    csrf_token = issue_csrf_token()
-    dbs = [
-        {"id": d.id, "name": d.name, "display_name": d.display_name}
-        for d in user.accessible_databases
-    ]
-    if dbs:
-        session["db_name"] = dbs[0]["name"]
-
-    return jsonify(
-        {
-            "message": "Password changed successfully",
-            "role": user.role,
-            "databases": dbs,
-            "csrf_token": csrf_token,
-        }
-    )
-
-
-@api_bp.route("/logout", methods=["POST"])
-@login_required
-def logout():
-    session.clear()
-    return jsonify({"message": "Logged out successfully"})
-
-
-@api_bp.route("/me", methods=["GET"])
-@login_required
-def me():
-    user = db.session.get(User, session["user_id"])
-    dbs = [
-        {"id": d.id, "name": d.name, "display_name": d.display_name}
-        for d in user.accessible_databases
-    ]
-    return jsonify(
-        {
-            "username": user.username,
-            "role": user.role,
-            "databases": dbs,
-            "current_db": session.get("db_name"),
-            "is_account_owner": user.is_account_owner
-            if is_saas()
-            else (user.role == "admin"),
-        }
-    )
-
-
-@api_bp.route("/select-db/<string:db_name>", methods=["POST"])
-@login_required
-def select_database(db_name):
-    user = db.session.get(User, session["user_id"])
-    target_db = Database.query.filter_by(name=db_name).first()
-    if target_db and target_db in user.accessible_databases:
-        session["db_name"] = db_name
-        return jsonify({"message": f"Selected database: {db_name}"})
-    return jsonify({"error": "Access denied"}), 403
-
-
-@api_bp.route("/databases", methods=["GET", "POST"])
-@admin_required
-def databases_handler():
-    current_user = db.session.get(User, session.get("user_id"))
-    if request.method == "GET":
-        # In SaaS mode, only show databases owned by this admin
-        if is_saas():
-            dbs = (
-                Database.query.filter_by(owner_id=current_user.id)
-                .order_by(Database.created_at.desc())
-                .all()
-            )
-        else:
-            dbs = Database.query.order_by(Database.created_at.desc()).all()
-        return jsonify(
-            [
-                {
-                    "id": d.id,
-                    "name": d.name,
-                    "display_name": d.display_name,
-                    "description": d.description,
-                }
-                for d in dbs
-            ]
-        )
-    else:
-        data = request.get_json()
-        name = data.get("name", "").strip()
-        display_name = data.get("display_name", "").strip()
-
-        # Validate database name
-        is_valid, error = validate_database_name(name)
-        if not is_valid:
-            return jsonify({"error": error}), 400
-
-        # Check if name already exists
-        if Database.query.filter_by(name=name).first():
-            return jsonify({"error": "A database with this name already exists"}), 400
-        new_db = Database(
-            name=name,
-            display_name=display_name,
-            description=data.get("description", ""),
-        )
-        # In SaaS mode, set owner to current admin
-        if is_saas():
-            new_db.owner_id = current_user.id
-        try:
-            db.session.add(new_db)
-            # In SaaS mode, only grant access to this admin; in self-hosted, grant to all admins
-            if is_saas():
-                current_user.accessible_databases.append(new_db)
-            else:
-                for admin in User.query.filter_by(role="admin").all():
-                    admin.accessible_databases.append(new_db)
-            db.session.commit()
-            return jsonify({"message": "Created", "id": new_db.id}), 201
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Failed to create database '{name}': {e}")
-            return jsonify(
-                {"error": "Failed to create bill group. Please try again."}
-            ), 500
-
-
-@api_bp.route("/databases/<int:db_id>", methods=["DELETE"])
-@admin_required
-def delete_database(db_id):
-    target_db = db.get_or_404(Database, db_id)
-    # In SaaS mode, only allow deleting databases you own
-    if is_saas():
-        current_user_id = session.get("user_id")
-        if target_db.owner_id != current_user_id:
-            return jsonify({"error": "Access denied"}), 403
-    db.session.delete(target_db)
-    db.session.commit()
-    return jsonify({"message": "Deleted"})
-
-
-@api_bp.route("/databases/<int:db_id>", methods=["PUT"])
-@admin_required
-def update_database(db_id):
-    target_db = db.get_or_404(Database, db_id)
-    # In SaaS mode, only allow updating databases you own
-    if is_saas():
-        current_user_id = session.get("user_id")
-        if target_db.owner_id != current_user_id:
-            return jsonify({"error": "Access denied"}), 403
-    data = request.get_json()
-    if "display_name" in data:
-        display_name = data["display_name"].strip()
-        if not display_name:
-            return jsonify({"error": "Display name cannot be empty"}), 400
-        target_db.display_name = display_name
-    if "description" in data:
-        target_db.description = (
-            data["description"].strip() if data["description"] else ""
-        )
-    db.session.commit()
-    return jsonify(
-        {
-            "id": target_db.id,
-            "name": target_db.name,
-            "display_name": target_db.display_name,
-            "description": target_db.description,
-        }
-    )
-
-
-@api_bp.route("/databases/<int:db_id>/access", methods=["GET", "POST"])
-@admin_required
-def database_access_handler(db_id):
-    target_db = db.get_or_404(Database, db_id)
-    current_user_id = session.get("user_id")
-    # In SaaS mode, only allow managing access to databases you own
-    if is_saas() and target_db.owner_id != current_user_id:
-        return jsonify({"error": "Access denied"}), 403
-    if request.method == "GET":
-        return jsonify(
-            [
-                {"id": u.id, "username": u.username, "role": u.role}
-                for u in target_db.users
-            ]
-        )
-    else:
-        user = db.get_or_404(User, request.get_json().get("user_id"))
-        # In SaaS mode, only allow granting access to users you created
-        if (
-            is_saas()
-            and user.created_by_id != current_user_id
-            and user.id != current_user_id
-        ):
-            return jsonify(
-                {"error": "Cannot grant access to users outside your account"}
-            ), 403
-        if target_db not in user.accessible_databases:
-            user.accessible_databases.append(target_db)
-            db.session.commit()
-        return jsonify({"message": "Granted"})
-
-
-@api_bp.route("/databases/<int:db_id>/access/<int:user_id>", methods=["DELETE"])
-@admin_required
-def revoke_database_access(db_id, user_id):
-    target_db = db.get_or_404(Database, db_id)
-    user = db.get_or_404(User, user_id)
-    current_user_id = session.get("user_id")
-    # In SaaS mode, only allow revoking access to databases you own
-    if is_saas() and target_db.owner_id != current_user_id:
-        return jsonify({"error": "Access denied"}), 403
-    if target_db in user.accessible_databases:
-        user.accessible_databases.remove(target_db)
-        db.session.commit()
-    return jsonify({"message": "Revoked"})
-
-
-@api_bp.route("/users", methods=["GET", "POST"])
-@admin_required
-def users_handler():
-    current_user_id = session.get("user_id")
-    current_user = db.session.get(User, current_user_id)
-    if request.method == "GET":
-        # In SaaS mode, only show users created by this admin (plus themselves)
-        if is_saas():
-            users = User.query.filter(
-                (User.created_by_id == current_user_id) | (User.id == current_user_id)
-            ).all()
-        else:
-            users = User.query.all()
-        return jsonify(
-            [
-                {"id": u.id, "username": u.username, "role": u.role, "email": u.email}
-                for u in users
-            ]
-        )
-    else:
-        data = request.get_json()
-        username = data.get("username", "").strip().lower()
-        password = data.get("password", "")
-
-        # Validate username
-        is_valid, error = validate_username(username)
-        if not is_valid:
-            return jsonify({"error": error}), 400
-
-        # Validate password
-        is_valid, error = validate_password(password)
-        if not is_valid:
-            return jsonify({"error": error}), 400
-
-        # Check if username already taken
-        if User.query.filter_by(username=username).first():
-            return jsonify({"error": "Username already taken"}), 400
-
-        new_user = User(
-            username=username,
-            role=data.get("role", "user"),
-            password_change_required=True,
-        )
-        # In SaaS mode, track who created this user
-        if is_saas():
-            new_user.created_by_id = current_user_id
-        new_user.set_password(data.get("password"))
-        db.session.add(new_user)
-        for db_id in data.get("database_ids", []):
-            d = db.session.get(Database, db_id)
-            # In SaaS mode, only allow assigning access to databases you own
-            if d:
-                if is_saas() and d.owner_id != current_user_id:
-                    continue  # Skip databases not owned by this admin
-                new_user.accessible_databases.append(d)
-        db.session.commit()
-        return jsonify({"message": "Created", "id": new_user.id}), 201
-
-
-@api_bp.route("/users/<int:user_id>", methods=["PUT"])
-@admin_required
-def update_user(user_id):
-    user = db.get_or_404(User, user_id)
-    current_user_id = session.get("user_id")
-    current_user = db.session.get(User, current_user_id)
-    # In SaaS mode, only allow updating users you created (or yourself, or legacy users)
-    if is_saas() and user.id != current_user_id:
-        if user.created_by_id is not None and user.created_by_id != current_user_id:
-            return jsonify({"error": "Access denied"}), 403
-    data = request.get_json()
-    # Update email if provided
-    if "email" in data:
-        new_email = data["email"].strip() if data["email"] else None
-        if new_email and new_email != user.email:
-            # Check for uniqueness
-            existing = User.query.filter(
-                User.email == new_email, User.id != user_id
-            ).first()
-            if existing:
-                return jsonify({"error": "Email already in use"}), 400
-        user.email = new_email
-    # Update role if provided
-    if "role" in data:
-        new_role = data["role"]
-        if new_role not in ["admin", "user"]:
-            return jsonify({"error": 'Invalid role. Must be "admin" or "user"'}), 400
-        # Prevent demoting yourself
-        if user.id == current_user_id and new_role != "admin":
-            return jsonify({"error": "Cannot change your own role"}), 400
-        # In SaaS mode, prevent changing account owner's role
-        if is_saas() and user.is_account_owner and new_role != "admin":
-            return jsonify({"error": "Cannot demote account owner"}), 400
-        user.role = new_role
-    db.session.commit()
-    return jsonify(
-        {
-            "id": user.id,
-            "username": user.username,
-            "role": user.role,
-            "email": user.email,
-        }
-    )
-
-
-@api_bp.route("/users/<int:user_id>", methods=["DELETE"])
-@admin_required
-def delete_user(user_id):
-    if user_id == session.get("user_id"):
-        return jsonify({"error": "Self"}), 400
-    user = db.get_or_404(User, user_id)
-    # In SaaS mode, check permissions
-    if is_saas():
-        current_user_id = session.get("user_id")
-        current_user = db.session.get(User, current_user_id)
-        # Account owners can delete any user (except themselves, checked above)
-        if current_user.is_account_owner:
-            pass  # Allow deletion
-        # Non-owner admins can only delete users they created or legacy users
-        elif user.created_by_id is not None and user.created_by_id != current_user_id:
-            return jsonify({"error": "Access denied"}), 403
-    db.session.delete(user)
-    db.session.commit()
-    return jsonify({"message": "Deleted"})
-
-
-@api_bp.route("/users/invite", methods=["POST"])
-@admin_required
-def invite_user():
-    """Send an invitation email to a new user"""
-    data = request.get_json()
-    email = data.get("email", "").strip().lower()
-    role = data.get("role", "user")
-    database_ids = data.get("database_ids", [])
-
-    # Validate email
-    is_valid, error = validate_email(email)
-    if not is_valid:
-        return jsonify({"error": error}), 400
-
-    # Check if user with this email already exists
-    existing_user = User.query.filter_by(email=email).first()
-    if existing_user:
-        return jsonify({"error": "A user with this email already exists"}), 400
-
-    # Check for pending invite to same email
-    pending_invite = (
-        UserInvite.query.filter_by(email=email, accepted_at=None)
-        .filter(UserInvite.expires_at > datetime.datetime.now(datetime.timezone.utc))
-        .first()
-    )
-    if pending_invite:
-        return jsonify(
-            {"error": "An invitation has already been sent to this email"}
-        ), 400
-
-    current_user_id = session.get("user_id")
-    current_user = db.session.get(User, current_user_id)
-
-    # In SaaS mode, validate database access
-    if is_saas():
-        for db_id in database_ids:
-            d = db.session.get(Database, db_id)
-            if d and d.owner_id != current_user_id:
-                return jsonify(
-                    {"error": "Cannot grant access to databases you do not own"}
-                ), 403
-
-    # Create invitation
-    invite = UserInvite(
-        email=email,
-        role=role,
-        invited_by_id=current_user_id,
-        expires_at=datetime.datetime.now(datetime.timezone.utc) + timedelta(days=7),
-    )
-    token = invite.set_token()
-    # Store database IDs in a simple format (we'll use them when accepting)
-    invite.database_ids = (
-        ",".join(str(id) for id in database_ids) if database_ids else ""
-    )
-
-    try:
-        db.session.add(invite)
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Failed to create invitation for {email}: {e}")
-        return jsonify({"error": "Failed to create invitation. Please try again."}), 500
-
-    # Send invitation email
-    invited_by_name = current_user.username
-    if send_invite_email(email, token, invited_by_name):
-        return jsonify({"message": "Invitation sent", "id": invite.id}), 201
-    else:
-        return jsonify(
-            {"message": "Invitation created but email failed to send", "id": invite.id}
-        ), 201
-
-
-@api_bp.route("/users/invites", methods=["GET"])
-@admin_required
-def get_invites():
-    """Get pending invitations sent by current admin"""
-    current_user_id = session.get("user_id")
-    invites = (
-        UserInvite.query.filter_by(invited_by_id=current_user_id, accepted_at=None)
-        .filter(UserInvite.expires_at > datetime.datetime.now(datetime.timezone.utc))
-        .all()
-    )
-    return jsonify(
-        [
-            {
-                "id": inv.id,
-                "email": inv.email,
-                "role": inv.role,
-                "created_at": inv.created_at.isoformat(),
-                "expires_at": inv.expires_at.isoformat(),
-            }
-            for inv in invites
-        ]
-    )
-
-
-@api_bp.route("/users/invites/<int:invite_id>", methods=["DELETE"])
-@admin_required
-def cancel_invite(invite_id):
-    """Cancel a pending invitation"""
-    current_user_id = session.get("user_id")
-    invite = db.get_or_404(UserInvite, invite_id)
-    if invite.invited_by_id != current_user_id:
-        return jsonify({"error": "Access denied"}), 403
-    if invite.is_accepted:
-        return jsonify({"error": "Invitation already accepted"}), 400
-    db.session.delete(invite)
-    db.session.commit()
-    return jsonify({"message": "Invitation cancelled"})
-
-
-@api_bp.route("/accept-invite", methods=["POST"])
-def accept_invite():
-    """Accept an invitation and create user account (public endpoint)"""
-    data = request.get_json()
-    token = data.get("token", "").strip()
-    username = data.get("username", "").strip()
-    password = data.get("password", "")
-
-    if not token or not username or not password:
-        return jsonify({"error": "Token, username, and password are required"}), 400
-
-    # Find the invitation
-    invite = UserInvite.find_by_token(token)
-    if not invite:
-        return jsonify({"error": "Invalid invitation token"}), 400
-    if not invite.verify_token(token):
-        return jsonify({"error": "Invalid invitation token"}), 400
-    if invite.is_accepted:
-        return jsonify({"error": "Invitation has already been accepted"}), 400
-    if invite.is_expired:
-        return jsonify({"error": "Invitation has expired"}), 400
-
-    # Check username availability
-    if User.query.filter_by(username=username).first():
-        return jsonify({"error": "Username is already taken"}), 400
-
-    # Create the user
-    new_user = User(
-        username=username,
-        email=invite.email,
-        role=invite.role,
-        created_by_id=invite.invited_by_id,
-        email_verified_at=datetime.datetime.now(
-            datetime.timezone.utc
-        ),  # Auto-verify since they received the invite email
-    )
-    new_user.set_password(password)
-    db.session.add(new_user)
-
-    # Grant access to specified databases
-    if hasattr(invite, "database_ids") and invite.database_ids:
-        for db_id_str in invite.database_ids.split(","):
-            try:
-                db_id = int(db_id_str)
-                d = db.session.get(Database, db_id)
-                if d:
-                    new_user.accessible_databases.append(d)
-            except ValueError:
-                pass
-
-    # Mark invitation as accepted
-    invite.accepted_at = datetime.datetime.now(datetime.timezone.utc)
-    db.session.commit()
-
-    return jsonify(
-        {"message": "Account created successfully", "username": username}
-    ), 201
-
-
-@api_bp.route("/invite-info", methods=["GET"])
-def get_invite_info():
-    """Get information about an invitation (public endpoint)"""
-    token = request.args.get("token", "").strip()
-    if not token:
-        return jsonify({"error": "Token is required"}), 400
-
-    invite = UserInvite.find_by_token(token)
-    if not invite:
-        return jsonify({"error": "Invalid invitation token"}), 404
-    if not invite.verify_token(token):
-        return jsonify({"error": "Invalid invitation token"}), 404
-    if invite.is_accepted:
-        return jsonify({"error": "Invitation has already been accepted"}), 400
-    if invite.is_expired:
-        return jsonify({"error": "Invitation has expired"}), 400
-
-    inviter = db.session.get(User, invite.invited_by_id)
-    return jsonify(
-        {
-            "email": invite.email,
-            "invited_by": inviter.username if inviter else "Unknown",
-            "expires_at": invite.expires_at.isoformat(),
-        }
-    )
-
-
-@api_bp.route("/users/<int:user_id>/databases", methods=["GET"])
-@admin_required
-def get_user_databases(user_id):
-    user = db.get_or_404(User, user_id)
-    current_user_id = session.get("user_id")
-    # In SaaS mode, only allow viewing databases of users you created (or yourself, or legacy users)
-    if is_saas() and user.id != current_user_id:
-        if user.created_by_id is not None and user.created_by_id != current_user_id:
-            return jsonify({"error": "Access denied"}), 403
-    return jsonify(
-        [
-            {"id": d.id, "name": d.name, "display_name": d.display_name}
-            for d in user.accessible_databases
-        ]
-    )
-
-
-@api_bp.route("/api/accounts", methods=["GET"])
-@login_required
-def get_accounts():
-    db_name = session.get("db_name")
-    target_db = Database.query.filter_by(name=db_name).first()
-    if not target_db:
-        return jsonify([])
-    accounts = (
-        db.session.query(Bill.account)
-        .filter_by(database_id=target_db.id)
-        .distinct()
-        .all()
-    )
-    return jsonify([a[0] for a in accounts if a[0]])
-
-
-@api_bp.route("/bills", methods=["GET", "POST"])
-@limiter.limit("60 per minute", methods=["GET"])
-@limiter.limit("30 per minute", methods=["POST"])
-@login_required
-def bills_handler():
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    if not target_db:
-        return jsonify({"error": "DB invalid"}), 400
-    if request.method == "GET":
-        current_user_id = session.get("user_id")
-        include_archived = (
-            request.args.get("include_archived", "false").lower() == "true"
-        )
-
-        # Get owned bills
-        query = Bill.query.filter_by(database_id=target_db.id)
-        if not include_archived:
-            query = query.filter_by(archived=False)
-        owned_bills = query.order_by(Bill.due_date).all()
-
-        # Get shared bills (bills shared with current user)
-        shared_bill_query = (
-            db.session.query(Bill)
-            .join(BillShare, Bill.id == BillShare.bill_id)
-            .filter(
-                BillShare.shared_with_user_id == current_user_id,
-                BillShare.status == "accepted",
-            )
-        )
-        if not include_archived:
-            shared_bill_query = shared_bill_query.filter(Bill.archived == False)
-        shared_bills_data = shared_bill_query.order_by(Bill.due_date).all()
-
-        # Create a lookup for share info
-        share_lookup = {}
-        if shared_bills_data:
-            shares = BillShare.query.filter(
-                BillShare.shared_with_user_id == current_user_id,
-                BillShare.status == "accepted",
-                BillShare.bill_id.in_([b.id for b in shared_bills_data]),
-            ).all()
-            for share in shares:
-                share_lookup[share.bill_id] = share
-
-        result = []
-
-        # Pre-compute average amounts for all variable bills in a single query (fixes N+1)
-        all_bills = owned_bills + shared_bills_data
-        variable_bill_ids = [b.id for b in all_bills if b.is_variable]
-        avg_amounts_map = {}
-        if variable_bill_ids:
-            avg_query = (
-                db.session.query(
-                    Payment.bill_id, func.avg(Payment.amount).label("avg_amount")
-                )
-                .filter(Payment.bill_id.in_(variable_bill_ids))
-                .group_by(Payment.bill_id)
-                .all()
-            )
-            avg_amounts_map = {row.bill_id: float(row.avg_amount) for row in avg_query}
-
-        # Pre-fetch database and owner info for shared bills (fixes N+1)
-        owner_names_map = {}
-        if shared_bills_data:
-            db_ids = list(set(b.database_id for b in shared_bills_data))
-            databases_with_owners = (
-                db.session.query(Database, User)
-                .join(User, Database.owner_id == User.id)
-                .filter(Database.id.in_(db_ids))
-                .all()
-            )
-            for database, owner in databases_with_owners:
-                owner_names_map[database.id] = owner.username if owner else "Unknown"
-
-        # Add owned bills
-        for bill in owned_bills:
-            b_dict = {
-                "id": bill.id,
-                "name": bill.name,
-                "amount": bill.amount,
-                "varies": bill.is_variable,
-                "frequency": bill.frequency,
-                "frequency_type": bill.frequency_type,
-                "frequency_config": bill.frequency_config,
-                "next_due": bill.due_date,
-                "auto_payment": bill.auto_pay,
-                "icon": bill.icon,
-                "type": bill.type,
-                "account": bill.account,
-                "notes": bill.notes,
-                "archived": bill.archived,
-                "is_shared": False,
-            }
-            if bill.is_variable:
-                b_dict["avg_amount"] = avg_amounts_map.get(bill.id, 0)
-            result.append(b_dict)
-
-        # Add shared bills
-        for bill in shared_bills_data:
-            share = share_lookup.get(bill.id)
-            if not share:
-                continue
-
-            # Calculate recipient's portion
-            my_portion = None
-            if share.split_type and bill.amount is not None:
-                my_portion = share.calculate_portion()
-
-            owner_name = owner_names_map.get(bill.database_id, "Unknown")
-
-            b_dict = {
-                "id": bill.id,
-                "name": bill.name,
-                "amount": bill.amount,
-                "varies": bill.is_variable,
-                "frequency": bill.frequency,
-                "frequency_type": bill.frequency_type,
-                "frequency_config": bill.frequency_config,
-                "next_due": bill.due_date,
-                "auto_payment": bill.auto_pay,
-                "icon": bill.icon,
-                "type": bill.type,
-                "account": bill.account,
-                "notes": bill.notes,
-                "archived": bill.archived,
-                "is_shared": True,
-                "share_info": {
-                    "share_id": share.id,
-                    "owner_name": owner_name,
-                    "my_portion": my_portion,
-                    "my_portion_paid": share.is_recipient_paid,
-                    "my_portion_paid_date": share.recipient_paid_date.isoformat()
-                    if share.recipient_paid_date
-                    else None,
-                },
-            }
-            if bill.is_variable:
-                b_dict["avg_amount"] = avg_amounts_map.get(bill.id, 0)
-            result.append(b_dict)
-
-        # Sort combined results by due date
-        result.sort(key=lambda x: x["next_due"])
-        return jsonify(result)
-    else:
-        # Check subscription limits before creating bill
-        user = db.session.get(User, session.get("user_id"))
-        if user:
-            allowed, info = check_tier_limit(user, "bills")
-            if not allowed:
-                return jsonify(
-                    {
-                        "error": f"You have reached your bill limit ({info.get('limit')}). Upgrade for more.",
-                        "upgrade_required": True,
-                        "limit_info": info,
-                    }
-                ), 403
-
-        data = request.get_json()
-
-        # Validate bill name
-        is_valid, error = validate_bill_name(data.get("name", ""))
-        if not is_valid:
-            return jsonify({"error": error}), 400
-
-        # Validate amount if not variable
-        if not data.get("varies", False):
-            is_valid, error = validate_amount(data.get("amount"))
-            if not is_valid:
-                return jsonify({"error": error}), 400
-
-        # Validate frequency
-        is_valid, error = validate_frequency(data.get("frequency", "monthly"))
-        if not is_valid:
-            return jsonify({"error": error}), 400
-
-        # Validate next due date
-        is_valid, error = validate_date(data.get("next_due", ""), "Next due date")
-        if not is_valid:
-            return jsonify({"error": error}), 400
-
-        new_bill = Bill(
-            database_id=target_db.id,
-            name=data["name"],
-            amount=data.get("amount"),
-            is_variable=data.get("varies", False),
-            frequency=data.get("frequency", "monthly"),
-            frequency_type=data.get("frequency_type", "simple"),
-            frequency_config=data.get("frequency_config", "{}"),
-            due_date=data["next_due"],
-            auto_pay=data.get("auto_payment", False),
-            icon=data.get("icon", "payment"),
-            type=data.get("type", "expense"),
-            account=data.get("account"),
-            notes=data.get("notes"),
-            archived=False,
-        )
-        db.session.add(new_bill)
-        db.session.commit()
-        return jsonify({"message": "Added", "id": new_bill.id}), 201
-
-
-@api_bp.route("/bills/<int:bill_id>", methods=["PUT", "DELETE"])
-@limiter.limit("30 per minute")
-@login_required
-def bill_detail_handler(bill_id):
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    if not target_db:
-        return jsonify({"error": "No database selected"}), 400
-    bill = db.get_or_404(Bill, bill_id)
-    if bill.database_id != target_db.id:
-        return jsonify({"error": "Access denied"}), 403
-    if request.method == "PUT":
-        data = request.get_json()
-        bill.name = data.get("name", bill.name)
-        bill.amount = data.get("amount", bill.amount)
-        bill.is_variable = data.get("varies", bill.is_variable)
-        bill.frequency = data.get("frequency", bill.frequency)
-        bill.frequency_type = data.get("frequency_type", bill.frequency_type)
-        bill.frequency_config = data.get("frequency_config", bill.frequency_config)
-        bill.due_date = data.get("next_due", bill.due_date)
-        bill.auto_pay = data.get("auto_payment", bill.auto_pay)
-        bill.icon = data.get("icon", bill.icon)
-        bill.type = data.get("type", bill.type)
-        bill.account = data.get("account", bill.account)
-        bill.notes = data.get("notes", bill.notes)
-        db.session.commit()
-        return jsonify({"message": "Updated"})
-    else:
-        bill.archived = True
-        db.session.commit()
-        return jsonify({"message": "Archived"})
-
-
-@api_bp.route("/bills/<int:bill_id>/unarchive", methods=["POST"])
-@limiter.limit("30 per minute")
-@login_required
-def unarchive_bill(bill_id):
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    if not target_db:
-        return jsonify({"error": "No database selected"}), 400
-    bill = db.get_or_404(Bill, bill_id)
-    if bill.database_id != target_db.id:
-        return jsonify({"error": "Access denied"}), 403
-    bill.archived = False
-    db.session.commit()
-    return jsonify({"message": "Unarchived"})
-
-
-@api_bp.route("/bills/<int:bill_id>/permanent", methods=["DELETE"])
-@limiter.limit("30 per minute")
-@login_required
-def delete_bill_permanent(bill_id):
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    if not target_db:
-        return jsonify({"error": "No database selected"}), 400
-    bill = db.get_or_404(Bill, bill_id)
-    if bill.database_id != target_db.id:
-        return jsonify({"error": "Access denied"}), 403
-    db.session.delete(bill)
-    db.session.commit()
-    return jsonify({"message": "Deleted"})
-
-
-@api_bp.route("/bills/<int:bill_id>/pay", methods=["POST"])
-@limiter.limit("30 per minute")
-@login_required
-def pay_bill(bill_id):
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    if not target_db:
-        return jsonify({"error": "No database selected"}), 400
-    bill = db.get_or_404(Bill, bill_id)
-    if bill.database_id != target_db.id:
-        return jsonify({"error": "Access denied"}), 403
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid request data"}), 400
-
-    amount = data.get("amount")
-    if amount is None:
-        return jsonify({"error": "Payment amount is required"}), 400
-
-    try:
-        payment = Payment(
-            bill_id=bill.id,
-            amount=amount,
-            payment_date=datetime.date.today().isoformat(),
-            notes=data.get("notes"),
-        )
-        db.session.add(payment)
-        if data.get("advance_due", True):
-            # Update existing bill instead of creating new
-            freq_config = (
-                json.loads(bill.frequency_config) if bill.frequency_config else {}
-            )
-            next_due = calculate_next_due_date(
-                bill.due_date, bill.frequency, bill.frequency_type, freq_config
-            )
-            bill.due_date = next_due.isoformat()
-            bill.archived = False  # Ensure active
-        db.session.commit()
-        return jsonify({"message": "Paid"})
-    except json.JSONDecodeError:
-        db.session.rollback()
-        logger.error(f"Invalid frequency config for bill {bill_id}")
-        return jsonify({"error": "Invalid bill configuration"}), 500
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Failed to record payment for bill {bill_id}: {e}")
-        return jsonify({"error": "Failed to record payment. Please try again."}), 500
-
-
-@api_bp.route("/bills/<string:name>/payments", methods=["GET"])
-@limiter.limit("60 per minute")
-@login_required
-def get_payments_by_name(name):
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    payments = (
-        db.session.query(Payment)
-        .join(Bill)
-        .filter(Bill.database_id == target_db.id, Bill.name == name)
-        .order_by(desc(Payment.payment_date))
-        .all()
-    )
-    return jsonify(
-        [
-            {
-                "id": p.id,
-                "amount": p.amount,
-                "payment_date": p.payment_date,
-                "notes": p.notes,
-            }
-            for p in payments
-        ]
-    )
-
-
-@api_bp.route("/bills/<int:bill_id>/payments", methods=["GET"])
-@limiter.limit("60 per minute")
-@login_required
-def get_payments_by_id(bill_id):
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    bill = db.get_or_404(Bill, bill_id)
-    if bill.database_id != target_db.id:
-        return jsonify({"error": "Access denied"}), 403
-    payments = (
-        Payment.query.filter_by(bill_id=bill_id)
-        .order_by(desc(Payment.payment_date))
-        .all()
-    )
-    return jsonify(
-        [
-            {
-                "id": p.id,
-                "amount": p.amount,
-                "payment_date": p.payment_date,
-                "notes": p.notes,
-            }
-            for p in payments
-        ]
-    )
-
-
-@api_bp.route("/payments/<int:id>", methods=["PUT"])
-@limiter.limit("30 per minute")
-@login_required
-def update_payment(id):
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    if not target_db:
-        return jsonify({"error": "No database selected"}), 400
-    payment = db.get_or_404(Payment, id)
-    if payment.bill.database_id != target_db.id:
-        return jsonify({"error": "Access denied"}), 403
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid request data"}), 400
-    try:
-        if "amount" in data:
-            payment.amount = data["amount"]
-        if "payment_date" in data:
-            payment.payment_date = data["payment_date"]
-        if "notes" in data:
-            payment.notes = data["notes"]
-        db.session.commit()
-        return jsonify({"message": "Payment updated"})
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Failed to update payment {id}: {e}")
-        return jsonify({"error": "Failed to update payment. Please try again."}), 500
-
-
-@api_bp.route("/payments/<int:id>", methods=["DELETE"])
-@limiter.limit("30 per minute")
-@login_required
-def delete_payment(id):
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    if not target_db:
-        return jsonify({"error": "No database selected"}), 400
-    payment = db.get_or_404(Payment, id)
-    if payment.bill.database_id != target_db.id:
-        return jsonify({"error": "Access denied"}), 403
-    try:
-        db.session.delete(payment)
-        db.session.commit()
-        return jsonify({"message": "Payment deleted"})
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Failed to delete payment {id}: {e}")
-        return jsonify({"error": "Failed to delete payment. Please try again."}), 500
-
-
-# =============================================================================
-# BILL SHARING ENDPOINTS (api_bp - session-based for web)
-# =============================================================================
-
-
-@api_bp.route("/bills/<int:bill_id>/share", methods=["POST"])
-@limiter.limit("20 per minute")
-@login_required
-def share_bill(bill_id):
-    """Share a bill with another user (session-based)."""
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    if not target_db:
-        return jsonify({"error": "No database selected"}), 400
-
-    bill = db.get_or_404(Bill, bill_id)
-    if bill.database_id != target_db.id:
-        return jsonify({"error": "Access denied"}), 403
-
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid request data"}), 400
-
-    identifier = data.get("identifier", "").strip().lower()
-    split_type = data.get("split_type")
-    split_value = data.get("split_value")
-
-    if not identifier:
-        return jsonify({"error": "Username or email is required"}), 400
-
-    # Check for existing active share
-    existing = (
-        BillShare.query.filter_by(bill_id=bill_id, shared_with_identifier=identifier)
-        .filter(BillShare.status.in_(["pending", "accepted"]))
-        .first()
-    )
-
-    if existing:
-        return jsonify({"error": "Bill already shared with this user"}), 400
-
-    current_user_id = session.get("user_id")
-
-    # Determine identifier type
-    if is_saas() and "@" in identifier:
-        identifier_type = "email"
-        invite_token = None
-        expires_at = datetime.datetime.now(datetime.timezone.utc) + timedelta(days=7)
-        # Case-insensitive email lookup
-        from sqlalchemy import func
-
-        target_user = User.query.filter(func.lower(User.email) == identifier).first()
-
-        # Check if user already has access to this bill group
-        if target_user:
-            if target_db in target_user.accessible_databases:
-                return jsonify(
-                    {"error": "User already has access to this bill group"}
-                ), 400
-
-        shared_with_user_id = target_user.id if target_user else None
-        status = "accepted" if target_user else "pending"
-        accepted_at = (
-            datetime.datetime.now(datetime.timezone.utc) if target_user else None
-        )
-    else:
-        identifier_type = "username"
-        target_user = User.query.filter_by(username=identifier).first()
-
-        if not target_user:
-            return jsonify({"error": "User not found"}), 404
-
-        if target_user.id == current_user_id:
-            return jsonify({"error": "Cannot share with yourself"}), 400
-
-        # Check if user already has access to this bill group
-        if target_db in target_user.accessible_databases:
-            return jsonify({"error": "User already has access to this bill group"}), 400
-
-        shared_with_user_id = target_user.id
-        invite_token = None
-        expires_at = None
-        status = "accepted"
-        accepted_at = datetime.datetime.now(datetime.timezone.utc)
-
-    share = BillShare(
-        bill_id=bill_id,
-        owner_user_id=current_user_id,
-        shared_with_user_id=shared_with_user_id,
-        shared_with_identifier=identifier,
-        identifier_type=identifier_type,
-        status=status,
-        split_type=split_type,
-        split_value=split_value,
-        accepted_at=accepted_at,
-        expires_at=expires_at,
-    )
-    if identifier_type == "email":
-        invite_token = share.set_invite_token()
-
-    try:
-        db.session.add(share)
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Failed to create bill share: {e}")
-        return jsonify({"error": "Failed to create share"}), 500
-
-    # Send email if SaaS and pending
-    if is_saas() and status == "pending" and EMAIL_ENABLED:
-        try:
-            from services.email import send_bill_share_email
-
-            current_user = db.session.get(User, current_user_id)
-            send_bill_share_email(
-                identifier, invite_token, bill.name, current_user.username
-            )
-        except Exception as e:
-            logger.warning(f"Failed to send share invitation email: {e}")
-
-    return jsonify(
-        {
-            "share_id": share.id,
-            "status": status,
-            "message": "Share created" if status == "accepted" else "Invitation sent",
-        }
-    ), 201
-
-
-@api_bp.route("/bills/<int:bill_id>/shares", methods=["GET"])
-@limiter.limit("60 per minute")
-@login_required
-def get_bill_shares(bill_id):
-    """Get all shares for a bill."""
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    if not target_db:
-        return jsonify({"error": "No database selected"}), 400
-
-    bill = db.get_or_404(Bill, bill_id)
-    if bill.database_id != target_db.id:
-        return jsonify({"error": "Access denied"}), 403
-
-    # Security check: Only the database owner can view shares
-    current_user_id = session.get("user_id")
-    database = db.session.get(Database, bill.database_id)
-    if not database or database.owner_id != current_user_id:
-        return jsonify({"error": "Access denied"}), 403
-
-    shares = BillShare.query.filter_by(bill_id=bill_id).all()
-
-    # Security: Only return shares owned by the current user
-    filtered_shares = [s for s in shares if s.owner_user_id == current_user_id]
-
-    return jsonify(
-        [
-            {
-                "id": s.id,
-                "shared_with": s.shared_with_identifier,
-                "identifier_type": s.identifier_type,
-                "status": s.status,
-                "split_type": s.split_type,
-                "split_value": s.split_value,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
-                "accepted_at": s.accepted_at.isoformat() if s.accepted_at else None,
-            }
-            for s in filtered_shares
-        ]
-    )
-
-
-@api_bp.route("/shares/<int:share_id>", methods=["DELETE"])
-@limiter.limit("20 per minute")
-@login_required
-def revoke_share(share_id):
-    """Revoke a bill share."""
-    share = db.get_or_404(BillShare, share_id)
-    current_user_id = session.get("user_id")
-
-    if share.owner_user_id != current_user_id:
-        return jsonify({"error": "Access denied"}), 403
-
-    share.status = "revoked"
-    db.session.commit()
-    return jsonify({"message": "Share revoked"})
-
-
-@api_bp.route("/shares/<int:share_id>", methods=["PUT"])
-@limiter.limit("20 per minute")
-@login_required
-def update_share(share_id):
-    """Update share split configuration."""
-    share = db.get_or_404(BillShare, share_id)
-    current_user_id = session.get("user_id")
-
-    if share.owner_user_id != current_user_id:
-        return jsonify({"error": "Access denied"}), 403
-
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid request data"}), 400
-
-    if "split_type" in data:
-        split_type = data["split_type"]
-        # Validate split_type
-        if split_type is not None and split_type not in (
-            "percentage",
-            "fixed",
-            "equal",
-        ):
-            return jsonify(
-                {
-                    "error": "Invalid split_type. Must be one of: percentage, fixed, equal, or null"
-                }
-            ), 400
-        share.split_type = split_type
-    if "split_value" in data:
-        share.split_value = data["split_value"]
-
-    db.session.commit()
-    return jsonify({"message": "Share updated"})
-
-
-@api_bp.route("/shared-bills", methods=["GET"])
-@login_required
-def get_shared_bills():
-    """Get bills shared with the current user."""
-    from sqlalchemy.orm import joinedload
-
-    current_user_id = session.get("user_id")
-
-    # Use eager loading to avoid N+1 queries for bill and owner relationships
-    shares = (
-        BillShare.query.filter_by(
-            shared_with_user_id=current_user_id, status="accepted"
-        )
-        .options(joinedload(BillShare.bill), joinedload(BillShare.owner))
-        .all()
-    )
-
-    # Batch fetch latest payments for all bills in a single query
-    bill_ids = [share.bill.id for share in shares]
-    latest_payments_subq = (
-        db.session.query(
-            Payment.bill_id, func.max(Payment.payment_date).label("max_date")
-        )
-        .filter(Payment.bill_id.in_(bill_ids))
-        .group_by(Payment.bill_id)
-        .subquery()
-    )
-
-    latest_payments = (
-        db.session.query(Payment)
-        .join(
-            latest_payments_subq,
-            db.and_(
-                Payment.bill_id == latest_payments_subq.c.bill_id,
-                Payment.payment_date == latest_payments_subq.c.max_date,
-            ),
-        )
-        .all()
-        if bill_ids
-        else []
-    )
-
-    # Create a map of bill_id -> latest payment
-    payments_map = {p.bill_id: p for p in latest_payments}
-
-    result = []
-    for share in shares:
-        bill = share.bill
-        latest_payment = payments_map.get(bill.id)
-
-        result.append(
-            {
-                "share_id": share.id,
-                "bill": {
-                    "id": bill.id,
-                    "name": bill.name,
-                    "amount": bill.amount,
-                    "next_due": bill.due_date,
-                    "icon": bill.icon,
-                    "type": bill.type,
-                    "frequency": bill.frequency,
-                    "is_variable": bill.is_variable,
-                    "auto_pay": bill.auto_pay,
-                },
-                "owner": share.owner.username,
-                "owner_id": share.owner_user_id,
-                "split_type": share.split_type,
-                "split_value": share.split_value,
-                "my_portion": share.calculate_portion(),
-                "last_payment": {
-                    "id": latest_payment.id,
-                    "amount": latest_payment.amount,
-                    "date": latest_payment.payment_date,
-                    "notes": latest_payment.notes,
-                }
-                if latest_payment
-                else None,
-                "created_at": share.created_at.isoformat()
-                if share.created_at
-                else None,
-            }
-        )
-
-    return jsonify(result)
-
-
-@api_bp.route("/shared-bills/pending", methods=["GET"])
-@login_required
-def get_pending_shares():
-    """Get pending share invitations for the current user."""
-    current_user_id = session.get("user_id")
-    current_user = db.session.get(User, current_user_id)
-
-    if not current_user or not current_user.email:
-        return jsonify([])
-
-    # Optimize: Filter out expired shares at database level instead of in Python loop
-    from sqlalchemy import or_
-
-    shares = (
-        BillShare.query.filter_by(
-            shared_with_identifier=current_user.email.lower(),
-            identifier_type="email",
-            status="pending",
-        )
-        .filter(
-            or_(
-                BillShare.expires_at.is_(None),
-                BillShare.expires_at > datetime.datetime.now(datetime.timezone.utc),
-            )
-        )
-        .all()
-    )
-
-    result = []
-    for share in shares:
-        bill = share.bill
-        result.append(
-            {
-                "share_id": share.id,
-                "bill_name": bill.name,
-                "bill_amount": bill.amount,
-                "owner": share.owner.username,
-                "split_type": share.split_type,
-                "split_value": share.split_value,
-                "my_portion": share.calculate_portion(),
-                "expires_at": share.expires_at.isoformat()
-                if share.expires_at
-                else None,
-            }
-        )
-
-    return jsonify(result)
-
-
-@api_bp.route("/shares/<int:share_id>/accept", methods=["POST"])
-@limiter.limit("20 per minute")
-@login_required
-def accept_share(share_id):
-    """Accept a pending share invitation."""
-    share = db.get_or_404(BillShare, share_id)
-    current_user_id = session.get("user_id")
-    current_user = db.session.get(User, current_user_id)
-
-    # Verify access
-    if share.identifier_type == "email" and current_user.email:
-        if share.shared_with_identifier.lower() != current_user.email.lower():
-            return jsonify({"error": "Access denied"}), 403
-    elif share.identifier_type == "username":
-        # For username-based shares, must match the intended recipient (strict check)
-        if (
-            not share.shared_with_user_id
-            or share.shared_with_user_id != current_user_id
-        ):
-            return jsonify({"error": "Access denied"}), 403
-
-    if share.status != "pending":
-        return jsonify({"error": f"Share is already {share.status}"}), 400
-
-    if share.is_expired:
-        return jsonify({"error": "Share invitation has expired"}), 400
-
-    share.status = "accepted"
-    share.shared_with_user_id = current_user_id
-    share.accepted_at = datetime.datetime.now(datetime.timezone.utc)
-    db.session.commit()
-
-    return jsonify({"message": "Share accepted"})
-
-
-@api_bp.route("/shares/<int:share_id>/decline", methods=["POST"])
-@limiter.limit("20 per minute")
-@login_required
-def decline_share(share_id):
-    """Decline a pending share invitation."""
-    share = db.get_or_404(BillShare, share_id)
-    current_user_id = session.get("user_id")
-    current_user = db.session.get(User, current_user_id)
-
-    if share.identifier_type == "email" and current_user.email:
-        if share.shared_with_identifier.lower() != current_user.email.lower():
-            return jsonify({"error": "Access denied"}), 403
-    elif share.identifier_type == "username":
-        # For username-based shares, must match the intended recipient (strict check)
-        if (
-            not share.shared_with_user_id
-            or share.shared_with_user_id != current_user_id
-        ):
-            return jsonify({"error": "Access denied"}), 403
-
-    if share.status != "pending":
-        return jsonify({"error": f"Share is already {share.status}"}), 400
-
-    share.status = "declined"
-    db.session.commit()
-
-    return jsonify({"message": "Share declined"})
-
-
-@api_bp.route("/share/invite/<token>", methods=["GET"])
-@limiter.limit("20 per minute")
-def get_share_invite_details(token):
-    """Get share invitation details by token (public endpoint)."""
-    share = BillShare.find_by_invite_token(token)
-    if not share:
-        return jsonify({"error": "Invalid invitation"}), 404
-    if not share.verify_invite_token(token):
-        return jsonify({"error": "Invalid invitation"}), 404
-
-    if share.status != "pending":
-        return jsonify({"error": f"Invitation already {share.status}"}), 400
-
-    if share.is_expired:
-        return jsonify({"error": "Invitation has expired"}), 400
-
-    # Get bill details
-    bill = share.bill
-    owner = share.owner
-
-    return jsonify(
-        {
-            "bill_name": bill.name,
-            "bill_amount": bill.amount,
-            "owner_username": owner.username,
-            "shared_with_email": share.shared_with_identifier,
-            "split_type": share.split_type,
-            "split_value": share.split_value,
-            "my_portion": share.calculate_portion() if share.split_type else None,
-        }
-    )
-
-
-@api_bp.route("/share/accept-by-token", methods=["POST"])
-@limiter.limit("20 per minute")
-@login_required
-def accept_share_by_token():
-    """Accept a share invitation by token (for email-based invites)."""
-    data = request.get_json()
-    if not data or not data.get("token"):
-        return jsonify({"error": "Token required"}), 400
-
-    share = BillShare.find_by_invite_token(data["token"])
-    if not share:
-        return jsonify({"error": "Invalid invitation"}), 404
-    if not share.verify_invite_token(data["token"]):
-        return jsonify({"error": "Invalid invitation"}), 404
-
-    if share.status != "pending":
-        return jsonify({"error": f"Invitation already {share.status}"}), 400
-
-    if share.is_expired:
-        return jsonify({"error": "Invitation has expired"}), 400
-
-    current_user_id = session.get("user_id")
-    current_user = db.session.get(User, current_user_id)
-
-    # Verify the current user matches the invitation
-    if share.identifier_type == "email" and current_user.email:
-        if share.shared_with_identifier.lower() != current_user.email.lower():
-            return jsonify(
-                {"error": "This invitation was sent to a different email address"}
-            ), 403
-
-    # For username-based shares, verify username match
-    if share.identifier_type == "username":
-        if (
-            not share.shared_with_user_id
-            or share.shared_with_user_id != current_user_id
-        ):
-            return jsonify({"error": "Access denied"}), 403
-
-    # Accept the share
-    share.status = "accepted"
-    share.shared_with_user_id = current_user_id
-    share.accepted_at = datetime.datetime.now(datetime.timezone.utc)
-    db.session.commit()
-
-    return jsonify({"message": "Share accepted", "share_id": share.id})
-
-
-@api_bp.route("/shares/<int:share_id>/leave", methods=["POST"])
-@limiter.limit("20 per minute")
-@login_required
-def leave_share(share_id):
-    """Leave a shared bill."""
-    share = db.get_or_404(BillShare, share_id)
-    current_user_id = session.get("user_id")
-
-    if share.shared_with_user_id != current_user_id:
-        return jsonify({"error": "Access denied"}), 403
-
-    if share.status != "accepted":
-        return jsonify({"error": "Share is not active"}), 400
-
-    share.status = "revoked"
-    db.session.commit()
-
-    return jsonify({"message": "Left shared bill"})
-
-
-@api_bp.route("/shares/<int:share_id>/mark-paid", methods=["POST"])
-@limiter.limit("20 per minute")
-@login_required
-def mark_share_paid(share_id):
-    """Mark recipient's portion of shared bill as paid and create payment record."""
-    share = db.get_or_404(BillShare, share_id)
-    current_user_id = session.get("user_id")
-
-    # Only the share recipient can mark their portion as paid
-    if share.shared_with_user_id != current_user_id:
-        return jsonify({"error": "Access denied"}), 403
-
-    if share.status != "accepted":
-        return jsonify({"error": "Share is not active"}), 400
-
-    payment_id = None
-
-    # Toggle paid status
-    if share.recipient_paid_date:
-        # Already marked as paid, so unmark it - delete the associated payment
-        existing_payment = Payment.query.filter_by(share_id=share.id).first()
-        if existing_payment:
-            db.session.delete(existing_payment)
-        share.recipient_paid_date = None
-        message = "Marked as unpaid"
-    else:
-        # Mark as paid - create a payment record for tracking
-        portion_amount = share.calculate_portion()
-        if portion_amount is None:
-            portion_amount = share.bill.amount or 0
-
-        # Get recipient's username for the note
-        recipient = db.session.get(User, current_user_id)
-        recipient_name = recipient.username if recipient else "Unknown"
-
-        payment = Payment(
-            bill_id=share.bill_id,
-            amount=portion_amount,
-            payment_date=datetime.date.today().isoformat(),
-            notes=f"Share payment by {recipient_name}",
-            share_id=share.id,
-        )
-        db.session.add(payment)
-        share.recipient_paid_date = datetime.datetime.now(datetime.timezone.utc)
-        message = "Marked as paid"
-        db.session.flush()  # Get the payment ID
-        payment_id = payment.id
-
-    db.session.commit()
-
-    return jsonify(
-        {
-            "message": message,
-            "recipient_paid_date": share.recipient_paid_date.isoformat()
-            if share.recipient_paid_date
-            else None,
-            "payment_id": payment_id,
-        }
-    )
-
-
-@api_bp.route("/users/search", methods=["GET"])
-@limiter.limit("20 per minute")
-@login_required
-def search_users():
-    """Search for users by username (for sharing)."""
-    query = request.args.get("q", "").strip().lower()
-    current_user_id = session.get("user_id")
-
-    if len(query) < 2:
-        return jsonify([])
-
-    # Escape SQL wildcards to prevent pattern-based enumeration attacks
-    query_escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-    users = (
-        User.query.filter(
-            User.username.ilike(f"%{query_escaped}%", escape="\\"),
-            User.id != current_user_id,
-        )
-        .limit(10)
-        .all()
-    )
-
-    return jsonify([{"id": u.id, "username": u.username} for u in users])
-
-
-@api_bp.route("/api/payments/all", methods=["GET"])
-@login_required
-def get_all_payments():
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    payments = (
-        db.session.query(Payment)
-        .join(Bill)
-        .filter(Bill.database_id == target_db.id)
-        .order_by(desc(Payment.payment_date))
-        .all()
-    )
-    return jsonify(
-        [
-            {
-                "id": p.id,
-                "amount": p.amount,
-                "payment_date": p.payment_date,
-                "bill_name": p.bill.name,
-                "bill_icon": p.bill.icon,
-            }
-            for p in payments
-        ]
-    )
-
-
-@api_bp.route("/api/payments/monthly", methods=["GET"])
-@login_required
-def get_monthly_payments():
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    results = (
-        db.session.query(
-            func.to_char(
-                func.to_date(Payment.payment_date, "YYYY-MM-DD"), "YYYY-MM"
-            ).label("month"),
-            func.sum(Payment.amount),
-        )
-        .join(Bill)
-        .filter(Bill.database_id == target_db.id, Bill.type == "expense")
-        .group_by("month")
-        .all()
-    )
-    return jsonify({r[0]: float(r[1]) for r in results})
-
-
-@api_bp.route("/api/payments/bill/<string:name>/monthly", methods=["GET"])
-@login_required
-def get_bill_monthly_payments(name):
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    results = (
-        db.session.query(
-            func.to_char(
-                func.to_date(Payment.payment_date, "YYYY-MM-DD"), "YYYY-MM"
-            ).label("month"),
-            func.sum(Payment.amount),
-            func.count(Payment.id),
-        )
-        .join(Bill)
-        .filter(Bill.database_id == target_db.id, Bill.name == name)
-        .group_by("month")
-        .order_by(desc("month"))
-        .limit(12)
-        .all()
-    )
-    return jsonify(
-        [{"month": r[0], "total": float(r[1]), "count": r[2]} for r in results]
-    )
-
-
-@api_bp.route("/api/process-auto-payments", methods=["POST"])
-@login_required
-def process_auto_payments():
-    target_db = Database.query.filter_by(name=session.get("db_name")).first()
-    today = datetime.date.today().isoformat()
-    auto_bills = (
-        Bill.query.filter_by(database_id=target_db.id, auto_pay=True, archived=False)
-        .filter(Bill.due_date <= today)
-        .all()
-    )
-    for bill in auto_bills:
-        payment = Payment(bill_id=bill.id, amount=bill.amount or 0, payment_date=today)
-        db.session.add(payment)
-        next_due = calculate_next_due_date(
-            bill.due_date,
-            bill.frequency,
-            bill.frequency_type,
-            json.loads(bill.frequency_config),
-        )
-        bill.due_date = next_due.isoformat()
-    db.session.commit()
-    return jsonify({"message": "Processed", "processed_count": len(auto_bills)})
-
-
-@api_bp.route("/api/version", methods=["GET"])
-def get_version():
-    return jsonify(
-        {
-            "version": SERVER_VERSION,
-            "license": "O'Saasy",
-            "license_url": "https://osaasy.dev/",
-            "features": [
-                "enhanced_frequencies",
-                "auto_payments",
-                "postgresql_saas",
-                "row_tenancy",
-                "user_invites",
-                "shared_bills",
-                "self_hosted_oidc",
-                "provider_neutral_email",
-            ],
-        }
-    )
-
-
-@api_bp.route("/ping")
-def ping():
-    return jsonify({"status": "ok"})
 
 
 # --- API v2 Routes (JWT Auth for Mobile) ---
@@ -3367,41 +1441,6 @@ def jwt_logout_all():
     db.session.commit()
     response = jsonify({"success": True, "message": "Logged out from all devices"})
     return _clear_refresh_cookie(response)
-
-
-def _v2_invitation_alias_result(route_result):
-    """Wrap the established public invitation flow in the v2 envelope."""
-    if isinstance(route_result, tuple):
-        response = route_result[0]
-        status = route_result[1]
-    else:
-        response = route_result
-        status = response.status_code
-    body = response.get_json() or {}
-    if status >= 400:
-        return jsonify(
-            {
-                "success": False,
-                "error": body.get("error", "Invitation request failed"),
-            }
-        ), status
-    return jsonify({"success": True, "data": body}), status
-
-
-@api_v2_bp.route("/invite-info", methods=["GET"])
-@limiter.limit("20 per minute")
-def get_invite_info_v2():
-    """Get a team invitation through the v2 response envelope."""
-    return _v2_invitation_alias_result(get_invite_info())
-
-
-@api_v2_bp.route("/accept-invite", methods=["POST"])
-@limiter.limit("20 per minute")
-def accept_invite_v2():
-    """Accept a team invitation while preserving the established web flow."""
-    if not isinstance(request.get_json(silent=True), dict):
-        return jsonify({"success": False, "error": "Invalid JSON body"}), 400
-    return _v2_invitation_alias_result(accept_invite())
 
 
 # --- Registration & Password Reset Endpoints ---
@@ -3694,12 +1733,12 @@ def billing_config():
 
 
 @api_v2_bp.route("/billing/usage", methods=["GET"])
-@auth_required
+@jwt_required
 def billing_usage():
     """Get current usage against tier limits."""
     from config import is_saas, get_tier_limits
 
-    user = db.session.get(User, g.auth_user_id)
+    user = db.session.get(User, g.jwt_user_id)
     if not user:
         return jsonify({"success": False, "error": "User not found"}), 404
 
@@ -3735,10 +1774,10 @@ def billing_usage():
 
 
 @api_v2_bp.route("/billing/create-checkout", methods=["POST"])
-@auth_required
+@jwt_required
 def create_checkout():
     """Create a Stripe Checkout session for subscription."""
-    user = db.session.get(User, g.auth_user_id)
+    user = db.session.get(User, g.jwt_user_id)
     if not user:
         return jsonify({"success": False, "error": "User not found"}), 404
 
@@ -3800,10 +1839,10 @@ def create_checkout():
 
 
 @api_v2_bp.route("/billing/portal", methods=["POST"])
-@auth_required
+@jwt_required
 def billing_portal():
     """Create a Stripe Customer Portal session for subscription management."""
-    user = db.session.get(User, g.auth_user_id)
+    user = db.session.get(User, g.jwt_user_id)
     if not user:
         return jsonify({"success": False, "error": "User not found"}), 404
 
@@ -3819,12 +1858,12 @@ def billing_portal():
 
 
 @api_v2_bp.route("/billing/change-plan", methods=["POST"])
-@auth_required
+@jwt_required
 def change_plan():
     """Change subscription plan (upgrade or downgrade)."""
     from config import get_stripe_price_id
 
-    user = db.session.get(User, g.auth_user_id)
+    user = db.session.get(User, g.jwt_user_id)
     if not user:
         return jsonify({"success": False, "error": "User not found"}), 404
 
@@ -3891,12 +1930,12 @@ def change_plan():
 
 
 @api_v2_bp.route("/billing/status", methods=["GET"])
-@auth_required
+@jwt_required
 def billing_status():
     """Get current subscription status."""
     from config import get_tier_limits
 
-    user = db.session.get(User, g.auth_user_id)
+    user = db.session.get(User, g.jwt_user_id)
     if not user:
         return jsonify({"success": False, "error": "User not found"}), 404
 
@@ -4282,6 +2321,9 @@ def jwt_get_bills():
 
     current_user_id = g.jwt_user_id
     include_archived = request.args.get("include_archived", "false").lower() == "true"
+    bill_type = request.args.get("type")
+    if bill_type not in ("expense", "deposit"):
+        bill_type = None
 
     # Handle "all databases" mode
     result = resolve_accessible_db_ids()
@@ -4293,6 +2335,8 @@ def jwt_get_bills():
     query = Bill.query.filter(Bill.database_id.in_(accessible_db_ids))
     if not include_archived:
         query = query.filter_by(archived=False)
+    if bill_type:
+        query = query.filter_by(type=bill_type)
     owned_bills = query.order_by(Bill.due_date).all()
 
     # Get share counts for owned bills (how many people each bill is shared with)
@@ -4321,6 +2365,8 @@ def jwt_get_bills():
     )
     if not include_archived:
         shared_bill_query = shared_bill_query.filter(Bill.archived == False)
+    if bill_type:
+        shared_bill_query = shared_bill_query.filter(Bill.type == bill_type)
     shared_bills_data = shared_bill_query.order_by(Bill.due_date).all()
 
     # Create a lookup for share info
@@ -4566,9 +2612,19 @@ def jwt_get_bill(bill_id):
 
     bill = db.get_or_404(Bill, bill_id)
 
-    access = check_bill_access(bill)
-    if access is not True:
-        return access
+    # Check access: either owns the bill's database OR has an accepted share
+    has_access = check_bill_access(bill) is True
+    share = None
+    if not has_access:
+        share = BillShare.query.filter_by(
+            bill_id=bill_id, shared_with_user_id=g.jwt_user_id, status="accepted"
+        ).first()
+        has_access = share is not None
+
+    if not has_access:
+        return jsonify({"success": False, "error": "Access denied"}), 403
+
+    database = db.session.get(Database, bill.database_id)
 
     b_dict = {
         "id": bill.id,
@@ -4589,7 +2645,28 @@ def jwt_get_bill(bill_id):
         "reminder_days": parse_reminder_days(bill.reminder_days),
         "archived": bill.archived,
         "last_updated": _isoformat_utc(bill.last_updated),
+        "database_id": bill.database_id,
+        "database_name": database.display_name if database else "Unknown",
     }
+
+    if share:
+        my_portion = None
+        if share.split_type and bill.amount is not None:
+            my_portion = share.calculate_portion()
+        owner = db.session.get(User, database.owner_id) if database else None
+        b_dict["is_shared"] = True
+        b_dict["share_info"] = {
+            "share_id": share.id,
+            "owner_name": owner.username if owner else "Unknown",
+            "my_portion": my_portion,
+            "my_portion_paid": share.is_recipient_paid,
+            "my_portion_paid_date": share.recipient_paid_date.isoformat()
+            if share.recipient_paid_date
+            else None,
+        }
+    else:
+        b_dict["is_shared"] = False
+
     if bill.is_variable:
         avg = (
             db.session.query(func.avg(Payment.amount))
@@ -4919,7 +2996,9 @@ def jwt_pay_bill(bill_id):
     )
     db.session.add(payment)
 
-    if data.get("advance_due", True):
+    if bill.frequency == "once":
+        bill.archived = True
+    elif data.get("advance_due", True):
         freq_config = json.loads(bill.frequency_config) if bill.frequency_config else {}
         next_due = calculate_next_due_date(
             bill.due_date, bill.frequency, bill.frequency_type, freq_config
@@ -4983,6 +3062,54 @@ def jwt_get_bill_payments(bill_id):
     ]
 
     return jsonify({"success": True, "data": result})
+
+
+@api_v2_bp.route("/bills/<int:bill_id>/payments/monthly", methods=["GET"])
+@limiter.limit("60 per minute")
+@jwt_required
+def jwt_get_bill_monthly_payments(bill_id):
+    """Get up to 12 monthly payment totals for one bill."""
+    if not g.jwt_db_name:
+        return jsonify({"success": False, "error": "X-Database header required"}), 400
+
+    bill = db.get_or_404(Bill, bill_id)
+
+    # Keep the same ownership and shared-bill authorization semantics as the
+    # bill payment-history endpoint above.
+    has_access = check_bill_access(bill) is True
+    if not has_access:
+        share = BillShare.query.filter_by(
+            bill_id=bill_id, shared_with_user_id=g.jwt_user_id, status="accepted"
+        ).first()
+        has_access = share is not None
+
+    if not has_access:
+        return jsonify({"success": False, "error": "Access denied"}), 403
+
+    results = (
+        db.session.query(
+            func.to_char(
+                func.to_date(Payment.payment_date, "YYYY-MM-DD"), "YYYY-MM"
+            ).label("month"),
+            func.sum(Payment.amount),
+            func.count(Payment.id),
+        )
+        .filter(Payment.bill_id == bill_id)
+        .group_by("month")
+        .order_by(desc("month"))
+        .limit(12)
+        .all()
+    )
+
+    return jsonify(
+        {
+            "success": True,
+            "data": [
+                {"month": row[0], "total": float(row[1]), "count": row[2]}
+                for row in results
+            ],
+        }
+    )
 
 
 @api_v2_bp.route("/payments", methods=["GET"])
@@ -5266,13 +3393,13 @@ def jwt_share_bill(bill_id):
         return mutation_response
 
     # Get share parameters
-    identifier = data.get("shared_with", "").strip().lower()  # username or email
+    identifier = data.get("identifier", "").strip().lower()  # username or email
     split_type = data.get("split_type")  # None, 'percentage', 'fixed', 'equal'
     split_value = data.get("split_value")
 
     if not identifier:
         return jsonify(
-            {"success": False, "error": "shared_with (username or email) is required"}
+            {"success": False, "error": "identifier (username or email) is required"}
         ), 400
 
     # Validate split configuration
@@ -5457,6 +3584,9 @@ def jwt_get_bill_shares(bill_id):
             "created_at": s.created_at.isoformat() if s.created_at else None,
             "accepted_at": s.accepted_at.isoformat() if s.accepted_at else None,
             "updated_at": _isoformat_utc(s.updated_at),
+            "recipient_paid_date": s.recipient_paid_date.isoformat()
+            if s.recipient_paid_date
+            else None,
         }
         for s in filtered_shares
     ]
@@ -7075,13 +5205,16 @@ def jwt_process_auto_payments():
     for bill in auto_bills:
         payment = Payment(bill_id=bill.id, amount=bill.amount or 0, payment_date=today)
         db.session.add(payment)
-        next_due = calculate_next_due_date(
-            bill.due_date,
-            bill.frequency,
-            bill.frequency_type,
-            json.loads(bill.frequency_config),
-        )
-        bill.due_date = next_due.isoformat()
+        if bill.frequency == "once":
+            bill.archived = True
+        else:
+            next_due = calculate_next_due_date(
+                bill.due_date,
+                bill.frequency,
+                bill.frequency_type,
+                json.loads(bill.frequency_config),
+            )
+            bill.due_date = next_due.isoformat()
         processed.append(
             {"bill_id": bill.id, "name": bill.name, "amount": bill.amount or 0}
         )
@@ -7098,7 +5231,14 @@ def jwt_process_auto_payments():
 @api_v2_bp.route("/auth/change-password", methods=["POST"])
 @limiter.limit("20 per minute;60 per hour")
 def jwt_change_password():
-    """Change a password with either an authenticated current password or a change token."""
+    """Change password.
+
+    Supports two modes:
+    - `change_token` (unauthenticated): for the forced first-login /
+      password-reset flow.
+    - `current_password` (authenticated via Authorization header): for a
+      logged-in user voluntarily changing their own password.
+    """
     data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"success": False, "error": "Invalid JSON body"}), 400
@@ -7107,7 +5247,7 @@ def jwt_change_password():
     current_password = data.get("current_password")
     new_password = data.get("new_password")
 
-    if not new_password or (not change_token and not current_password):
+    if not new_password or not (change_token or current_password):
         return jsonify(
             {
                 "success": False,
@@ -7119,39 +5259,31 @@ def jwt_change_password():
     if not is_valid:
         return jsonify({"success": False, "error": error}), 400
 
-    if current_password:
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
-            return jsonify({"success": False, "error": "Authentication required"}), 401
-        payload = verify_access_token(auth_header.removeprefix("Bearer "))
+    if change_token:
+        user = User.find_by_change_token(change_token)
+        if not user:
+            return jsonify({"success": False, "error": "Invalid change token"}), 401
+        if not user.verify_change_token(change_token):
+            return jsonify({"success": False, "error": "Change token expired"}), 401
+        user.password_change_required = False
+        user.change_token = None
+        user.change_token_expires = None
+    else:
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return jsonify(
+                {"success": False, "error": "Missing or invalid Authorization header"}
+            ), 401
+        payload = verify_access_token(auth_header.split(" ")[1])
         if not payload:
             return jsonify({"success": False, "error": "Invalid or expired token"}), 401
         user = db.session.get(User, payload["user_id"])
-        if not user or not user.password_hash or not user.check_password(current_password):
-            return jsonify({"success": False, "error": "Current password is incorrect"}), 401
-        user.set_password(new_password)
-        db.session.commit()
-        log_auth_event(
-            "password_change",
-            success=True,
-            user_id=user.id,
-            username=user.username,
-            first_login=False,
-        )
-        return jsonify(
-            {"success": True, "data": {"message": "Password changed successfully"}}
-        )
-
-    user = User.find_by_change_token(change_token)
-    if not user:
-        return jsonify({"success": False, "error": "Invalid change token"}), 401
-    if not user.verify_change_token(change_token):
-        return jsonify({"success": False, "error": "Change token expired"}), 401
+        if not user or not user.check_password(current_password):
+            return jsonify(
+                {"success": False, "error": "Current password is incorrect"}
+            ), 401
 
     user.set_password(new_password)
-    user.password_change_required = False
-    user.change_token = None
-    user.change_token_expires = None
     db.session.commit()
 
     # Optionally auto-login after password change
@@ -9415,6 +7547,101 @@ def jwt_create_invitation():
     ), 201
 
 
+@api_v2_bp.route("/invitations/info", methods=["GET"])
+@limiter.limit("20 per minute")
+def jwt_get_invitation_info():
+    """Get public user-invitation details by token."""
+    token = request.args.get("token", "").strip()
+    if not token:
+        return jsonify({"success": False, "error": "Token is required"}), 400
+
+    invite = UserInvite.find_by_token(token)
+    if not invite or not invite.verify_token(token):
+        return jsonify({"success": False, "error": "Invalid invitation token"}), 404
+    if invite.is_accepted:
+        return jsonify(
+            {"success": False, "error": "Invitation has already been accepted"}
+        ), 400
+    if invite.is_expired:
+        return jsonify({"success": False, "error": "Invitation has expired"}), 400
+
+    inviter = db.session.get(User, invite.invited_by_id)
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "email": invite.email,
+                "invited_by": inviter.username if inviter else "Unknown",
+                "expires_at": invite.expires_at.isoformat(),
+            },
+        }
+    )
+
+
+@api_v2_bp.route("/invitations/accept", methods=["POST"])
+@limiter.limit("10 per minute")
+def jwt_accept_invitation():
+    """Accept a public user invitation and create the invited account."""
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "").strip()
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+
+    if not token or not username or not password:
+        return jsonify(
+            {
+                "success": False,
+                "error": "Token, username, and password are required",
+            }
+        ), 400
+
+    invite = UserInvite.find_by_token(token)
+    if not invite or not invite.verify_token(token):
+        return jsonify({"success": False, "error": "Invalid invitation token"}), 400
+    if invite.is_accepted:
+        return jsonify(
+            {"success": False, "error": "Invitation has already been accepted"}
+        ), 400
+    if invite.is_expired:
+        return jsonify({"success": False, "error": "Invitation has expired"}), 400
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({"success": False, "error": "Username is already taken"}), 400
+
+    new_user = User(
+        username=username,
+        email=invite.email,
+        role=invite.role,
+        created_by_id=invite.invited_by_id,
+        # An invite can only be accepted by someone who received its email.
+        email_verified_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    new_user.set_password(password)
+    db.session.add(new_user)
+
+    if invite.database_ids:
+        for db_id_str in invite.database_ids.split(","):
+            try:
+                database = db.session.get(Database, int(db_id_str))
+            except ValueError:
+                continue
+            if database:
+                new_user.accessible_databases.append(database)
+
+    invite.accepted_at = datetime.datetime.now(datetime.timezone.utc)
+    db.session.commit()
+
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "message": "Account created successfully",
+                "username": username,
+            },
+        }
+    ), 201
+
+
 @api_v2_bp.route("/invitations/<int:invite_id>", methods=["DELETE"])
 @jwt_admin_required
 def jwt_delete_invitation(invite_id):
@@ -9695,6 +7922,12 @@ def jwt_get_version():
             },
         }
     )
+
+
+@api_v2_bp.route("/ping", methods=["GET"])
+def jwt_ping():
+    """Return a lightweight unauthenticated liveness response."""
+    return jsonify({"success": True, "data": {"status": "ok"}})
 
 
 @api_v2_bp.route("/config", methods=["GET"])
@@ -10718,7 +8951,7 @@ def jwt_sync_full():
     )
 
 
-# --- Telemetry Consent Endpoints (V1 - Session Auth) ---
+# --- Telemetry consent helpers ---
 
 
 def _get_or_create_telemetry_settings():
@@ -10791,127 +9024,6 @@ def _telemetry_notice_config(settings=None):
     if settings:
         config["consent_state"] = settings.state
     return config
-
-
-@api_bp.route("/telemetry/notice", methods=["GET"])
-@login_required
-def get_telemetry_notice_v1():
-    """
-    Check if user needs to see telemetry notice (session auth version).
-
-    Returns notice status and telemetry configuration.
-    """
-    user = User.query.get(session.get("user_id"))
-    if not user:
-        return jsonify({"success": False, "error": "User not found"}), 404
-
-    # Only account owners see/manage telemetry settings
-    if not user.is_account_owner:
-        return jsonify(
-            {
-                "success": True,
-                "data": {"show_notice": False, "reason": "not_account_owner"},
-            }
-        )
-
-    settings = _get_or_create_telemetry_settings()
-    telemetry_config = _telemetry_notice_config(settings)
-
-    if not telemetry_config["telemetry_enabled"]:
-        return jsonify(
-            {
-                "success": True,
-                "data": {
-                    "show_notice": False,
-                    "reason": "globally_disabled",
-                    **telemetry_config,
-                },
-            }
-        )
-
-    if settings.state != 'pending':
-        return jsonify(
-            {
-                "success": True,
-                "data": {
-                    "show_notice": False,
-                    "opted_out": settings.state == 'disabled',
-                    "notice_shown_at": settings.decided_at.isoformat()
-                    if settings.decided_at
-                    else None,
-                    **telemetry_config,
-                },
-            }
-        )
-
-    # User needs to see the notice
-    return jsonify(
-        {
-            "success": True,
-            "data": {
-                "show_notice": True,
-                **telemetry_config,
-            },
-        }
-    )
-
-
-@api_bp.route("/telemetry/accept", methods=["POST"])
-@login_required
-def accept_telemetry_v1():
-    """Accept telemetry (session auth version)."""
-    user = User.query.get(session.get("user_id"))
-    if not user:
-        return jsonify({"success": False, "error": "User not found"}), 404
-
-    if not user.is_account_owner:
-        return jsonify(
-            {"success": False, "error": "Only account owners can manage telemetry"}
-        ), 403
-
-    _set_telemetry_consent(user, 'enabled')
-
-    logger.info(f"User {user.username} accepted telemetry")
-
-    return jsonify(
-        {
-            "success": True,
-            "data": {
-                "message": "Telemetry accepted",
-                "opted_out": False,
-                "consent_state": "enabled",
-            },
-        }
-    )
-
-
-@api_bp.route("/telemetry/opt-out", methods=["POST"])
-@login_required
-def opt_out_telemetry_v1():
-    """Opt out of telemetry (session auth version)."""
-    user = User.query.get(session.get("user_id"))
-    if not user:
-        return jsonify({"success": False, "error": "User not found"}), 404
-
-    if not user.is_account_owner:
-        return jsonify(
-            {"success": False, "error": "Only account owners can manage telemetry"}
-        ), 403
-
-    _set_telemetry_consent(user, 'disabled')
-
-    logger.info(f"User {user.username} opted out of telemetry")
-
-    return jsonify(
-        {
-            "success": True,
-            "data": {
-                "message": "Telemetry disabled",
-                "opted_out": True,
-                "consent_state": "disabled",
-            },
-        }
-    )
 
 
 # --- Telemetry Consent Endpoints (V2 - JWT Auth) ---
@@ -11088,7 +9200,6 @@ def serve_static(path):
 def create_app():
     app = Flask(__name__, static_folder=None)
     app.url_map.strict_slashes = False
-    app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 
     # Get DATABASE_URL and convert to psycopg3 dialect if needed
     db_url = os.environ.get(
@@ -11170,19 +9281,20 @@ def create_app():
             frame_options="DENY",  # Additional clickjacking protection
         )
 
-    # Secure session cookie configuration
-    app.config["SESSION_COOKIE_SECURE"] = is_production  # HTTPS only in production
-    app.config["SESSION_COOKIE_HTTPONLY"] = True  # Prevent JS access
-    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # CSRF protection
-    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=24)
-
     # Add request logging middleware (controlled by LOG_REQUESTS env var)
     # Also adds X-Request-ID header for request tracing
     request_logging_middleware(app)
 
-    # Register API Blueprints first, then SPA
-    app.register_blueprint(api_bp)
-    app.register_blueprint(api_v2_bp)  # JWT auth for mobile
+    @app.route(
+        "/api/<path:path>",
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    )
+    def api_not_found(path):
+        """Return JSON for removed or unknown API routes instead of the SPA shell."""
+        return jsonify({"success": False, "error": "API endpoint not found"}), 404
+
+    # Register the v2 API before the SPA fallback.
+    app.register_blueprint(api_v2_bp)
 
     # Register telemetry receiver (only on production server for collecting telemetry)
     enable_telemetry_receiver = (

@@ -349,6 +349,11 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
                         <Badge size="xs" color={getStatusColor(share.status)}>
                           {getStatusLabel(share.status, t)}
                         </Badge>
+                        {share.status === 'accepted' && (
+                          <Badge size="xs" variant="light" color={share.recipient_paid_date ? 'green' : 'gray'}>
+                            {share.recipient_paid_date ? t('shareBillModal.paid') : t('shareBillModal.unpaid')}
+                          </Badge>
+                        )}
                       </Group>
 
                       <Select
@@ -405,6 +410,11 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
                         <Badge size="xs" color={getStatusColor(share.status)}>
                           {getStatusLabel(share.status, t)}
                         </Badge>
+                        {share.status === 'accepted' && (
+                          <Badge size="xs" variant="light" color={share.recipient_paid_date ? 'green' : 'gray'}>
+                            {share.recipient_paid_date ? t('shareBillModal.paid') : t('shareBillModal.unpaid')}
+                          </Badge>
+                        )}
                         {share.split_type && (
                           <Badge size="xs" variant="light">
                             {share.split_type === 'equal'

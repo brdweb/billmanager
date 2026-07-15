@@ -455,23 +455,6 @@ def test_notice_honors_global_disable(client, admin_auth_headers, monkeypatch):
     }
 
 
-def test_web_notice_honors_global_disable(
-    client, admin_user, db_session, monkeypatch
-):
-    monkeypatch.setenv("TELEMETRY_ENABLED", "false")
-    with client.session_transaction() as session:
-        session["user_id"] = admin_user.id
-        session["role"] = admin_user.role
-
-    response = client.get("/telemetry/notice")
-
-    assert response.status_code == 200
-    data = response.get_json()["data"]
-    assert data["show_notice"] is False
-    assert data["reason"] == "globally_disabled"
-    assert data["telemetry_enabled"] is False
-
-
 def test_notice_keeps_config_after_owner_choice(
     client, admin_user, admin_auth_headers, db_session, monkeypatch
 ):

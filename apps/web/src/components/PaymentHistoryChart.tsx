@@ -8,7 +8,7 @@ import type { MonthlyBillPayment } from '../api/client';
 import { formatCurrency, formatCurrencyAxis, getLocale } from '../lib/currency';
 
 interface PaymentHistoryChartProps {
-  billName: string | null;
+  billId: number | null;
 }
 
 interface ChartData {
@@ -28,17 +28,17 @@ function parseMonthString(monthStr: string): { year: number; month: number } | n
   return { year, month };
 }
 
-export function PaymentHistoryChart({ billName }: PaymentHistoryChartProps) {
+export function PaymentHistoryChart({ billId }: PaymentHistoryChartProps) {
   const { t } = useTranslation();
   const [data, setData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!billName) return;
+    if (!billId) return;
 
     setLoading(true);
     try {
-      const response = await getBillMonthlyPayments(billName);
+      const response = await getBillMonthlyPayments(billId);
       const monthlyData: MonthlyBillPayment[] = response ?? [];
 
       // Transform and reverse to show chronological order (oldest first)
@@ -63,13 +63,13 @@ export function PaymentHistoryChart({ billName }: PaymentHistoryChartProps) {
     } finally {
       setLoading(false);
     }
-  }, [billName]);
+  }, [billId]);
 
   useEffect(() => {
-    if (billName) {
+    if (billId) {
       fetchData();
     }
-  }, [billName]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [billId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (

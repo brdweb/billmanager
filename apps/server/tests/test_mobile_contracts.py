@@ -134,7 +134,11 @@ def test_openapi_covers_runtime_contract_and_resolves_all_local_refs():
             for requirement in operation.get("security", [])
             for name in requirement
         }
-        if decorators & {"jwt_required", "jwt_admin_required"}:
+        if key == ("/auth/change-password", "post"):
+            # This endpoint intentionally supports both a public change-token
+            # flow and an authenticated current-password flow.
+            assert security_names == {"bearerAuth"}, key
+        elif decorators & {"jwt_required", "jwt_admin_required"}:
             assert "bearerAuth" in security_names, key
         elif "auth_required" in decorators:
             assert security_names == {"bearerAuth", "cookieAuth"}, key
@@ -797,7 +801,7 @@ def test_share_create_replays_without_duplicate_or_duplicate_audit(
     db_session,
 ):
     payload = {
-        "shared_with": regular_user.username,
+        "identifier": regular_user.username,
         "split_type": "equal",
         "client_mutation_id": str(uuid.uuid4()),
     }
@@ -1843,7 +1847,7 @@ def test_upcoming_alerts_reject_non_numeric_horizon(
     assert response.get_json()["error"] == "horizon_days must be a number"
 
 
-def test_v2_team_invitation_alias_preserves_legacy_flow(
+def test_v2_team_invitation_endpoints_preserve_public_flow(
     client,
     admin_user,
     test_database,
@@ -1863,16 +1867,17 @@ def test_v2_team_invitation_alias_preserves_legacy_flow(
         db_session.add(invite)
         db_session.commit()
 
-    legacy_info = client.get("/invite-info", query_string={"token": token})
-    mobile_info = client.get("/api/v2/invite-info", query_string={"token": token})
+    mobile_info = client.get(
+        "/api/v2/invitations/info", query_string={"token": token}
+    )
 
-    assert legacy_info.status_code == 200
     assert mobile_info.status_code == 200
     assert mobile_info.get_json()["success"] is True
-    assert mobile_info.get_json()["data"] == legacy_info.get_json()
+    assert mobile_info.get_json()["data"]["email"] == "mobile-invite@example.com"
+    assert mobile_info.get_json()["data"]["invited_by"] == admin_user.username
 
     accepted = client.post(
-        "/api/v2/accept-invite",
+        "/api/v2/invitations/accept",
         json={
             "token": token,
             "username": "mobileinvitee",

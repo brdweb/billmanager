@@ -199,7 +199,7 @@ export function PaymentHistory({
         )}
 
         {/* Payment History Chart */}
-        <PaymentHistoryChart billName={billName} />
+        <PaymentHistoryChart billId={billId} />
 
         {loading ? (
           <Center py="xl">

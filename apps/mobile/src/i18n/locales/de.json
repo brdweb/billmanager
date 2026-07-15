@@ -30,6 +30,7 @@
       "expense": "Ausgabe"
     },
     "frequency": {
+      "once": "Einmalig",
       "weekly": "Wöchentlich",
       "biweekly": "Zweiwöchentlich",
       "quarterly": "Vierteljährlich",
@@ -205,7 +206,9 @@
       "pending": "ausstehend",
       "declined": "abgelehnt",
       "revoked": "widerrufen"
-    }
+    },
+    "paid": "Bezahlt",
+    "unpaid": "Unbezahlt"
   },
   "sharedBillsSection": {
     "title": "Geteilte Rechnungen",

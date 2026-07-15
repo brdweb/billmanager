@@ -898,11 +898,10 @@ export class BillManagerApi {
 
   async getTeamInviteInfo(token: string): Promise<ApiResponse<TeamInviteInfo>> {
     try {
-      const response = await axios.get(this.legacyPublicUrl('/invite-info'), {
+      const response = await this.client.get<ApiResponse<TeamInviteInfo>>('/invitations/info', {
         params: { token },
-        timeout: 30000,
       });
-      return this.normalizeLegacyResponse<TeamInviteInfo>(response.data);
+      return response.data;
     } catch (error) {
       return this.handleError(error);
     }
@@ -914,12 +913,11 @@ export class BillManagerApi {
     password: string,
   ): Promise<ApiResponse<TeamInviteAcceptance>> {
     try {
-      const response = await axios.post(
-        this.legacyPublicUrl('/accept-invite'),
+      const response = await this.client.post<ApiResponse<TeamInviteAcceptance>>(
+        '/invitations/accept',
         { token, username, password },
-        { timeout: 30000 },
       );
-      return this.normalizeLegacyResponse<TeamInviteAcceptance>(response.data);
+      return response.data;
     } catch (error) {
       return this.handleError(error);
     }
@@ -1652,11 +1650,16 @@ export class BillManagerApi {
     }
   }
 
-  async createDatabase(name: string, displayName: string): Promise<ApiResponse<{ id: number }>> {
+  async createDatabase(
+    name: string,
+    displayName: string,
+    description?: string,
+  ): Promise<ApiResponse<{ id: number }>> {
     try {
       const response = await this.client.post<ApiResponse<{ id: number }>>('/databases', {
         name,
         display_name: displayName,
+        description,
       });
       return response.data;
     } catch (error) {
@@ -1664,10 +1667,15 @@ export class BillManagerApi {
     }
   }
 
-  async updateDatabase(databaseId: number, displayName: string): Promise<ApiResponse<void>> {
+  async updateDatabase(
+    databaseId: number,
+    displayName: string,
+    description?: string,
+  ): Promise<ApiResponse<void>> {
     try {
       const response = await this.client.put<ApiResponse<void>>(`/databases/${databaseId}`, {
         display_name: displayName,
+        description,
       });
       return response.data;
     } catch (error) {
@@ -2098,27 +2106,6 @@ export class BillManagerApi {
     }
     const { success: _success, error: _error, ...data } = response;
     return { success: true, data: data as T };
-  }
-
-  private normalizeLegacyResponse<T>(payload: unknown): ApiResponse<T> {
-    const response = (payload ?? {}) as Record<string, unknown>;
-    if (typeof response.success === 'boolean') {
-      return response as unknown as ApiResponse<T>;
-    }
-    if (typeof response.error === 'string') {
-      return { success: false, error: response.error };
-    }
-    return { success: true, data: response as T };
-  }
-
-  private legacyPublicUrl(path: string): string {
-    if (this.configurationError) throw this.configurationError;
-    const url = new URL(this.activeProfile.baseUrl);
-    const basePath = url.pathname.replace(/\/api\/v2\/?$/, '');
-    url.pathname = `${basePath}${path.startsWith('/') ? path : `/${path}`}`;
-    url.search = '';
-    url.hash = '';
-    return url.toString();
   }
 
   private handleError(error: unknown): ApiResponse<any> {

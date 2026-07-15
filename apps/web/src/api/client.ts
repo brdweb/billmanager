@@ -200,7 +200,7 @@ export interface Bill {
   name: string;
   amount: number | null;
   varies: boolean;
-  frequency: 'weekly' | 'bi-weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
+  frequency: 'once' | 'weekly' | 'bi-weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
   frequency_type: 'simple' | 'specific_dates' | 'multiple_weekly';
   frequency_config: string;
   next_due: string;
@@ -382,28 +382,18 @@ export const getInvites = () =>
 export const cancelInvite = (inviteId: number) =>
   unwrap(api.delete<ApiResponse<void>>(`/invitations/${inviteId}`));
 
-// Public invitation endpoints (v1 only - no auth required)
-// These use axios directly since they're not in v2 API yet
-export const getInviteInfo = async (token: string) => {
-  const response = await axios.get<ApiResponse<{ email: string; invited_by: string; expires_at: string }>>(
-    `/invite-info?token=${encodeURIComponent(token)}`
-  );
-  if (!response.data.success) {
-    throw new Error(response.data.error || i18n.t('apiErrors.invitationLoadFailed'));
-  }
-  return response.data.data!;
-};
+// Public invitation endpoints. They intentionally use the v2 client so their
+// response envelope and error handling stay consistent with the rest of web.
+export const getInviteInfo = (token: string) =>
+  unwrap(api.get<ApiResponse<{ email: string; invited_by: string; expires_at: string }>>(
+    `/invitations/info?token=${encodeURIComponent(token)}`
+  ));
 
-export const acceptInvite = async (token: string, username: string, password: string) => {
-  const response = await axios.post<ApiResponse<{ message: string; username: string }>>(
-    '/accept-invite',
+export const acceptInvite = (token: string, username: string, password: string) =>
+  unwrap(api.post<ApiResponse<{ message: string; username: string }>>(
+    '/invitations/accept',
     { token, username, password }
-  );
-  if (!response.data.success) {
-    throw new Error(response.data.error || i18n.t('apiErrors.invitationAcceptFailed'));
-  }
-  return response.data.data!;
-};
+  ));
 
 // Bills API
 export const getBills = (includeArchived = false, type?: 'expense' | 'deposit') => {
@@ -499,9 +489,8 @@ export const getMonthlyComparison = () =>
 export const getAllPayments = () =>
   unwrap(api.get<ApiResponse<PaymentWithBill[]>>('/payments'));
 
-// Note: This endpoint has no v2 equivalent - may need to filter client-side or add v2 endpoint
-export const getBillMonthlyPayments = (billName: string) =>
-  unwrap(api.get<ApiResponse<MonthlyBillPayment[]>>(`/payments/bill/${encodeURIComponent(billName)}/monthly`));
+export const getBillMonthlyPayments = (billId: number) =>
+  unwrap(api.get<ApiResponse<MonthlyBillPayment[]>>(`/bills/${billId}/payments/monthly`));
 
 // Auto-payment API
 export const processAutoPayments = () =>
@@ -710,7 +699,7 @@ export const createCheckoutSession = (tier: string = 'basic', interval: string =
 export const createPortalSession = () =>
   unwrap(api.post<ApiResponse<CheckoutResponse>>('/billing/portal'));
 
-// Telemetry API (v1 - session auth)
+// Telemetry API (v2 JWT auth)
 export interface TelemetryNoticeResponse {
   success: boolean;
   data: {

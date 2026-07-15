@@ -9,20 +9,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/login': 'http://localhost:5001',
-      '/logout': 'http://localhost:5001',
-      '/me': 'http://localhost:5001',
-      '/change-password': 'http://localhost:5001',
-      '/bills': 'http://localhost:5001',
-      '/payments': 'http://localhost:5001',
-      '/select-db': 'http://localhost:5001',
-      '/databases': 'http://localhost:5001',
-      '/users': 'http://localhost:5001',
       '/api': 'http://localhost:5001',
-      '/debug-db': 'http://localhost:5001',
-      '/telemetry': 'http://localhost:5001',
-      '/shares': 'http://localhost:5001',
-      '/shared-bills': 'http://localhost:5001',
     },
   },
   build: {

@@ -74,16 +74,12 @@ export async function login(page: Page, username: string = 'admin', password: st
 }
 
 /**
- * Navigate to the Bills page using sidebar link (client-side routing).
- * Direct page.goto('/bills') hits the Vite proxy which forwards to Flask API.
- * This helper clicks the sidebar NavLink instead, triggering React Router navigation.
+ * Navigate directly to the Bills page through the SPA fallback.
  */
 export async function navigateToBills(page: Page) {
-  const billsLink = page.locator('[class*="NavLink"]').filter({ hasText: /^Bills$/ }).first();
-  await billsLink.click();
+  await page.goto('/bills');
   await page.waitForURL(/\/bills/, { timeout: 5000 });
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForTimeout(1000);
 }
 
 /**

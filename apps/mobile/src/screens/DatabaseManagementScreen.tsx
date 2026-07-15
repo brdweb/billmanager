@@ -35,6 +35,7 @@ export default function DatabaseManagementScreen({ navigation }: Props) {
   const [editingDatabase, setEditingDatabase] = useState<DatabaseWithAccess | null>(null);
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // User access modal state
@@ -89,6 +90,7 @@ export default function DatabaseManagementScreen({ navigation }: Props) {
     setEditingDatabase(null);
     setName('');
     setDisplayName('');
+    setDescription('');
     setShowModal(true);
   };
 
@@ -96,6 +98,7 @@ export default function DatabaseManagementScreen({ navigation }: Props) {
     setEditingDatabase(db);
     setName(db.name);
     setDisplayName(db.display_name);
+    setDescription(db.description ?? '');
     setShowModal(true);
   };
 
@@ -114,9 +117,13 @@ export default function DatabaseManagementScreen({ navigation }: Props) {
 
     let result;
     if (editingDatabase) {
-      result = await api.updateDatabase(editingDatabase.id, displayName.trim());
+      result = await api.updateDatabase(
+        editingDatabase.id,
+        displayName.trim(),
+        description.trim(),
+      );
     } else {
-      result = await api.createDatabase(name.trim(), displayName.trim());
+      result = await api.createDatabase(name.trim(), displayName.trim(), description.trim());
     }
 
     setIsSubmitting(false);
@@ -386,6 +393,23 @@ export default function DatabaseManagementScreen({ navigation }: Props) {
               onChangeText={setDisplayName}
               placeholder={t('mobileParity.groupManagement.displayPlaceholder')}
               placeholderTextColor={colors.textMuted}
+            />
+
+            <Text style={[styles.inputLabel, { color: colors.textMuted }]}>
+              {t('mobileParity.groupManagement.description')}
+            </Text>
+            <TextInput
+              style={[styles.input, styles.descriptionInput, {
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+                color: colors.text,
+              }]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder={t('mobileParity.groupManagement.descriptionPlaceholder')}
+              placeholderTextColor={colors.textMuted}
+              multiline
+              textAlignVertical="top"
             />
 
             <View style={styles.modalButtons}>
@@ -693,6 +717,9 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     marginBottom: 16,
+  },
+  descriptionInput: {
+    minHeight: 88,
   },
   inputHint: {
     fontSize: 12,

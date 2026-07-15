@@ -60,6 +60,54 @@ class TestBillsCRUD:
         assert data.get('success') is True
         assert data['data']['name'] == 'Test Bill'
 
+    def test_get_single_bill_includes_database_and_share_fields(self, client, auth_headers_with_db, test_bill, test_database):
+        """Regression: jwt_get_bill omitted database_id/database_name/is_shared
+        that the list endpoint (and mobile's BillDetailScreen) rely on."""
+        response = client.get(f'/api/v2/bills/{test_bill.id}',
+                              headers=auth_headers_with_db)
+        data = json.loads(response.data)['data']
+        assert data['database_id'] == test_database.id
+        assert data['database_name'] == test_database.display_name
+        assert data['is_shared'] is False
+
+    def test_get_single_bill_accessible_to_share_recipient(
+        self, client, user_auth_headers, db_session, test_bill, admin_user, regular_user
+    ):
+        """Regression: a share recipient (not a database member) got a 403 on
+        GET /bills/<id> - the route only had check_bill_access (owner-only),
+        never the accepted-share fallback that /payments and /pay already had.
+        """
+        recipient_db = Database(
+            name='recipientdb2', display_name='Recipient DB', owner_id=regular_user.id
+        )
+        db_session.add(recipient_db)
+        db_session.commit()
+        regular_user.accessible_databases.append(recipient_db)
+        db_session.commit()
+
+        share = BillShare(
+            bill_id=test_bill.id,
+            owner_user_id=admin_user.id,
+            shared_with_user_id=regular_user.id,
+            shared_with_identifier=regular_user.username,
+            identifier_type='username',
+            status='accepted',
+            split_type='equal',
+            accepted_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+        db_session.add(share)
+        db_session.commit()
+
+        recipient_headers = user_auth_headers.copy()
+        recipient_headers['X-Database'] = recipient_db.name
+
+        response = client.get(f'/api/v2/bills/{test_bill.id}', headers=recipient_headers)
+        assert response.status_code == 200
+        data = json.loads(response.data)['data']
+        assert data['is_shared'] is True
+        assert data['share_info']['share_id'] == share.id
+        assert data['share_info']['owner_name'] == admin_user.username
+
     def test_update_bill(self, client, auth_headers_with_db, test_bill):
         """Test updating a bill."""
         response = client.put(f'/api/v2/bills/{test_bill.id}',
@@ -193,6 +241,32 @@ class TestBillTypes:
         get_resp = client.get(f'/api/v2/bills/{bill_id}', headers=auth_headers_with_db)
         get_data = json.loads(get_resp.data)
         assert get_data['data']['type'] == 'deposit'
+
+    def test_get_bills_filters_by_type(self, client, auth_headers_with_db):
+        """The v2 list endpoint honors the web client's declared type filter."""
+        client.post('/api/v2/bills', headers=auth_headers_with_db, json={
+            'name': 'Rent', 'amount': 1500.00, 'frequency': 'monthly',
+            'next_due': '2025-01-01', 'type': 'expense',
+        })
+        client.post('/api/v2/bills', headers=auth_headers_with_db, json={
+            'name': 'Salary', 'amount': 5000.00, 'frequency': 'monthly',
+            'next_due': '2025-01-15', 'type': 'deposit',
+        })
+
+        expense_response = client.get(
+            '/api/v2/bills?type=expense', headers=auth_headers_with_db
+        )
+        expense_data = json.loads(expense_response.data)['data']
+        assert [bill['name'] for bill in expense_data] == ['Rent']
+
+        deposit_response = client.get(
+            '/api/v2/bills?type=deposit', headers=auth_headers_with_db
+        )
+        deposit_data = json.loads(deposit_response.data)['data']
+        assert [bill['name'] for bill in deposit_data] == ['Salary']
+
+        all_response = client.get('/api/v2/bills', headers=auth_headers_with_db)
+        assert len(json.loads(all_response.data)['data']) == 2
 
     def test_create_variable_amount_bill(self, client, auth_headers_with_db):
         """Test creating a bill with variable amount."""
@@ -707,3 +781,115 @@ class TestBillValidation:
                                })
         # Should either reject or handle appropriately
         assert response.status_code in [400, 201]
+
+
+class TestBillShareCreation:
+    """Regression coverage for POST /bills/<id>/share request field names.
+
+    The web and mobile clients both send `identifier` (username or email),
+    matching the v1 session-based route. The v2 route had drifted to expect
+    `shared_with` instead, silently rejecting every share request from both
+    clients with "identifier is required".
+    """
+
+    def test_share_by_username_accepts_identifier_field(
+        self, client, auth_headers_with_db, test_bill, regular_user
+    ):
+        response = client.post(
+            f'/api/v2/bills/{test_bill.id}/share',
+            headers=auth_headers_with_db,
+            json={'identifier': regular_user.username},
+        )
+        assert response.status_code == 201
+        data = json.loads(response.data)
+        assert data['success'] is True
+        assert data['data']['shared_with_identifier'] == regular_user.username
+
+    def test_share_missing_identifier_is_rejected(self, client, auth_headers_with_db, test_bill):
+        response = client.post(
+            f'/api/v2/bills/{test_bill.id}/share',
+            headers=auth_headers_with_db,
+            json={'split_type': None},
+        )
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'identifier' in data['error']
+
+    def test_get_bill_shares_reflects_recipient_paid_status(
+        self, client, auth_headers_with_db, user_auth_headers, db_session, test_bill, admin_user, regular_user
+    ):
+        """Regression (Codex review on #64): jwt_get_bill_shares dropped
+        recipient_paid_date from its response, so the owner-facing paid/unpaid
+        badge in ShareBillModal always showed "unpaid" regardless of reality.
+        """
+        share = BillShare(
+            bill_id=test_bill.id,
+            owner_user_id=admin_user.id,
+            shared_with_user_id=regular_user.id,
+            shared_with_identifier=regular_user.username,
+            identifier_type='username',
+            status='accepted',
+            accepted_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+        db_session.add(share)
+        db_session.commit()
+        db_session.refresh(share)
+
+        before = client.get(f'/api/v2/bills/{test_bill.id}/shares', headers=auth_headers_with_db)
+        before_data = json.loads(before.data)['data']
+        assert before_data[0]['recipient_paid_date'] is None
+
+        mark_response = client.post(f'/api/v2/shares/{share.id}/mark-paid', headers=user_auth_headers)
+        assert mark_response.status_code == 200
+
+        after = client.get(f'/api/v2/bills/{test_bill.id}/shares', headers=auth_headers_with_db)
+        after_data = json.loads(after.data)['data']
+        assert after_data[0]['recipient_paid_date'] is not None
+
+
+class TestOneTimeBills:
+    """Regression coverage for frequency='once' bills.
+
+    The mobile app has offered a "One-time" frequency option since it was
+    built, but the backend never accepted 'once' as a valid frequency and
+    had no logic to stop it from being treated as recurring - creating one
+    failed outright, and had it been accepted, paying it would have rolled
+    the due date forward instead of retiring the bill.
+    """
+
+    def test_create_once_bill_is_accepted(self, client, auth_headers_with_db):
+        response = client.post('/api/v2/bills',
+                               headers=auth_headers_with_db,
+                               json={
+                                   'name': 'One-off purchase',
+                                   'amount': 42.00,
+                                   'frequency': 'once',
+                                   'next_due': '2025-01-15',
+                               })
+        assert response.status_code == 201
+
+    def test_paying_once_bill_archives_instead_of_rescheduling(self, client, auth_headers_with_db, app, db_session, test_database):
+        with app.app_context():
+            bill = Bill(
+                database_id=test_database.id,
+                name='One-off purchase',
+                amount=42.00,
+                frequency='once',
+                due_date='2025-01-15',
+                type='expense',
+            )
+            db_session.add(bill)
+            db_session.commit()
+            db_session.refresh(bill)
+            bill_id = bill.id
+
+        response = client.post(f'/api/v2/bills/{bill_id}/pay',
+                               headers=auth_headers_with_db,
+                               json={'amount': 42.00, 'payment_date': '2025-01-15'})
+        assert response.status_code in [200, 201]
+
+        with app.app_context():
+            db_session.expire_all()
+            updated = db_session.get(Bill, bill_id)
+            assert updated.archived is True
+            assert updated.due_date == '2025-01-15'

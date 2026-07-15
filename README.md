@@ -91,7 +91,7 @@ make test-db-down
        restart: unless-stopped
        environment:
          - DATABASE_URL=postgresql://billsuser:billspass@db:5432/billsdb
-         - FLASK_SECRET_KEY=change-this-to-a-secure-random-string
+         - JWT_SECRET_KEY=change-this-to-a-secure-random-string
        depends_on:
          - db
 
@@ -144,7 +144,7 @@ If you already have a PostgreSQL server or prefer to use a managed database serv
        restart: unless-stopped
        environment:
          - DATABASE_URL=postgresql://billsuser:your-secure-password@your-db-host:5432/billsdb
-         - FLASK_SECRET_KEY=change-this-to-a-secure-random-string
+         - JWT_SECRET_KEY=change-this-to-a-secure-random-string
    ```
 
 3. **Or run with Docker directly**:
@@ -153,7 +153,7 @@ If you already have a PostgreSQL server or prefer to use a managed database serv
      --name billmanager \
      -p 5000:5000 \
      -e DATABASE_URL=postgresql://billsuser:your-secure-password@your-db-host:5432/billsdb \
-     -e FLASK_SECRET_KEY=change-this-to-a-secure-random-string \
+     -e JWT_SECRET_KEY=change-this-to-a-secure-random-string \
      ghcr.io/brdweb/billmanager:latest
    ```
 
@@ -181,8 +181,8 @@ postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://billsuser:billspass@db:5432/billsdb` |
-| `FLASK_SECRET_KEY` | Secret key for session encryption | **Required in production** |
-| `JWT_SECRET_KEY` | Secret key for mobile API tokens | Falls back to `FLASK_SECRET_KEY` |
+| `FLASK_SECRET_KEY` | Backward-compatible fallback for `JWT_SECRET_KEY` | **Required in production when `JWT_SECRET_KEY` is unset** |
+| `JWT_SECRET_KEY` | Secret key for API access, refresh, and OAuth state tokens | Falls back to `FLASK_SECRET_KEY` |
 | `EMAIL_PROVIDER` | Outbound email provider: `smtp`, `resend`, or `none` | Auto-detects Resend/SMTP config |
 | `FROM_EMAIL` | Sender email address | None |
 | `APP_URL` | Application URL for email links | `http://localhost:5000` |
@@ -408,7 +408,7 @@ Docker Compose uses a named volume for PostgreSQL data:
 - **REST API (v2):** JWT-based authentication at `/api/v2/*`
 - **Documentation:** Interactive Swagger UI at `/api/v2/docs`
 - **Features:** Delta sync, offline support, device registration, push notifications
-- **Legacy API (v1):** Session-based endpoints at `/login`, `/bills`, etc. (deprecated)
+- **Legacy API (v1):** Removed; all application clients use `/api/v2/*`
 
 ### Key Technologies
 - **Icons:** Tabler Icons (70+ categories)

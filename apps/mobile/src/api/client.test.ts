@@ -1238,12 +1238,15 @@ describe('BillManagerApi security behavior', () => {
     expect((api as unknown as { refreshToken: string | null }).refreshToken).toBe('refresh-b');
   });
 
-  it('loads legacy team invitations from the selected server origin', async () => {
-    testMocks.axiosMock.get.mockResolvedValueOnce({
+  it('loads team invitations through the canonical v2 endpoint', async () => {
+    testMocks.mockClient.get.mockResolvedValueOnce({
       data: {
-        email: 'invitee@example.com',
-        invited_by: 'owner',
-        expires_at: '2026-07-20T12:00:00Z',
+        success: true,
+        data: {
+          email: 'invitee@example.com',
+          invited_by: 'owner',
+          expires_at: '2026-07-20T12:00:00Z',
+        },
       },
     });
 
@@ -1251,10 +1254,33 @@ describe('BillManagerApi security behavior', () => {
     const response = await api.getTeamInviteInfo('invite-token');
 
     expect(response.success).toBe(true);
-    expect(testMocks.axiosMock.get).toHaveBeenCalledWith(
-      'https://app.billmanager.app/invite-info',
+    expect(testMocks.mockClient.get).toHaveBeenCalledWith(
+      '/invitations/info',
       expect.objectContaining({ params: { token: 'invite-token' } }),
     );
+  });
+
+  it('sends localized bill-group descriptions on create and update', async () => {
+    testMocks.mockClient.post.mockResolvedValueOnce({
+      data: { success: true, data: { id: 12 } },
+    });
+    testMocks.mockClient.put.mockResolvedValueOnce({
+      data: { success: true },
+    });
+
+    const { api } = createApi();
+    await api.createDatabase('household', 'Household', 'Shared household bills');
+    await api.updateDatabase(12, 'Home', 'Recurring home expenses');
+
+    expect(testMocks.mockClient.post).toHaveBeenCalledWith('/databases', {
+      name: 'household',
+      display_name: 'Household',
+      description: 'Shared household bills',
+    });
+    expect(testMocks.mockClient.put).toHaveBeenCalledWith('/databases/12', {
+      display_name: 'Home',
+      description: 'Recurring home expenses',
+    });
   });
 
   it('executes queued mutations against their persisted scope after the active profile changes', async () => {
