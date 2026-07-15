@@ -6,56 +6,49 @@ test.describe('Admin Features', () => {
     await login(page);
   });
 
-  test('open admin panel modal', async ({ page }) => {
+  test('open admin settings page', async ({ page }) => {
     const adminButton = page.locator('button:has-text("Admin")');
     await expect(adminButton).toBeVisible({ timeout: 10000 });
     await adminButton.click();
 
-    await expect(page.locator('[role="dialog"]').first()).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/settings\?tab=users/);
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10000 });
   });
 
-  test('view users tab in admin panel', async ({ page }) => {
+  test('view users tab in settings page', async ({ page }) => {
     await page.locator('button:has-text("Admin")').click();
-    await expect(page.locator('[role="dialog"]').first()).toBeVisible({ timeout: 5000 });
+    await expect(page).toHaveURL(/\/settings\?tab=users/);
 
-    // Look for users content in the modal
-    const modal = page.locator('[role="dialog"]');
-    // Users tab may be default or we look for user-related content
-    const usersTab = modal.locator('[role="tab"]:has-text("Users")');
-    if (await usersTab.count() > 0) {
-      await usersTab.click();
-    }
+    const usersTab = page.locator('[role="tab"]:has-text("Users")');
+    await expect(usersTab).toHaveAttribute('aria-selected', 'true');
     // Should see admin user listed
-    await expect(modal.getByText('admin').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('admin').first()).toBeVisible({ timeout: 5000 });
   });
 
-  test('view bill groups tab in admin panel', async ({ page }) => {
+  test('view bill groups tab in settings page', async ({ page }) => {
     await page.locator('button:has-text("Admin")').click();
-    await expect(page.locator('[role="dialog"]').first()).toBeVisible({ timeout: 5000 });
+    await expect(page).toHaveURL(/\/settings\?tab=users/);
 
-    // Click Bill Groups tab (may be labeled "Databases" or "Bill Groups")
-    const modal = page.locator('[role="dialog"]');
-    const billGroupsTab = modal.locator('[role="tab"]').filter({ hasText: /bill group|database/i });
+    const billGroupsTab = page.locator('[role="tab"]').filter({ hasText: /bill group|database/i });
 
     if (await billGroupsTab.count() > 0) {
       await billGroupsTab.first().click();
       await page.waitForTimeout(500);
 
       // Should see bill groups content
-      const hasContent = await modal.locator('table').count() > 0 ||
-        await modal.getByText(/test_bills|Test Bills|Personal/i).count() > 0;
+      const hasContent = await page.locator('table').count() > 0 ||
+        await page.getByText(/test_bills|Test Bills|Personal/i).count() > 0;
       expect(hasContent).toBeTruthy();
     } else {
       test.skip();
     }
   });
 
-  test('close admin panel modal', async ({ page }) => {
+  test('admin settings page participates in browser navigation', async ({ page }) => {
     await page.locator('button:has-text("Admin")').click();
-    await expect(page.locator('[role="dialog"]').first()).toBeVisible({ timeout: 5000 });
+    await expect(page).toHaveURL(/\/settings\?tab=users/);
 
-    // Close with Escape
-    await page.keyboard.press('Escape');
-    await expect(page.locator('[role="dialog"]')).not.toBeVisible({ timeout: 3000 });
+    await page.goBack();
+    await expect(page).toHaveURL(/\/$/);
   });
 });

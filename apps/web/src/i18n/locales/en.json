@@ -351,6 +351,7 @@
     "toggleColorScheme": "Toggle color scheme",
     "billing": "Billing",
     "admin": "Admin",
+    "settings": "Settings",
     "logout": "Logout",
     "scrollToTop": "Scroll to top"
   },
@@ -1026,8 +1027,11 @@
     "acceptInvitationButton": "Accept Invitation"
   },
   "settingsPage": {
-    "title": "Security Settings",
-    "languageLabel": "Language"
+    "title": "Settings",
+    "languageLabel": "Language",
+    "tabs": {
+      "settings": "Settings"
+    }
   },
   "dashboardPage": {
     "noBillGroupTitle": "No Bill Group Selected",

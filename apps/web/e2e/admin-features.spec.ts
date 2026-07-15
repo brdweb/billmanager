@@ -41,7 +41,7 @@ test.describe.serial('Admin Features v3.4.3', () => {
     expect(billsVisible).toBe(true);
   });
 
-  test('should display edit button for bill groups in admin panel', async ({ page }) => {
+  test('should display edit button for bill groups in admin settings', async ({ page }) => {
     // Login with established password
     await page.goto('/login');
     await page.getByLabel('Username').fill('admin');
@@ -53,7 +53,7 @@ test.describe.serial('Admin Features v3.4.3', () => {
     // Find and click Admin button in top right
     await page.screenshot({ path: 'e2e/screenshots/02-before-admin.png', fullPage: true });
 
-    // The admin panel is accessed via the "Admin" button in the header
+    // The admin settings page is accessed via the "Admin" button in the header
     await page.getByRole('button', { name: 'Admin' }).click();
     await page.waitForTimeout(1000);
 
@@ -79,7 +79,7 @@ test.describe.serial('Admin Features v3.4.3', () => {
     await page.waitForURL('/', { timeout: 10000 });
     await page.waitForTimeout(1000);
 
-    // Navigate to admin panel
+    // Navigate to admin settings
     await page.getByRole('button', { name: 'Admin' }).click();
     await page.waitForTimeout(1000);
 
@@ -127,7 +127,7 @@ test.describe.serial('Admin Features v3.4.3', () => {
     await page.waitForURL('/', { timeout: 10000 });
     await page.waitForTimeout(1000);
 
-    // Navigate to admin panel
+    // Navigate to admin settings
     await page.getByRole('button', { name: 'Admin' }).click();
     await page.waitForTimeout(1000);
 
