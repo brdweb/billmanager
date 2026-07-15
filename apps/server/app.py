@@ -8670,11 +8670,9 @@ def jwt_database_access(database_id):
             {"success": False, "error": "Cannot grant access to users outside your account"}
         ), 403
 
-    if target_user in database.users:
-        return jsonify({"success": False, "error": "User already has access"}), 400
-
-    database.users.append(target_user)
-    db.session.commit()
+    if target_user not in database.users:
+        database.users.append(target_user)
+        db.session.commit()
     return jsonify({"success": True, "data": {"message": "Access granted"}})
 
 
@@ -8692,11 +8690,9 @@ def jwt_remove_database_access(database_id, target_user_id):
 
     target_user = db.get_or_404(User, target_user_id)
 
-    if target_user not in database.users:
-        return jsonify({"success": False, "error": "User does not have access"}), 400
-
-    database.users.remove(target_user)
-    db.session.commit()
+    if target_user in database.users:
+        database.users.remove(target_user)
+        db.session.commit()
     return jsonify({"success": True, "data": {"message": "Access revoked"}})
 
 
