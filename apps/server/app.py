@@ -888,7 +888,9 @@ def calculate_next_due_date(
     else:
         current_date = current_due
 
-    if frequency == "weekly":
+    if frequency == "once":
+        return current_date
+    elif frequency == "weekly":
         return current_date + timedelta(days=7)
     elif frequency in ("bi-weekly", "biweekly"):
         return current_date + timedelta(days=14)
@@ -1953,7 +1955,9 @@ def pay_bill(bill_id):
             notes=data.get("notes"),
         )
         db.session.add(payment)
-        if data.get("advance_due", True):
+        if bill.frequency == "once":
+            bill.archived = True
+        elif data.get("advance_due", True):
             # Update existing bill instead of creating new
             freq_config = (
                 json.loads(bill.frequency_config) if bill.frequency_config else {}
@@ -2762,13 +2766,16 @@ def process_auto_payments():
     for bill in auto_bills:
         payment = Payment(bill_id=bill.id, amount=bill.amount or 0, payment_date=today)
         db.session.add(payment)
-        next_due = calculate_next_due_date(
-            bill.due_date,
-            bill.frequency,
-            bill.frequency_type,
-            json.loads(bill.frequency_config),
-        )
-        bill.due_date = next_due.isoformat()
+        if bill.frequency == "once":
+            bill.archived = True
+        else:
+            next_due = calculate_next_due_date(
+                bill.due_date,
+                bill.frequency,
+                bill.frequency_type,
+                json.loads(bill.frequency_config),
+            )
+            bill.due_date = next_due.isoformat()
     db.session.commit()
     return jsonify({"message": "Processed", "processed_count": len(auto_bills)})
 
@@ -4318,7 +4325,9 @@ def jwt_pay_bill(bill_id):
     )
     db.session.add(payment)
 
-    if data.get("advance_due", True):
+    if bill.frequency == "once":
+        bill.archived = True
+    elif data.get("advance_due", True):
         freq_config = json.loads(bill.frequency_config) if bill.frequency_config else {}
         next_due = calculate_next_due_date(
             bill.due_date, bill.frequency, bill.frequency_type, freq_config
@@ -6259,13 +6268,16 @@ def jwt_process_auto_payments():
     for bill in auto_bills:
         payment = Payment(bill_id=bill.id, amount=bill.amount or 0, payment_date=today)
         db.session.add(payment)
-        next_due = calculate_next_due_date(
-            bill.due_date,
-            bill.frequency,
-            bill.frequency_type,
-            json.loads(bill.frequency_config),
-        )
-        bill.due_date = next_due.isoformat()
+        if bill.frequency == "once":
+            bill.archived = True
+        else:
+            next_due = calculate_next_due_date(
+                bill.due_date,
+                bill.frequency,
+                bill.frequency_type,
+                json.loads(bill.frequency_config),
+            )
+            bill.due_date = next_due.isoformat()
         processed.append(
             {"bill_id": bill.id, "name": bill.name, "amount": bill.amount or 0}
         )

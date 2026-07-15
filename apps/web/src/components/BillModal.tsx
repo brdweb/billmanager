@@ -71,6 +71,7 @@ interface BillModalProps {
 
 function getFrequencyOptions(t: TFunction) {
   return [
+    { value: 'once', label: t('common.frequency.once') },
     { value: 'weekly', label: t('common.frequency.weekly') },
     { value: 'bi-weekly', label: t('common.frequency.biweekly') },
     { value: 'monthly', label: t('common.frequency.monthly') },

@@ -740,3 +740,51 @@ class TestBillShareCreation:
         assert response.status_code == 400
         data = json.loads(response.data)
         assert 'identifier' in data['error']
+
+
+class TestOneTimeBills:
+    """Regression coverage for frequency='once' bills.
+
+    The mobile app has offered a "One-time" frequency option since it was
+    built, but the backend never accepted 'once' as a valid frequency and
+    had no logic to stop it from being treated as recurring - creating one
+    failed outright, and had it been accepted, paying it would have rolled
+    the due date forward instead of retiring the bill.
+    """
+
+    def test_create_once_bill_is_accepted(self, client, auth_headers_with_db):
+        response = client.post('/api/v2/bills',
+                               headers=auth_headers_with_db,
+                               json={
+                                   'name': 'One-off purchase',
+                                   'amount': 42.00,
+                                   'frequency': 'once',
+                                   'next_due': '2025-01-15',
+                               })
+        assert response.status_code == 201
+
+    def test_paying_once_bill_archives_instead_of_rescheduling(self, client, auth_headers_with_db, app, db_session, test_database):
+        with app.app_context():
+            bill = Bill(
+                database_id=test_database.id,
+                name='One-off purchase',
+                amount=42.00,
+                frequency='once',
+                due_date='2025-01-15',
+                type='expense',
+            )
+            db_session.add(bill)
+            db_session.commit()
+            db_session.refresh(bill)
+            bill_id = bill.id
+
+        response = client.post(f'/api/v2/bills/{bill_id}/pay',
+                               headers=auth_headers_with_db,
+                               json={'amount': 42.00, 'payment_date': '2025-01-15'})
+        assert response.status_code in [200, 201]
+
+        with app.app_context():
+            db_session.expire_all()
+            updated = db_session.get(Bill, bill_id)
+            assert updated.archived is True
+            assert updated.due_date == '2025-01-15'

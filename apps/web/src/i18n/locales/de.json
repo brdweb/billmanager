@@ -30,6 +30,7 @@
       "expense": "Ausgabe"
     },
     "frequency": {
+      "once": "Einmalig",
       "weekly": "Wöchentlich",
       "biweekly": "Zweiwöchentlich",
       "quarterly": "Vierteljährlich",

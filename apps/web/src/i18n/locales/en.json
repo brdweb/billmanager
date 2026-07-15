@@ -30,6 +30,7 @@
       "expense": "Expense"
     },
     "frequency": {
+      "once": "One-time",
       "weekly": "Weekly",
       "biweekly": "Bi-weekly",
       "quarterly": "Quarterly",
