@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Bill Management', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
-    // Navigate to Bills page via sidebar link (page.goto('/bills') hits Vite proxy)
+    // Verify that direct SPA navigation works without legacy API proxies.
     await navigateToBills(page);
   });
 

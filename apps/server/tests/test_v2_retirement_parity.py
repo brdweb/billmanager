@@ -109,3 +109,37 @@ def test_v2_ping_preserves_the_legacy_health_check_capability(client):
 
     assert response.status_code == 200
     assert response.get_json() == {"success": True, "data": {"status": "ok"}}
+
+
+def test_legacy_api_blueprint_is_not_registered(app):
+    endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
+
+    assert not any(endpoint.startswith("api.") for endpoint in endpoints)
+
+
+def test_legacy_session_login_is_not_available(client):
+    response = client.post(
+        "/login", json={"username": "testadmin", "password": "testpassword123"}
+    )
+
+    assert response.status_code == 405
+
+
+def test_v2_billing_requires_jwt(client):
+    response = client.get("/api/v2/billing/usage")
+
+    assert response.status_code == 401
+    assert response.get_json() == {
+        "success": False,
+        "error": "Missing or invalid Authorization header",
+    }
+
+
+def test_removed_api_version_route_returns_json_404(client):
+    response = client.get("/api/version")
+
+    assert response.status_code == 404
+    assert response.get_json() == {
+        "success": False,
+        "error": "API endpoint not found",
+    }

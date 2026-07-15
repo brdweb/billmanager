@@ -189,8 +189,8 @@ test.describe('Two-Factor Authentication - Login Flow', () => {
   });
 
   test('TwoFactorVerify page renders with correct structure', async ({ page }) => {
-    // Navigate to login via SPA (direct /login is proxied to Flask by Vite)
-    await page.goto('/');
+    // Navigate directly to the login page through the SPA fallback.
+    await page.goto('/login');
     await page.locator('button[type="submit"]:has-text("Sign In")').waitFor({ timeout: 10000 });
 
     // Normal login should not show 2FA UI
@@ -221,8 +221,8 @@ test.describe('Two-Factor Authentication - Login Flow', () => {
   });
 
   test('cancel 2FA returns to login form', async ({ page }) => {
-    // Navigate to login via SPA (direct /login is proxied to Flask by Vite)
-    await page.goto('/');
+    // Navigate directly to the login page through the SPA fallback.
+    await page.goto('/login');
     await page.locator('button[type="submit"]:has-text("Sign In")').waitFor({ timeout: 10000 });
 
     await page.fill('input[placeholder*="username" i]', 'admin');

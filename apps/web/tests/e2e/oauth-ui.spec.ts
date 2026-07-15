@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { login, suppressModals } from './helpers';
 
-// Navigate to login page via SPA routing (direct /login is proxied to Flask by Vite)
+// Navigate directly to the login page through the SPA fallback.
 async function navigateToLogin(page: import('@playwright/test').Page) {
-  await page.goto('/');
+  await page.goto('/login');
   await page.locator('button[type="submit"]:has-text("Sign In")').waitFor({ timeout: 10000 });
 }
 

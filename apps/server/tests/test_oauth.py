@@ -43,7 +43,7 @@ def app():
     os.environ["RATE_LIMIT_ENABLED"] = "false"
 
     application = app_module.create_app()
-    application.config.update({"TESTING": True, "WTF_CSRF_ENABLED": False})
+    application.config.update({"TESTING": True})
 
     with application.app_context():
         db_obj.create_all()
