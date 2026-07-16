@@ -99,7 +99,9 @@ export function SettingsHomeScreenView({ platform }: SettingsHomeScreenViewProps
   const appLock = useAppLock();
   const formatting = getFormattingConfig();
   const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
-  const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+  const appVersion = typeof Constants.expoConfig?.extra?.releaseVersion === 'string'
+    ? Constants.expoConfig.extra.releaseVersion
+    : Constants.expoConfig?.version ?? '1.0.0';
   const appearanceLabel = t('mobileSettings.appearance.' + themeMode);
   const deploymentLabel = activeProfile.deploymentMode === 'saas'
     ? t('mobileSettings.home.cloud')

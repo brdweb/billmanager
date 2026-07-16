@@ -10,15 +10,16 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.3.2
+## 🎉 What's New in v4.3.3
 
-**Security and Data Integrity Coverage** - Expanded regression coverage protects tenant boundaries and offline synchronization from cross-group writes and stale updates.
+**BillManager Mobile Alpha-1** - The native-adaptive mobile rewrite is now marked `1.0.0-alpha.1` for internal iOS and Android testing, alongside web and API fixes for one-time bills and shared-bill invitations.
 
 ### Highlights
 
-- **Tenant Mutation Protection** - Unauthorized bill moves, budget writes, and payment changes across bill groups are now covered by regression tests
-- **Safe Offline Sync** - Cross-group sync attempts are rejected and stale client updates cannot overwrite newer server data
-- **Reliable V2 Administration** - Bill-group access management now consistently lists affected users and preserves account-level access controls
+- **Mobile Alpha-1** - Internal builds now show the Alpha-1 milestone while retaining the store-compatible native version `1.0.0`; this is not a public App Store or Google Play release
+- **Native-Adaptive Foundation** - The mobile client includes platform-specific iOS and Android navigation, encrypted offline data, local actionable reminders, biometric app lock, passkeys, and widgets for internal validation
+- **Correct One-Time Bills** - One-time bills stop producing future calendar, reminder, analytics, and optimistic-payment occurrences after completion
+- **Accurate Share Invitations** - Shared-bill invite details now use canonical owner and recipient fields while remaining compatible with older servers
 
 ---
 
@@ -31,7 +32,7 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 - **Enhanced Frequencies**: Weekly, bi-weekly, monthly (including 1st & 15th), quarterly, yearly, and custom schedules
 - **Auto-Payments**: Automatic payment processing for recurring transactions
 - **Modern UI**: Responsive design with dark/light mode, 70+ custom icons, and visual calendar
-- **Mobile Rewrite (in development)**: Native-adaptive iOS and Android clients with offline support and local actionable reminders; public replacement release gates are still open
+- **Mobile Alpha-1 (internal testing)**: Native-adaptive iOS and Android clients with offline support and local actionable reminders; public replacement release gates are still open
 - **Email Invitations**: Invite users via email with configurable roles and access control
 - **Bill Groups**: Organize finances into separate groups (personal, business, family, etc.)
 - **Bill Sharing**: Share bills with other users and split costs by percentage, fixed amount, or equally

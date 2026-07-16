@@ -44,6 +44,23 @@ const development = loadConfig(true);
 assertPolicy(production, false, 'Preview/release');
 assertPolicy(development, true, 'Development');
 
+const mobilePackage = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const releaseVersion = mobilePackage.version;
+const nativeVersion = releaseVersion.split('-', 1)[0] || releaseVersion;
+const prerelease = releaseVersion.split('-', 2)[1];
+const expectedReleaseLabel = prerelease?.replace(/^alpha[.-]?(\d+)$/i, 'Alpha-$1');
+for (const [label, config] of Object.entries({ production, development })) {
+  if (config.version !== nativeVersion) {
+    throw new Error(`${label} native version is ${String(config.version)}; expected ${nativeVersion}.`);
+  }
+  if (config.extra?.releaseVersion !== releaseVersion) {
+    throw new Error(`${label} release version is not synchronized with package.json.`);
+  }
+  if (config.extra?.releaseLabel !== expectedReleaseLabel) {
+    throw new Error(`${label} release label is not derived from the package pre-release.`);
+  }
+}
+
 const eas = JSON.parse(readFileSync(new URL('../eas.json', import.meta.url), 'utf8'));
 for (const profile of ['development', 'development:device']) {
   if (eas.build?.[profile]?.env?.BILLMANAGER_DEVELOPMENT_BUILD !== 'true') {

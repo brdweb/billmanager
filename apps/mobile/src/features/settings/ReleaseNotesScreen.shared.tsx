@@ -28,7 +28,9 @@ export function ReleaseNotesScreenView({
   const theme = useAdaptiveTheme(platform);
   const { activeProfile } = useServerProfiles();
   const version = buildMobileVersionInfo({
-    appVersion: Constants.expoConfig?.version,
+    appVersion: typeof Constants.expoConfig?.extra?.releaseVersion === 'string'
+      ? Constants.expoConfig.extra.releaseVersion
+      : Constants.expoConfig?.version,
     nativeBuild: Constants.nativeBuildVersion,
     runtimeVersion: Updates.runtimeVersion,
     channel: Updates.channel,

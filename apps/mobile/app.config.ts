@@ -1,7 +1,20 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 
-// package.json is the single source for the public app version.
+// package.json is the single source for the semantic mobile release version.
+// Native store versions must stay numeric, so pre-release metadata is exposed
+// separately to JavaScript while the generated native version uses its core.
 const packageJson = require('./package.json') as { version: string };
+const MOBILE_RELEASE_VERSION = packageJson.version;
+const NATIVE_APP_VERSION = MOBILE_RELEASE_VERSION.split('-', 1)[0] || MOBILE_RELEASE_VERSION;
+
+function releaseLabel(version: string): string | undefined {
+  const prerelease = version.split('-', 2)[1];
+  if (!prerelease) return undefined;
+  const alpha = prerelease.match(/^alpha[.-]?(\d+)$/i);
+  return alpha ? `Alpha-${alpha[1]}` : prerelease;
+}
+
+const MOBILE_RELEASE_LABEL = releaseLabel(MOBILE_RELEASE_VERSION);
 
 const EAS_PROJECT_ID = '061766ea-b874-4027-bcbb-a24b395cb8b6';
 const IOS_BUNDLE_ID = 'com.brdweb.billmanager';
@@ -25,7 +38,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     name: 'BillManager',
     slug: 'billmanager-mobile',
     owner: 'brdweb',
-    version: packageJson.version,
+    version: NATIVE_APP_VERSION,
     orientation: 'default',
     icon: './assets/icon.png',
     scheme: 'billmanager',
@@ -156,6 +169,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     extra: {
       ...config.extra,
       allowCleartextDevelopmentServers: developmentBuild,
+      releaseVersion: MOBILE_RELEASE_VERSION,
+      releaseLabel: MOBILE_RELEASE_LABEL,
       eas: {
         projectId: EAS_PROJECT_ID,
       },

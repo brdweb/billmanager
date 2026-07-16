@@ -153,8 +153,8 @@ export const mobileSettingsResources = {
       contract: 'Mobile contract',
       development: 'Development',
       unavailable: 'Unavailable',
-      latestTitle: 'BillManager Mobile 1.0.0',
-      latestStatus: 'Native-adaptive replacement',
+      latestTitle: 'BillManager Mobile Alpha-1',
+      latestStatus: 'Internal native-adaptive testing milestone',
       sections: {
         experience: 'Experience',
         offline: 'Offline & reminders',
@@ -331,8 +331,8 @@ export const mobileSettingsResources = {
       contract: 'Mobile-Vertrag',
       development: 'Entwicklung',
       unavailable: 'Nicht verfügbar',
-      latestTitle: 'BillManager Mobile 1.0.0',
-      latestStatus: 'Native-adaptiver Ersatz',
+      latestTitle: 'BillManager Mobile Alpha-1',
+      latestStatus: 'Interner Meilenstein für native-adaptive Tests',
       sections: {
         experience: 'Bedienung',
         offline: 'Offline & Erinnerungen',

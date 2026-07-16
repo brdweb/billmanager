@@ -2,6 +2,32 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.3.3',
+    date: '2026-07-15',
+    title: 'BillManager Mobile Alpha-1',
+    sections: [
+      {
+        heading: 'Neue Funktionen',
+        items: [
+          'BillManager Mobile ist jetzt als 1.0.0-alpha.1 (Alpha-1) für interne iOS- und Android-Tests markiert – mit nativer Navigation, verschlüsselten Offline-Daten, lokalen Erinnerungen, Biometrie, Passkeys und Widgets',
+        ],
+      },
+      {
+        heading: 'Verbesserungen',
+        items: [
+          'Mobile Einstellungen und Versionsdetails zeigen den Alpha-1-Meilenstein an, während generierte native Builds die store-kompatible Version 1.0.0 beibehalten',
+        ],
+      },
+      {
+        heading: 'Fehlerbehebungen',
+        items: [
+          'Einmalige Rechnungen enden jetzt nach ihrem geplanten Auftreten in mobilen Erinnerungen, Kalender, Analysen und der optimistischen Zahlungsbehandlung',
+          'Einladungen zu geteilten Rechnungen zeigen jetzt die kanonischen Angaben zu Eigentümer und Empfänger an und bleiben zu älteren Servern kompatibel',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.3.2',
     date: '2026-07-15',
     title: 'Sicherheits- und Datenintegritätsabdeckung',
