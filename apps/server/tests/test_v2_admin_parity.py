@@ -243,7 +243,11 @@ class TestV2UserDeletion:
         # than left dangling
         assert RefreshToken.query.filter_by(user_id=admin_user.id).count() == 0
         assert UserInvite.query.filter_by(invited_by_id=admin_user.id).count() == 0
-        assert db.session.get(BillShare, share.id) is None
+        # share.id was bulk-deleted (synchronize_session=False), so the
+        # already-loaded `share` instance is a stale identity-map entry;
+        # db.session.get() would try to refresh it and raise
+        # ObjectDeletedError instead of returning None. Query fresh instead.
+        assert BillShare.query.filter_by(id=share.id).first() is None
         assert ShareAuditLog.query.filter_by(actor_user_id=admin_user.id).count() == 0
 
 
