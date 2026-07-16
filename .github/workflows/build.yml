@@ -49,10 +49,19 @@ jobs:
           cd apps/server
           pip install -r requirements.txt
 
-      - name: Run pytest
+      - name: Run pytest (self-hosted)
+        env:
+          DEPLOYMENT_MODE: self-hosted
         run: |
           cd apps/server
           pytest -v --cov=. --cov-report=xml --cov-report=term-missing
+
+      - name: Run pytest (SaaS)
+        env:
+          DEPLOYMENT_MODE: saas
+        run: |
+          cd apps/server
+          pytest -v --cov=. --cov-append --cov-report=xml --cov-report=term-missing
 
       - name: Run bandit security scan
         run: |

@@ -10,6 +10,7 @@ import json
 import datetime
 import pytest
 
+import config
 from models import Bill, BillShare, Database, ShareAuditLog, db
 
 
@@ -78,7 +79,9 @@ class TestBillsCRUD:
         never the accepted-share fallback that /payments and /pay already had.
         """
         recipient_db = Database(
-            name='recipientdb2', display_name='Recipient DB', owner_id=regular_user.id
+            name='recipientdb2',
+            display_name='Recipient DB',
+            owner_id=regular_user.id if config.is_saas() else None,
         )
         db_session.add(recipient_db)
         db_session.commit()
@@ -537,7 +540,7 @@ class TestBillSettlements:
             name='recipientdb',
             display_name='Recipient Database',
             description='Database for settlement recipient tests',
-            owner_id=regular_user.id
+            owner_id=regular_user.id if config.is_saas() else None,
         )
         db_session.add(database)
         db_session.commit()
@@ -642,7 +645,7 @@ class TestCashFlowForecast:
             name='recipientdb',
             display_name='Recipient Database',
             description='Database for forecast recipient tests',
-            owner_id=regular_user.id
+            owner_id=regular_user.id if config.is_saas() else None,
         )
         db_session.add(database)
         db_session.commit()
@@ -956,9 +959,16 @@ class TestGetBillSharesSelfHosted:
     "not shared with anyone", regardless of actual share state.
     """
 
+    pytestmark = pytest.mark.skipif(
+        config.is_saas(), reason='requires a self-hosted-mode application process'
+    )
+
     def test_owner_can_list_shares_in_self_hosted_mode(
-        self, client, auth_headers_with_db, db_session, test_bill, admin_user, regular_user
+        self, client, auth_headers_with_db, db_session, test_bill, test_database,
+        admin_user, regular_user
     ):
+        assert test_database.owner_id is None
+
         share = BillShare(
             bill_id=test_bill.id,
             owner_user_id=admin_user.id,

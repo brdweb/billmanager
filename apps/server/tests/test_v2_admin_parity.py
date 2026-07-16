@@ -6,15 +6,25 @@ grant/revoke, SaaS cross-account isolation, and user role-change guards.
 import datetime
 import json
 
+import pytest
 import config
+from sqlalchemy import event
 from app import create_access_token
 from models import (
     BillShare,
+    ClientMutation,
     Database,
+    OAuthAccount,
     RefreshToken,
     ShareAuditLog,
+    Subscription,
+    TelemetrySettings,
+    TwoFAChallenge,
+    TwoFAConfig,
     User,
+    UserDevice,
     UserInvite,
+    WebAuthnCredential,
     db,
 )
 
@@ -22,6 +32,14 @@ from models import (
 def _headers_for(user):
     token = create_access_token(user.id, user.role)
     return {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+
+
+SAAS_ONLY = pytest.mark.skipif(
+    not config.is_saas(), reason='requires a SaaS-mode application process'
+)
+SELF_HOSTED_ONLY = pytest.mark.skipif(
+    config.is_saas(), reason='requires a self-hosted-mode application process'
+)
 
 
 class TestV2DatabaseDescription:
@@ -90,11 +108,11 @@ class TestV2AccessGrantRevokeIdempotency:
 
 
 class TestV2SaaSCrossAccountGrantDenial:
-    def test_cannot_grant_access_to_user_outside_account(
-        self, client, db_session, admin_user, monkeypatch
-    ):
-        monkeypatch.setattr(config, 'DEPLOYMENT_MODE', 'saas')
+    pytestmark = SAAS_ONLY
 
+    def test_cannot_grant_access_to_user_outside_account(
+        self, client, db_session, admin_user
+    ):
         database = Database(name='ownerdb', display_name='Owner DB', owner_id=admin_user.id)
         db_session.add(database)
         db_session.commit()
@@ -122,9 +140,7 @@ class TestV2SaaSCrossAccountGrantDenial:
         assert response.status_code == 403
         assert json.loads(response.data)['success'] is False
 
-    def test_can_grant_access_to_own_created_user(self, client, db_session, admin_user, regular_user, monkeypatch):
-        monkeypatch.setattr(config, 'DEPLOYMENT_MODE', 'saas')
-
+    def test_can_grant_access_to_own_created_user(self, client, db_session, admin_user, regular_user):
         database = Database(name='ownerdb2', display_name='Owner DB 2', owner_id=admin_user.id)
         db_session.add(database)
         db_session.commit()
@@ -155,9 +171,8 @@ class TestV2UserRoleChangeGuards:
         )
         assert response.status_code == 400
 
-    def test_cannot_demote_account_owner_in_saas_mode(self, client, db_session, admin_user, monkeypatch):
-        monkeypatch.setattr(config, 'DEPLOYMENT_MODE', 'saas')
-
+    @SAAS_ONLY
+    def test_subadmin_cannot_update_account_owner(self, client, db_session, admin_user):
         sub_admin = User(
             username='subadmin',
             role='admin',
@@ -173,8 +188,8 @@ class TestV2UserRoleChangeGuards:
             json={'role': 'user'},
             headers=_headers_for(sub_admin),
         )
-        assert response.status_code == 400
-        assert 'account owner' in json.loads(response.data)['error'].lower()
+        assert response.status_code == 403
+        assert 'access denied' in json.loads(response.data)['error'].lower()
 
 
 class TestV2UserDeletion:
@@ -187,8 +202,16 @@ class TestV2UserDeletion:
     did, scoped to just the one user being removed.
     """
 
+    pytestmark = SELF_HOSTED_ONLY
+
     def test_deleting_user_with_related_history_does_not_500(
-        self, client, db_session, admin_user, regular_user, test_bill
+        self,
+        client,
+        db_session,
+        admin_user,
+        regular_user,
+        test_bill,
+        test_database,
     ):
         second_admin = User(
             username='seconddeleter',
@@ -197,6 +220,12 @@ class TestV2UserDeletion:
         )
         second_admin.set_password('pw12345678')
         db_session.add(second_admin)
+        db_session.commit()
+
+        # Exercise legacy/backfilled tenancy references even though new
+        # self-hosted users and databases normally leave them unset.
+        regular_user.created_by_id = admin_user.id
+        test_database.owner_id = admin_user.id
         db_session.commit()
 
         # admin_user created regular_user (via the fixture) -> created_by_id
@@ -211,6 +240,52 @@ class TestV2UserDeletion:
             invited_by_id=admin_user.id,
             expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7),
         ))
+        db_session.add_all([
+            UserDevice(
+                user_id=admin_user.id,
+                device_id='delete-device',
+                platform='ios',
+            ),
+            Subscription(
+                user_id=admin_user.id,
+                status='canceled',
+            ),
+            OAuthAccount(
+                user_id=admin_user.id,
+                provider='oidc',
+                provider_user_id='delete-provider-user',
+            ),
+            TwoFAConfig(
+                user_id=admin_user.id,
+                email_otp_enabled=True,
+            ),
+            TwoFAChallenge(
+                user_id=admin_user.id,
+                token_hash='c' * 64,
+                challenge_type='email_otp',
+                expires_at=datetime.datetime.now(datetime.timezone.utc)
+                + datetime.timedelta(minutes=5),
+            ),
+            WebAuthnCredential(
+                user_id=admin_user.id,
+                credential_id='delete-credential',
+                public_key='delete-public-key',
+            ),
+            ClientMutation(
+                user_id=admin_user.id,
+                database_id=test_database.id,
+                client_mutation_id='00000000-0000-0000-0000-000000000001',
+                operation='delete-user-fixture',
+                request_hash='d' * 64,
+                response_status=200,
+                response_body='{}',
+            ),
+            TelemetrySettings(
+                id=1,
+                state='enabled',
+                decided_by_user_id=admin_user.id,
+            ),
+        ])
         share = BillShare(
             bill_id=test_bill.id,
             owner_user_id=admin_user.id,
@@ -229,9 +304,12 @@ class TestV2UserDeletion:
         db_session.commit()
         admin_user_id = admin_user.id
         regular_user_id = regular_user.id
+        second_admin_id = second_admin.id
+        database_id = test_database.id
+        deleted_user_headers = _headers_for(admin_user)
 
         response = client.delete(
-            f'/api/v2/users/{admin_user_id}', headers=_headers_for(second_admin)
+            f'/api/v2/users/{admin_user_id}', headers=_headers_for(second_admin),
         )
         assert response.status_code == 200
         assert json.loads(response.data)['success'] is True
@@ -248,10 +326,26 @@ class TestV2UserDeletion:
         refreshed_regular_user = db.session.get(User, regular_user_id)
         assert refreshed_regular_user is not None
         assert refreshed_regular_user.created_by_id is None
+        refreshed_database = db.session.get(Database, database_id)
+        assert refreshed_database is not None
+        assert refreshed_database.owner_id is None
+        assert second_admin_id in {u.id for u in refreshed_database.users}
+        assert client.get('/api/v2/me', headers=deleted_user_headers).status_code == 401
+        assert client.get('/api/v2/users', headers=deleted_user_headers).status_code == 401
         # dependent rows owned by the deleted user are cleaned up rather
         # than left dangling
         assert RefreshToken.query.filter_by(user_id=admin_user_id).count() == 0
         assert UserInvite.query.filter_by(invited_by_id=admin_user_id).count() == 0
+        assert UserDevice.query.filter_by(user_id=admin_user_id).count() == 0
+        assert Subscription.query.filter_by(user_id=admin_user_id).count() == 0
+        assert OAuthAccount.query.filter_by(user_id=admin_user_id).count() == 0
+        assert TwoFAConfig.query.filter_by(user_id=admin_user_id).count() == 0
+        assert TwoFAChallenge.query.filter_by(user_id=admin_user_id).count() == 0
+        assert WebAuthnCredential.query.filter_by(user_id=admin_user_id).count() == 0
+        assert ClientMutation.query.filter_by(user_id=admin_user_id).count() == 0
+        telemetry_settings = db.session.get(TelemetrySettings, 1)
+        assert telemetry_settings is not None
+        assert telemetry_settings.decided_by_user_id is None
         assert BillShare.query.filter_by(id=share_id).first() is None
         assert ShareAuditLog.query.filter_by(actor_user_id=admin_user_id).count() == 0
 
@@ -282,11 +376,27 @@ class TestV2DatabaseDeletionWithShareHistory:
         )
         db_session.commit()
 
-        response = client.delete(
-            f'/api/v2/databases/{test_database.id}', headers=admin_auth_headers
-        )
+        statements = []
+
+        def capture_statement(
+            connection, cursor, statement, parameters, context, executemany
+        ):
+            statements.append(statement)
+
+        event.listen(db.engine, 'before_cursor_execute', capture_statement)
+        try:
+            response = client.delete(
+                f'/api/v2/databases/{test_database.id}', headers=admin_auth_headers
+            )
+        finally:
+            event.remove(db.engine, 'before_cursor_execute', capture_statement)
+
         assert response.status_code == 200
         assert json.loads(response.data)['success'] is True
+        assert any(
+            'FROM BILLS' in statement.upper() and 'FOR UPDATE' in statement.upper()
+            for statement in statements
+        )
 
         assert db.session.get(Database, test_database.id) is None
         assert ShareAuditLog.query.filter_by(bill_id=test_bill.id).count() == 0

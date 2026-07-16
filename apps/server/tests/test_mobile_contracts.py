@@ -11,6 +11,7 @@ from pathlib import Path
 
 import yaml
 
+import config
 import app as server_app
 
 from models import (
@@ -310,7 +311,7 @@ def test_bill_move_replays_in_original_database_scope_after_post_state_change(
     destination = Database(
         name="move_destination",
         display_name="Move Destination",
-        owner_id=admin_user.id,
+        owner_id=admin_user.id if config.is_saas() else None,
     )
     db_session.add(destination)
     admin_user.accessible_databases.append(destination)
@@ -402,7 +403,7 @@ def test_deleted_resources_only_replay_in_the_original_database_scope(
     other_database = Database(
         name="wrong_replay_scope",
         display_name="Wrong Replay Scope",
-        owner_id=admin_user.id,
+        owner_id=admin_user.id if config.is_saas() else None,
     )
     payment = Payment(
         bill_id=test_bill.id,
@@ -476,7 +477,7 @@ def test_concurrent_bill_move_retries_replay_after_waiting_for_the_row_lock(
     destination = Database(
         name="concurrent_move_destination",
         display_name="Concurrent Move Destination",
-        owner_id=admin_user.id,
+        owner_id=admin_user.id if config.is_saas() else None,
     )
     db_session.add(destination)
     admin_user.accessible_databases.append(destination)

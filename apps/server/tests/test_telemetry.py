@@ -7,11 +7,21 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 from flask import Flask
+import pytest
 
+import config
 from models import db, TelemetryLog, TelemetrySettings, TelemetrySubmission, User
 from services.scheduler import TaskScheduler
 from services.telemetry import TelemetryCollector
 from services import telemetry_receiver
+
+
+SAAS_ONLY = pytest.mark.skipif(
+    not config.is_saas(), reason='requires a SaaS-mode application process'
+)
+SELF_HOSTED_ONLY = pytest.mark.skipif(
+    config.is_saas(), reason='requires a self-hosted-mode application process'
+)
 
 
 def _response_status(result):
@@ -175,6 +185,7 @@ def test_pending_instance_consent_prevents_network(
     post.assert_not_called()
 
 
+@SELF_HOSTED_ONLY
 def test_collect_metrics_reads_real_database_without_self_host_identifiers(
     app, admin_user, test_database, test_bill, monkeypatch
 ):
@@ -198,6 +209,32 @@ def test_collect_metrics_reads_real_database_without_self_host_identifiers(
     assert metrics["platform"]["database"].startswith("PostgreSQL")
     assert "server_url" not in metrics
     assert "server_ip" not in metrics
+
+
+@SAAS_ONLY
+def test_collect_metrics_includes_saas_deployment_identifiers(
+    app, admin_user, test_database, test_bill, monkeypatch
+):
+    collector = TelemetryCollector()
+    collector.app = app
+    collector.db = db
+    collector.instance_id = str(uuid.uuid4())
+    monkeypatch.setattr(collector, "_restore_instance_id_from_log", Mock())
+    monkeypatch.setattr(
+        collector, "_get_server_url", Mock(return_value="https://app.test")
+    )
+    monkeypatch.setattr(
+        collector, "_get_server_ip", Mock(return_value="203.0.113.10")
+    )
+
+    metrics = collector.collect_metrics()
+
+    assert metrics["deployment_mode"] == "saas"
+    assert metrics["metrics"]["users"]["total"] == 1
+    assert metrics["metrics"]["data"]["databases"] == 1
+    assert metrics["metrics"]["data"]["bills"] == 1
+    assert metrics["server_url"] == "https://app.test"
+    assert metrics["server_ip"] == "203.0.113.10"
 
 
 def test_collect_metrics_counts_users_active_within_thirty_days(
@@ -450,7 +487,7 @@ def test_notice_honors_global_disable(client, admin_auth_headers, monkeypatch):
         "show_notice": False,
         "reason": "globally_disabled",
         "telemetry_enabled": False,
-        "deployment_mode": "self-hosted",
+        "deployment_mode": config.DEPLOYMENT_MODE,
         "consent_state": "pending",
     }
 
@@ -471,7 +508,7 @@ def test_notice_keeps_config_after_owner_choice(
     assert data["opted_out"] is False
     assert data["consent_state"] == "enabled"
     assert data["telemetry_enabled"] is True
-    assert data["deployment_mode"] == "self-hosted"
+    assert data["deployment_mode"] == config.DEPLOYMENT_MODE
 
 
 def test_conservative_instance_migration_prefers_any_owner_opt_out(
