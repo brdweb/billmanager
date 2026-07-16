@@ -262,6 +262,24 @@ def cancel_subscription(subscription_id: str, at_period_end: bool = True) -> dic
             'status': subscription.status,
             'cancel_at_period_end': getattr(subscription, 'cancel_at_period_end', None)
         }
+    except stripe.error.InvalidRequestError as e:
+        # Immediate cancellation removes the subscription object from Stripe.
+        # A retried account-erasure request can therefore see resource_missing
+        # after a prior attempt canceled this subscription but failed on a
+        # later one. Treat absence as the desired idempotent end state.
+        if getattr(e, 'code', None) == 'resource_missing':
+            logger.info(
+                "Stripe subscription %s is already absent during cancellation",
+                subscription_id,
+            )
+            return {
+                'id': subscription_id,
+                'status': 'canceled',
+                'cancel_at_period_end': None,
+                'already_absent': True,
+            }
+        logger.error(f"Stripe cancel error: {e}")
+        return {'error': 'Unable to cancel subscription. Please try again.'}
     except stripe.error.StripeError as e:
         logger.error(f"Stripe cancel error: {e}")
         return {'error': 'Unable to cancel subscription. Please try again.'}
