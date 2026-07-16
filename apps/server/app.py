@@ -2231,27 +2231,94 @@ def jwt_delete_account():
     elif confirm is not True:
         return jsonify({"success": False, "error": "Confirmation required"}), 400
 
-    account_users = User.query.filter(
-        or_(User.id == current_user.id, User.created_by_id == current_user.id)
-    ).all()
-    account_user_ids = [u.id for u in account_users]
+    # Lock the owner first, then discover and lock every generation of managed
+    # users. Locking each parent before querying its children prevents a new
+    # descendant from being inserted between discovery and deletion.
+    current_user = db.session.execute(
+        db.select(User).where(User.id == current_user.id).with_for_update()
+    ).scalar_one()
+    account_users = [current_user]
+    account_user_depths = {current_user.id: 0}
+    frontier_ids = [current_user.id]
 
-    owned_databases = Database.query.filter_by(owner_id=current_user.id).all()
+    while frontier_ids:
+        children = db.session.execute(
+            db.select(User)
+            .where(User.created_by_id.in_(frontier_ids))
+            .order_by(User.id)
+            .with_for_update()
+        ).scalars().all()
+        next_frontier = []
+        for child in children:
+            if child.id in account_user_depths:
+                continue
+            account_user_depths[child.id] = account_user_depths[child.created_by_id] + 1
+            account_users.append(child)
+            next_frontier.append(child.id)
+        frontier_ids = next_frontier
+
+    account_user_ids = list(account_user_depths)
+
+    # Databases belong to the whole managed-user tree, not only the root
+    # account owner. Locking both databases and bills closes the same
+    # concurrent dependent-row race handled by the individual delete routes.
+    owned_databases = db.session.execute(
+        db.select(Database)
+        .where(Database.owner_id.in_(account_user_ids))
+        .order_by(Database.id)
+        .with_for_update()
+    ).scalars().all()
     owned_database_ids = [d.id for d in owned_databases]
 
     bill_ids = []
     if owned_database_ids:
         bill_ids = [
-            row[0]
-            for row in db.session.query(Bill.id)
-            .filter(Bill.database_id.in_(owned_database_ids))
-            .all()
+            bill.id
+            for bill in db.session.execute(
+                db.select(Bill)
+                .where(Bill.database_id.in_(owned_database_ids))
+                .order_by(Bill.id)
+                .with_for_update()
+            ).scalars().all()
         ]
+
+    subscriptions = db.session.execute(
+        db.select(Subscription)
+        .where(Subscription.user_id.in_(account_user_ids))
+        .order_by(Subscription.id)
+        .with_for_update()
+    ).scalars().all()
+
+    # Account erasure is the final opportunity to stop external billing.
+    # Cancel every live Stripe subscription before making local destructive
+    # changes. If Stripe cannot confirm cancellation, preserve the local data
+    # so the request can be retried safely.
+    if is_saas():
+        for subscription in subscriptions:
+            if (
+                not subscription.stripe_subscription_id
+                or subscription.status in {"canceled", "incomplete_expired"}
+            ):
+                continue
+            result = cancel_subscription(
+                subscription.stripe_subscription_id, at_period_end=False
+            )
+            if result.get("error"):
+                db.session.rollback()
+                return jsonify(
+                    {
+                        "success": False,
+                        "error": "Unable to cancel subscription; account was not deleted",
+                    }
+                ), 502
 
     if account_user_ids:
         db.session.execute(
             user_database_access.delete().where(
-                user_database_access.c.user_id.in_(account_user_ids)
+                or_(
+                    user_database_access.c.user_id.in_(account_user_ids),
+                    user_database_access.c.database_id.in_(owned_database_ids),
+                )
             )
         )
 
@@ -2279,6 +2346,15 @@ def jwt_delete_account():
         WebAuthnCredential.query.filter(
             WebAuthnCredential.user_id.in_(account_user_ids)
         ).delete(synchronize_session=False)
+        TelemetrySettings.query.filter(
+            TelemetrySettings.decided_by_user_id.in_(account_user_ids)
+        ).update({"decided_by_user_id": None}, synchronize_session=False)
+        ClientMutation.query.filter(
+            or_(
+                ClientMutation.user_id.in_(account_user_ids),
+                ClientMutation.database_id.in_(owned_database_ids),
+            )
+        ).delete(synchronize_session=False)
 
         BillShare.query.filter(
             or_(
@@ -2302,18 +2378,15 @@ def jwt_delete_account():
             synchronize_session=False
         )
 
-    if owned_database_ids:
-        db.session.execute(
-            user_database_access.delete().where(
-                user_database_access.c.database_id.in_(owned_database_ids)
-            )
-        )
-
     for database in owned_databases:
         db.session.delete(database)
 
+    # created_by_id has no database cascade, so children must be removed before
+    # their parents. Depth also makes the ordering deterministic for retries.
     for user in sorted(
-        account_users, key=lambda u: 1 if u.id == current_user.id else 0
+        account_users,
+        key=lambda user: (account_user_depths[user.id], user.id),
+        reverse=True,
     ):
         db.session.delete(user)
 
