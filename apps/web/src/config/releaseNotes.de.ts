@@ -2,6 +2,34 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.4.0',
+    date: '2026-07-16',
+    title: 'Sicheres Löschen und zuverlässiges Self-Hosting',
+    sections: [
+      {
+        heading: 'Hinweis für Administratoren',
+        items: [
+          'Beim ersten Start nach dem Upgrade ersetzt die PostgreSQL-Migration 20260716_01 drei Fremdschlüssel und kann Schreibzugriffe kurz blockieren, während vorhandene Zeilen geprüft werden; verwenden Sie ein reguläres Wartungsfenster und starten Sie bei mehreren Replikaten zunächst nur eine Anwendungsinstanz',
+          'Es sind weder manuelle SQL-Befehle noch eine Datenkonvertierung erforderlich; die Migration gleicht das Löschen von Rechnungsfreigaben, Kategoriebudgets und registrierten Geräten an das von BillManager vorgesehene Schema an',
+        ],
+      },
+      {
+        heading: 'Sicherheit und Datenintegrität',
+        items: [
+          'Das vollständige Löschen eines Kontos umfasst jetzt verschachtelte verwaltete Nutzer und deren Rechnungsgruppen, beendet aktive Stripe-Abonnements zuerst und bewahrt lokale Daten, wenn Stripe die Kündigung nicht bestätigen kann',
+          'Beim Löschen von Nutzern, Rechnungen und Rechnungsgruppen werden abhängige Authentifizierungs-, Freigabe-, Eigentums- und Prüfdatensätze bereinigt, ohne weiter abrechenbare Abonnements oder Fremdschlüsselfehler zu hinterlassen',
+        ],
+      },
+      {
+        heading: 'Verbesserungen für Self-Hosting',
+        items: [
+          'Archivierte Rechnungen sind wieder erreichbar, der Zugriff auf geteilte Rechnungen funktioniert außerhalb des SaaS-Modus und die Erinnerungsleiste ist vollständig übersetzt',
+          'Die vollständige Backend-Testsuite läuft jetzt unabhängig im Self-Hosted- und SaaS-Modus, um installationsspezifische Regressionen zu erkennen',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.3.3',
     date: '2026-07-15',
     title: 'BillManager Mobile Alpha-1',

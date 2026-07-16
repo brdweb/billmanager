@@ -10,16 +10,16 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.3.3
+## 🎉 What's New in v4.4.0
 
-**BillManager Mobile Alpha-1** - The native-adaptive mobile rewrite is now marked `1.0.0-alpha.1` for internal iOS and Android testing, alongside web and API fixes for one-time bills and shared-bill invitations.
+**Deletion Safety and Self-Hosted Reliability** - Account, user, bill, and bill-group deletion now handles related data safely across SaaS and self-hosted installations, with stronger PostgreSQL integrity contracts and full dual-mode backend coverage.
 
 ### Highlights
 
-- **Mobile Alpha-1** - Internal builds now show the Alpha-1 milestone while retaining the store-compatible native version `1.0.0`; this is not a public App Store or Google Play release
-- **Native-Adaptive Foundation** - The mobile client includes platform-specific iOS and Android navigation, encrypted offline data, local actionable reminders, biometric app lock, passkeys, and widgets for internal validation
-- **Correct One-Time Bills** - One-time bills stop producing future calendar, reminder, analytics, and optimistic-payment occurrences after completion
-- **Accurate Share Invitations** - Shared-bill invite details now use canonical owner and recipient fields while remaining compatible with older servers
+- **Safe Account Erasure** - Full account deletion now includes nested managed users and their bill groups, cancels live Stripe subscriptions first, and preserves local data if Stripe cannot confirm cancellation
+- **Reliable User and Bill Deletion** - Self-hosted and SaaS deletion paths clean up share history, authentication records, ownership, and access without foreign-key server errors or stranded data
+- **PostgreSQL Administrator Notice** - Migration `20260716_01` normalizes three delete cascades; it briefly locks and validates the affected tables, so multi-replica deployments should start one application instance first during a normal maintenance window
+- **Self-Hosted Parity** - Archived bills, bill-share access, reminder translations, and the complete backend suite now behave consistently outside SaaS mode
 
 ---
 
