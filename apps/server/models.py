@@ -307,7 +307,11 @@ class CategoryBudget(db.Model):
     __tablename__ = 'category_budgets'
 
     id = db.Column(db.Integer, primary_key=True)
-    database_id = db.Column(db.Integer, db.ForeignKey('databases.id'), nullable=False)
+    database_id = db.Column(
+        db.Integer,
+        db.ForeignKey('databases.id', ondelete='CASCADE'),
+        nullable=False,
+    )
     category = db.Column(db.String(50), nullable=False)
     monthly_limit = db.Column(db.Float, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -340,7 +344,11 @@ class UserDevice(db.Model):
     """Stores registered devices for push notifications"""
     __tablename__ = 'user_devices'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False,
+    )
 
     # Device identification
     device_id = db.Column(db.String(255), nullable=False)  # Unique device identifier
@@ -572,7 +580,11 @@ class BillShare(db.Model):
     """Tracks bill sharing between different users/accounts"""
     __tablename__ = 'bill_shares'
     id = db.Column(db.Integer, primary_key=True)
-    bill_id = db.Column(db.Integer, db.ForeignKey('bills.id'), nullable=False)
+    bill_id = db.Column(
+        db.Integer,
+        db.ForeignKey('bills.id', ondelete='CASCADE'),
+        nullable=False,
+    )
 
     # Who owns the bill (the user who created the share)
     owner_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
