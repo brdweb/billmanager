@@ -363,7 +363,19 @@
     "closeAriaLabel": "Close reminder alerts",
     "alertCount_one": "{{count}} Reminder Alert",
     "alertCount_other": "{{count}} Reminder Alerts",
-    "clickToReview": "Click to review"
+    "clickToReview": "Click to review",
+    "titleOverdue": "{{name}} is overdue",
+    "titleDueToday": "{{name}} is due today",
+    "titleDepositToday": "{{name}} is expected today",
+    "titleDueInDays_one": "{{name}} due in {{count}} day",
+    "titleDueInDays_other": "{{name}} due in {{count}} days",
+    "titleDepositInDays_one": "{{name}} expected in {{count}} day",
+    "titleDepositInDays_other": "{{name}} expected in {{count}} days",
+    "messageOverdue_one": "Due {{count}} day ago",
+    "messageOverdue_other": "Due {{count}} days ago",
+    "messageRecordPayment": "Record payment when complete",
+    "messageDepositToday": "Expected deposit is due today",
+    "messageUpcomingWindow": "Upcoming reminder window"
   },
   "iconPicker": {
     "title": "Choose an Icon",

@@ -363,7 +363,19 @@
     "closeAriaLabel": "Erinnerungen schließen",
     "alertCount_one": "{{count}} Erinnerung",
     "alertCount_other": "{{count}} Erinnerungen",
-    "clickToReview": "Zum Überprüfen klicken"
+    "clickToReview": "Zum Überprüfen klicken",
+    "titleOverdue": "{{name}} ist überfällig",
+    "titleDueToday": "{{name}} ist heute fällig",
+    "titleDepositToday": "{{name}} wird heute erwartet",
+    "titleDueInDays_one": "{{name}} fällig in {{count}} Tag",
+    "titleDueInDays_other": "{{name}} fällig in {{count}} Tagen",
+    "titleDepositInDays_one": "{{name}} erwartet in {{count}} Tag",
+    "titleDepositInDays_other": "{{name}} erwartet in {{count}} Tagen",
+    "messageOverdue_one": "Vor {{count}} Tag fällig gewesen",
+    "messageOverdue_other": "Vor {{count}} Tagen fällig gewesen",
+    "messageRecordPayment": "Zahlung erfassen, sobald erledigt",
+    "messageDepositToday": "Erwartete Einzahlung ist heute fällig",
+    "messageUpcomingWindow": "Bevorstehendes Erinnerungsfenster"
   },
   "iconPicker": {
     "title": "Symbol auswählen",

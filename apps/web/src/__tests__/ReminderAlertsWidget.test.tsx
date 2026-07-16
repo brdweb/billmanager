@@ -23,11 +23,16 @@ describe('ReminderAlertsWidget', () => {
       {
         type: 'upcoming',
         bill_id: 1,
+        bill_name: 'Utilities bill',
         due_date: '2026-07-15',
+        days_until_due: 3,
         severity: 'warning',
-        title: 'Utilities bill',
+        // title/message are the backend's raw (unlocalized) fallback text -
+        // the widget derives its own localized text from type/bill_name/
+        // days_until_due instead of rendering these directly.
+        title: 'Utilities bill due in 3 day(s)',
         database_name: 'Household',
-        message: 'Due soon',
+        message: 'Upcoming reminder window',
         amount: 125,
       },
     ]);
@@ -40,7 +45,7 @@ describe('ReminderAlertsWidget', () => {
     const trigger = await screen.findByRole('button', { name: 'Open reminder alerts' });
     await user.click(trigger);
 
-    await screen.findByText('Utilities bill');
+    await screen.findByText('Utilities bill due in 3 days');
     expect(screen.queryByRole('button', { name: 'Open reminder alerts' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Close reminder alerts' }));

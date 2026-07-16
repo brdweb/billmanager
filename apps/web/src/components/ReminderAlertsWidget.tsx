@@ -3,6 +3,7 @@ import { Affix, Badge, Button, Drawer, Group, Paper, Stack, Text, ThemeIcon, Uns
 import { useDisclosure } from '@mantine/hooks';
 import { IconAlertTriangle, IconBellRinging } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { Bill, ReminderAlert } from '../api/client';
 import { getReminderAlerts } from '../api/client';
 import { formatCurrency } from '../lib/currency';
@@ -15,6 +16,43 @@ interface ReminderAlertsWidgetProps {
 
 function alertColor(alerts: ReminderAlert[]) {
   return alerts.some((alert) => alert.severity === 'critical') ? 'red' : 'yellow';
+}
+
+// The backend's alert.title/alert.message are plain hardcoded English text
+// (not localized). Rebuild both from the structured fields instead of
+// rendering them directly, same as the create/edit form already does for
+// bill frequency labels.
+function alertTitle(alert: ReminderAlert, t: TFunction): string {
+  switch (alert.type) {
+    case 'overdue':
+      return t('reminderAlertsWidget.titleOverdue', { name: alert.bill_name });
+    case 'due_today':
+      return t('reminderAlertsWidget.titleDueToday', { name: alert.bill_name });
+    case 'deposit_today':
+      return t('reminderAlertsWidget.titleDepositToday', { name: alert.bill_name });
+    case 'upcoming':
+      return t('reminderAlertsWidget.titleDueInDays', { name: alert.bill_name, count: alert.days_until_due });
+    case 'deposit_expected':
+      return t('reminderAlertsWidget.titleDepositInDays', { name: alert.bill_name, count: alert.days_until_due });
+    default:
+      return alert.title;
+  }
+}
+
+function alertMessage(alert: ReminderAlert, t: TFunction): string {
+  switch (alert.type) {
+    case 'overdue':
+      return t('reminderAlertsWidget.messageOverdue', { count: Math.abs(alert.days_until_due) });
+    case 'due_today':
+      return t('reminderAlertsWidget.messageRecordPayment');
+    case 'deposit_today':
+      return t('reminderAlertsWidget.messageDepositToday');
+    case 'upcoming':
+    case 'deposit_expected':
+      return t('reminderAlertsWidget.messageUpcomingWindow');
+    default:
+      return alert.message;
+  }
 }
 
 export function ReminderAlertsWidget({ bills, hasDatabase, onPayBill }: ReminderAlertsWidgetProps) {
@@ -92,7 +130,7 @@ export function ReminderAlertsWidget({ bills, hasDatabase, onPayBill }: Reminder
                 <Group justify="space-between" wrap="nowrap" align="flex-start">
                   <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
                     <Group gap="xs">
-                      <Text fw={600}>{alert.title}</Text>
+                      <Text fw={600}>{alertTitle(alert, t)}</Text>
                       <Badge
                         size="xs"
                         color={alert.severity === 'critical' ? 'red' : alert.severity === 'warning' ? 'yellow' : 'blue'}
@@ -102,7 +140,7 @@ export function ReminderAlertsWidget({ bills, hasDatabase, onPayBill }: Reminder
                       </Badge>
                     </Group>
                     <Text size="sm" c="dimmed">
-                      {alert.message}
+                      {alertMessage(alert, t)}
                       {alert.amount !== null ? ` - ${formatCurrency(alert.amount)}` : ''}
                     </Text>
                   </Stack>
