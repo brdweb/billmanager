@@ -3,11 +3,20 @@ Regression tests for v2 (JWT) admin endpoints that had drifted from their
 v1 (session) counterparts: database description handling, database access
 grant/revoke, SaaS cross-account isolation, and user role-change guards.
 """
+import datetime
 import json
 
 import config
 from app import create_access_token
-from models import Database, User
+from models import (
+    BillShare,
+    Database,
+    RefreshToken,
+    ShareAuditLog,
+    User,
+    UserInvite,
+    db,
+)
 
 
 def _headers_for(user):
@@ -166,3 +175,109 @@ class TestV2UserRoleChangeGuards:
         )
         assert response.status_code == 400
         assert 'account owner' in json.loads(response.data)['error'].lower()
+
+
+class TestV2UserDeletion:
+    """Regression: several foreign keys onto users.id had no ON DELETE
+    clause (created_by_id, refresh_tokens.user_id, user_invites.invited_by_id,
+    bill_shares.owner_user_id, share_audit_log.actor_user_id), so deleting a
+    user who had ever logged in, invited someone, or shared a bill raised a
+    Postgres IntegrityError, surfaced to admins as a generic server error.
+    jwt_delete_user now cleans up the same tables jwt_delete_account already
+    did, scoped to just the one user being removed.
+    """
+
+    def test_deleting_user_with_related_history_does_not_500(
+        self, client, db_session, admin_user, regular_user, test_bill
+    ):
+        second_admin = User(
+            username='seconddeleter',
+            role='admin',
+            email='seconddeleter@test.com',
+        )
+        second_admin.set_password('pw12345678')
+        db_session.add(second_admin)
+        db_session.commit()
+
+        # admin_user created regular_user (via the fixture) -> created_by_id
+        db_session.add(RefreshToken(
+            user_id=admin_user.id,
+            token_hash='a' * 64,
+            expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1),
+        ))
+        db_session.add(UserInvite(
+            email='invitee@test.com',
+            token='b' * 64,
+            invited_by_id=admin_user.id,
+            expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7),
+        ))
+        share = BillShare(
+            bill_id=test_bill.id,
+            owner_user_id=admin_user.id,
+            shared_with_user_id=regular_user.id,
+            shared_with_identifier=regular_user.username,
+            identifier_type='username',
+            status='accepted',
+        )
+        db_session.add(share)
+        db_session.commit()
+        db_session.refresh(share)
+        ShareAuditLog.log_action(
+            action='created', bill_id=test_bill.id, actor_user_id=admin_user.id, share_id=share.id,
+        )
+        db_session.commit()
+
+        response = client.delete(
+            f'/api/v2/users/{admin_user.id}', headers=_headers_for(second_admin)
+        )
+        assert response.status_code == 200
+        assert json.loads(response.data)['success'] is True
+
+        assert db.session.get(User, admin_user.id) is None
+        # created_by_id is orphaned rather than blocking the delete, or
+        # taking regular_user down with it
+        db_session.refresh(regular_user)
+        assert regular_user.created_by_id is None
+        assert db.session.get(User, regular_user.id) is not None
+        # dependent rows owned by the deleted user are cleaned up rather
+        # than left dangling
+        assert RefreshToken.query.filter_by(user_id=admin_user.id).count() == 0
+        assert UserInvite.query.filter_by(invited_by_id=admin_user.id).count() == 0
+        assert db.session.get(BillShare, share.id) is None
+        assert ShareAuditLog.query.filter_by(actor_user_id=admin_user.id).count() == 0
+
+
+class TestV2DatabaseDeletionWithShareHistory:
+    """Regression: deleting a bill group cascade-deletes its bills via the
+    Database.bills relationship, but share_audit_log.bill_id has no ON
+    DELETE clause, so a group containing any bill that was ever shared
+    would fail the whole delete with a foreign key violation.
+    """
+
+    def test_deleting_database_with_shared_bill_does_not_500(
+        self, client, admin_auth_headers, db_session, admin_user, regular_user, test_bill, test_database
+    ):
+        share = BillShare(
+            bill_id=test_bill.id,
+            owner_user_id=admin_user.id,
+            shared_with_user_id=regular_user.id,
+            shared_with_identifier=regular_user.username,
+            identifier_type='username',
+            status='accepted',
+        )
+        db_session.add(share)
+        db_session.commit()
+        db_session.refresh(share)
+        ShareAuditLog.log_action(
+            action='created', bill_id=test_bill.id, actor_user_id=admin_user.id, share_id=share.id,
+        )
+        db_session.commit()
+
+        response = client.delete(
+            f'/api/v2/databases/{test_database.id}', headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+        assert json.loads(response.data)['success'] is True
+
+        assert db.session.get(Database, test_database.id) is None
+        assert ShareAuditLog.query.filter_by(bill_id=test_bill.id).count() == 0

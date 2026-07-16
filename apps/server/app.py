@@ -2943,6 +2943,12 @@ def jwt_delete_bill_permanent(bill_id):
     if conflict:
         return conflict
 
+    # share_audit_log.bill_id has no ON DELETE clause, so a bill that was
+    # ever shared (i.e. has audit history) would otherwise fail this delete
+    # with a foreign key violation. BillShare rows cascade via the Bill.shares
+    # relationship, but the audit log doesn't, so it needs explicit cleanup.
+    ShareAuditLog.query.filter_by(bill_id=bill.id).delete(synchronize_session=False)
+
     db.session.delete(bill)
     response_payload = {
         "success": True,
@@ -7403,6 +7409,43 @@ def jwt_delete_user(target_user_id):
             pass
         elif user.created_by_id is not None and user.created_by_id != current_user_id:
             return jsonify({"success": False, "error": "Access denied"}), 403
+
+    # Several tables reference users.id with no ON DELETE clause, so deleting
+    # a user who had ever logged in, sent an invite, or shared a bill would
+    # otherwise fail with a foreign key violation. Mirrors the cleanup done
+    # in jwt_delete_account, scoped to just this one user.
+    db.session.execute(
+        user_database_access.delete().where(user_database_access.c.user_id == target_user_id)
+    )
+    UserInvite.query.filter_by(invited_by_id=target_user_id).delete(synchronize_session=False)
+    RefreshToken.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    UserDevice.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    Subscription.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    OAuthAccount.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    TwoFAChallenge.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    TwoFAConfig.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    WebAuthnCredential.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    BillShare.query.filter(
+        or_(
+            BillShare.owner_user_id == target_user_id,
+            BillShare.shared_with_user_id == target_user_id,
+        )
+    ).delete(synchronize_session=False)
+    ShareAuditLog.query.filter(
+        or_(
+            ShareAuditLog.actor_user_id == target_user_id,
+            ShareAuditLog.affected_user_id == target_user_id,
+        )
+    ).delete(synchronize_session=False)
+    # Deleting this user shouldn't take other users or databases down with it;
+    # just drop the now-dangling reference to them.
+    User.query.filter_by(created_by_id=target_user_id).update(
+        {"created_by_id": None}, synchronize_session=False
+    )
+    Database.query.filter_by(owner_id=target_user_id).update(
+        {"owner_id": None}, synchronize_session=False
+    )
+
     db.session.delete(user)
     db.session.commit()
     return jsonify({"success": True, "data": {"message": "User deleted"}})
@@ -7825,6 +7868,19 @@ def jwt_delete_database(database_id):
 
     if is_saas() and database.owner_id != current_user_id:
         return jsonify({"success": False, "error": "Access denied"}), 403
+
+    # Bills cascade-delete via the Database.bills relationship, but
+    # share_audit_log.bill_id has no ON DELETE clause, so any bill in this
+    # group that was ever shared would otherwise fail the whole delete with
+    # a foreign key violation (same issue as jwt_delete_bill_permanent).
+    bill_ids = [
+        row[0]
+        for row in db.session.query(Bill.id).filter(Bill.database_id == database.id).all()
+    ]
+    if bill_ids:
+        ShareAuditLog.query.filter(ShareAuditLog.bill_id.in_(bill_ids)).delete(
+            synchronize_session=False
+        )
 
     db.session.delete(database)
     db.session.commit()
