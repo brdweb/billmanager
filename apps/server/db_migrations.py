@@ -911,6 +911,91 @@ def migrate_20260715_04_add_user_last_login_at(db):
     db.session.commit()
 
 
+def _replace_fk_delete_action(
+    db,
+    *,
+    table_name,
+    column_name,
+    referred_table,
+    referred_column,
+    ondelete,
+):
+    """Replace one existing FK while preserving its database-assigned name."""
+    matching_foreign_keys = [
+        foreign_key
+        for foreign_key in inspect(db.engine).get_foreign_keys(table_name)
+        if foreign_key['constrained_columns'] == [column_name]
+        and foreign_key['referred_table'] == referred_table
+        and foreign_key['referred_columns'] == [referred_column]
+    ]
+    if len(matching_foreign_keys) != 1:
+        raise RuntimeError(
+            f"Expected one foreign key for {table_name}.{column_name}, "
+            f"found {len(matching_foreign_keys)}"
+        )
+
+    foreign_key = matching_foreign_keys[0]
+    current_action = (
+        foreign_key.get('options', {}).get('ondelete') or 'NO ACTION'
+    )
+    if current_action.upper() == ondelete:
+        logger.info(
+            "%s.%s already uses ON DELETE %s",
+            table_name,
+            column_name,
+            ondelete,
+        )
+        return
+
+    if db.engine.dialect.name != 'postgresql':
+        raise RuntimeError(
+            f"Cannot replace {table_name}.{column_name} foreign key on "
+            f"{db.engine.dialect.name}"
+        )
+
+    constraint_name = foreign_key.get('name')
+    if not constraint_name:
+        raise RuntimeError(f"Foreign key for {table_name}.{column_name} has no name")
+
+    quote = db.engine.dialect.identifier_preparer.quote
+    db.session.execute(text(f'''
+        ALTER TABLE {quote(table_name)}
+        DROP CONSTRAINT {quote(constraint_name)},
+        ADD CONSTRAINT {quote(constraint_name)}
+            FOREIGN KEY ({quote(column_name)})
+            REFERENCES {quote(referred_table)} ({quote(referred_column)})
+            ON DELETE {ondelete}
+    '''))
+    logger.info(
+        "Changed %s.%s to ON DELETE %s",
+        table_name,
+        column_name,
+        ondelete,
+    )
+
+
+def migrate_20260716_01_normalize_delete_cascades(db):
+    """Align upgraded schemas with the cascades declared by create migrations."""
+    logger.info("Running migration: 20260716_01_normalize_delete_cascades")
+
+    cascade_contracts = (
+        ('bill_shares', 'bill_id', 'bills', 'id'),
+        ('category_budgets', 'database_id', 'databases', 'id'),
+        ('user_devices', 'user_id', 'users', 'id'),
+    )
+    for table_name, column_name, referred_table, referred_column in cascade_contracts:
+        _replace_fk_delete_action(
+            db,
+            table_name=table_name,
+            column_name=column_name,
+            referred_table=referred_table,
+            referred_column=referred_column,
+            ondelete='CASCADE',
+        )
+
+    db.session.commit()
+
+
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -942,6 +1027,7 @@ MIGRATIONS = [
     ('20260715_02', 'Add optimistic concurrency timestamp to bill shares', migrate_20260715_02_add_bill_share_updated_at),
     ('20260715_03', 'Create instance-wide telemetry consent settings', migrate_20260715_03_create_telemetry_settings),
     ('20260715_04', 'Add coarse user last-login tracking', migrate_20260715_04_add_user_last_login_at),
+    ('20260716_01', 'Normalize destructive foreign-key cascades', migrate_20260716_01_normalize_delete_cascades),
 ]
 
 
