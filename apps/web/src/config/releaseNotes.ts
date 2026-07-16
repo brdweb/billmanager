@@ -5,7 +5,7 @@
  *
  * 1. Add a new entry at the TOP of the `releaseNotes` array (newest first)
  * 2. Update the version number in these files:
- *    - apps/server/app.py (search for 'version': - two occurrences)
+ *    - apps/server/config.py (SERVER_VERSION)
  *    - apps/server/openapi.yaml
  *    - apps/web/package.json
  *    - apps/web/package-lock.json
@@ -47,6 +47,34 @@ export interface ReleaseNote {
 }
 
 export const releaseNotes: ReleaseNote[] = [
+  {
+    version: '4.4.0',
+    date: '2026-07-16',
+    title: 'Deletion Safety and Self-Hosted Reliability',
+    sections: [
+      {
+        heading: 'Administrator Notice',
+        items: [
+          'On first startup after upgrading, PostgreSQL migration 20260716_01 replaces three foreign-key constraints and may briefly block writes while existing rows are validated; use a normal maintenance window and start one application replica first',
+          'No manual SQL or data conversion is required; the migration aligns bill-share, category-budget, and registered-device cleanup with the schema already intended by BillManager',
+        ],
+      },
+      {
+        heading: 'Security and Data Integrity',
+        items: [
+          'Full account erasure now includes nested managed users and their bill groups, cancels live Stripe subscriptions first, and preserves local data when Stripe cannot confirm cancellation',
+          'User, bill, and bill-group deletion now cleans up dependent authentication, sharing, ownership, and audit records without leaving billable subscriptions or triggering foreign-key server errors',
+        ],
+      },
+      {
+        heading: 'Self-Hosted Improvements',
+        items: [
+          'Archived bills are reachable again, shared-bill access works outside SaaS mode, and the reminder drawer is fully translated',
+          'The complete backend suite now runs independently in both self-hosted and SaaS modes to catch deployment-specific regressions',
+        ],
+      },
+    ],
+  },
   {
     version: '4.3.3',
     date: '2026-07-15',
