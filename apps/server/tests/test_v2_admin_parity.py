@@ -222,33 +222,38 @@ class TestV2UserDeletion:
         db_session.add(share)
         db_session.commit()
         db_session.refresh(share)
+        share_id = share.id
         ShareAuditLog.log_action(
-            action='created', bill_id=test_bill.id, actor_user_id=admin_user.id, share_id=share.id,
+            action='created', bill_id=test_bill.id, actor_user_id=admin_user.id, share_id=share_id,
         )
         db_session.commit()
+        admin_user_id = admin_user.id
+        regular_user_id = regular_user.id
 
         response = client.delete(
-            f'/api/v2/users/{admin_user.id}', headers=_headers_for(second_admin)
+            f'/api/v2/users/{admin_user_id}', headers=_headers_for(second_admin)
         )
         assert response.status_code == 200
         assert json.loads(response.data)['success'] is True
 
-        assert db.session.get(User, admin_user.id) is None
+        # The tables below were mutated by bulk queries (synchronize_session=False,
+        # matching jwt_delete_account's existing convention) or by another
+        # session (the Flask request), so previously-loaded ORM references
+        # (admin_user, regular_user, share) are stale/expired. Querying by
+        # the ids captured above avoids SQLAlchemy trying to refresh a
+        # now-gone row and raising ObjectDeletedError.
+        assert db.session.get(User, admin_user_id) is None
         # created_by_id is orphaned rather than blocking the delete, or
         # taking regular_user down with it
-        db_session.refresh(regular_user)
-        assert regular_user.created_by_id is None
-        assert db.session.get(User, regular_user.id) is not None
+        refreshed_regular_user = db.session.get(User, regular_user_id)
+        assert refreshed_regular_user is not None
+        assert refreshed_regular_user.created_by_id is None
         # dependent rows owned by the deleted user are cleaned up rather
         # than left dangling
-        assert RefreshToken.query.filter_by(user_id=admin_user.id).count() == 0
-        assert UserInvite.query.filter_by(invited_by_id=admin_user.id).count() == 0
-        # share.id was bulk-deleted (synchronize_session=False), so the
-        # already-loaded `share` instance is a stale identity-map entry;
-        # db.session.get() would try to refresh it and raise
-        # ObjectDeletedError instead of returning None. Query fresh instead.
-        assert BillShare.query.filter_by(id=share.id).first() is None
-        assert ShareAuditLog.query.filter_by(actor_user_id=admin_user.id).count() == 0
+        assert RefreshToken.query.filter_by(user_id=admin_user_id).count() == 0
+        assert UserInvite.query.filter_by(invited_by_id=admin_user_id).count() == 0
+        assert BillShare.query.filter_by(id=share_id).first() is None
+        assert ShareAuditLog.query.filter_by(actor_user_id=admin_user_id).count() == 0
 
 
 class TestV2DatabaseDeletionWithShareHistory:
