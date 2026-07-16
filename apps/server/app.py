@@ -891,8 +891,14 @@ def jwt_required(f):
         if not payload:
             return jsonify({"success": False, "error": "Invalid or expired token"}), 401
 
-        g.jwt_user_id = payload["user_id"]
-        g.jwt_role = payload["role"]
+        user = db.session.get(User, payload["user_id"])
+        if not user:
+            return jsonify(
+                {"success": False, "error": "User no longer exists"}
+            ), 401
+
+        g.jwt_user_id = user.id
+        g.jwt_role = user.role
 
         # Get database from X-Database header for mobile clients
         db_name = request.headers.get("X-Database")
@@ -901,7 +907,6 @@ def jwt_required(f):
                 # Special value for all-databases view
                 g.jwt_db_name = "_all_"
             else:
-                user = db.session.get(User, g.jwt_user_id)
                 target_db = Database.query.filter_by(name=db_name).first()
                 if target_db and target_db in user.accessible_databases:
                     g.jwt_db_name = db_name
@@ -933,11 +938,17 @@ def jwt_admin_required(f):
         if not payload:
             return jsonify({"success": False, "error": "Invalid or expired token"}), 401
 
-        if payload["role"] != "admin":
+        user = db.session.get(User, payload["user_id"])
+        if not user:
+            return jsonify(
+                {"success": False, "error": "User no longer exists"}
+            ), 401
+
+        if user.role != "admin":
             return jsonify({"success": False, "error": "Admin access required"}), 403
 
-        g.jwt_user_id = payload["user_id"]
-        g.jwt_role = payload["role"]
+        g.jwt_user_id = user.id
+        g.jwt_role = user.role
         return f(*args, **kwargs)
 
     return decorated_function
@@ -2653,7 +2664,7 @@ def jwt_get_bill(bill_id):
         my_portion = None
         if share.split_type and bill.amount is not None:
             my_portion = share.calculate_portion()
-        owner = db.session.get(User, database.owner_id) if database else None
+        owner = db.session.get(User, share.owner_user_id)
         b_dict["is_shared"] = True
         b_dict["share_info"] = {
             "share_id": share.id,
@@ -2942,6 +2953,12 @@ def jwt_delete_bill_permanent(bill_id):
     )
     if conflict:
         return conflict
+
+    # share_audit_log.bill_id has no ON DELETE clause, so a bill that was
+    # ever shared (i.e. has audit history) would otherwise fail this delete
+    # with a foreign key violation. BillShare rows cascade via the Bill.shares
+    # relationship, but the audit log doesn't, so it needs explicit cleanup.
+    ShareAuditLog.query.filter_by(bill_id=bill.id).delete(synchronize_session=False)
 
     db.session.delete(bill)
     response_payload = {
@@ -7225,6 +7242,18 @@ def twofa_verify():
 # ============ API v2 Admin Endpoints ============
 
 
+def _can_manage_user(actor_user_id, target_user, *, allow_self=False):
+    """Return whether an admin may manage a user in the active deployment mode."""
+    if not is_saas():
+        return True
+    if allow_self and target_user.id == actor_user_id:
+        return True
+    # SaaS administration is intentionally one level deep: an admin manages
+    # the users they directly created, while account owners and other tenants
+    # remain outside that boundary.
+    return target_user.created_by_id == actor_user_id
+
+
 @api_v2_bp.route("/users", methods=["GET"])
 @jwt_admin_required
 def jwt_get_users():
@@ -7348,9 +7377,9 @@ def jwt_update_user(target_user_id):
     """Update user role (admin only)."""
     user = db.get_or_404(User, target_user_id)
     current_user_id = g.jwt_user_id
-    if is_saas() and user.id != current_user_id:
-        if user.created_by_id is not None and user.created_by_id != current_user_id:
-            return jsonify({"success": False, "error": "Access denied"}), 403
+    if not _can_manage_user(current_user_id, user, allow_self=True):
+        return jsonify({"success": False, "error": "Access denied"}), 403
+
     data = request.get_json()
     if "role" in data:
         new_role = data["role"]
@@ -7398,14 +7427,91 @@ def jwt_delete_user(target_user_id):
     """Delete a user (admin only)."""
     if target_user_id == g.jwt_user_id:
         return jsonify({"success": False, "error": "Cannot delete yourself"}), 400
-    user = db.get_or_404(User, target_user_id)
+
+    # Lock the target so a concurrent request cannot add a new dependent row
+    # between cleanup and the final delete.
+    user = db.first_or_404(
+        db.select(User).where(User.id == target_user_id).with_for_update()
+    )
+    current_user_id = g.jwt_user_id
+    current_user = db.session.get(User, current_user_id)
+
+    if not _can_manage_user(current_user_id, user):
+        return jsonify({"success": False, "error": "Access denied"}), 403
+
+    # Never delete only the local record for a subscription that can still be
+    # billed externally. Canceled/expired Stripe records are safe to remove.
+    if (
+        is_saas()
+        and user.subscription
+        and user.subscription.stripe_subscription_id
+        and user.subscription.status not in {"canceled", "incomplete_expired"}
+    ):
+        return jsonify(
+            {
+                "success": False,
+                "error": "Cancel the user's subscription before deleting the user",
+            }
+        ), 409
+
+    owned_databases = Database.query.filter_by(owner_id=target_user_id).all()
+    accessible_databases = list(user.accessible_databases)
+
     if is_saas():
-        current_user_id = g.jwt_user_id
-        current_user = db.session.get(User, current_user_id)
-        if current_user.is_account_owner:
-            pass
-        elif user.created_by_id is not None and user.created_by_id != current_user_id:
-            return jsonify({"success": False, "error": "Access denied"}), 403
+        # Keep managed users and bill groups inside the same tenant. Direct
+        # children are reparented and owned databases transfer to the actor.
+        replacement_owner_id = current_user_id
+        for database in owned_databases:
+            if current_user_id not in {member.id for member in database.users}:
+                database.users.append(current_user)
+    else:
+        replacement_owner_id = None
+        # Ownership fields are unused in self-hosted mode, but deleting the
+        # only user with access must not strand a surviving bill group.
+        candidate_databases = {
+            database.id: database
+            for database in [*owned_databases, *accessible_databases]
+        }
+        for database in candidate_databases.values():
+            remaining_user_ids = {
+                member.id for member in database.users if member.id != target_user_id
+            }
+            if not remaining_user_ids:
+                database.users.append(current_user)
+
+    # Several tables reference users.id with no ON DELETE clause, so deleting
+    # a user who had ever logged in, sent an invite, or shared a bill would
+    # otherwise fail with a foreign key violation. Mirrors the cleanup done
+    # in jwt_delete_account, scoped to just this one user.
+    user.accessible_databases.clear()
+    UserInvite.query.filter_by(invited_by_id=target_user_id).delete(synchronize_session=False)
+    RefreshToken.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    UserDevice.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    Subscription.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    OAuthAccount.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    TwoFAChallenge.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    TwoFAConfig.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    WebAuthnCredential.query.filter_by(user_id=target_user_id).delete(synchronize_session=False)
+    BillShare.query.filter(
+        or_(
+            BillShare.owner_user_id == target_user_id,
+            BillShare.shared_with_user_id == target_user_id,
+        )
+    ).delete(synchronize_session=False)
+    ShareAuditLog.query.filter(
+        or_(
+            ShareAuditLog.actor_user_id == target_user_id,
+            ShareAuditLog.affected_user_id == target_user_id,
+        )
+    ).delete(synchronize_session=False)
+
+    User.query.filter_by(created_by_id=target_user_id).update(
+        {"created_by_id": replacement_owner_id}, synchronize_session=False
+    )
+    Database.query.filter_by(owner_id=target_user_id).update(
+        {"owner_id": replacement_owner_id}, synchronize_session=False
+    )
+
     db.session.delete(user)
     db.session.commit()
     return jsonify({"success": True, "data": {"message": "User deleted"}})
@@ -7418,9 +7524,8 @@ def jwt_get_user_databases(target_user_id):
     user = db.get_or_404(User, target_user_id)
     current_user_id = g.jwt_user_id
     # In SaaS mode, only allow viewing databases of users you created (or yourself)
-    if is_saas() and user.id != current_user_id:
-        if user.created_by_id is not None and user.created_by_id != current_user_id:
-            return jsonify({"success": False, "error": "Access denied"}), 403
+    if not _can_manage_user(current_user_id, user, allow_self=True):
+        return jsonify({"success": False, "error": "Access denied"}), 403
     return jsonify(
         {
             "success": True,
@@ -7823,11 +7928,28 @@ def jwt_update_database(database_id):
 @jwt_admin_required
 def jwt_delete_database(database_id):
     """Delete a database/bill group (admin only)."""
-    database = db.get_or_404(Database, database_id)
+    database = db.first_or_404(
+        db.select(Database).where(Database.id == database_id).with_for_update()
+    )
     current_user_id = g.jwt_user_id
 
     if is_saas() and database.owner_id != current_user_id:
         return jsonify({"success": False, "error": "Access denied"}), 403
+
+    # Bills cascade-delete via the Database.bills relationship, but
+    # share_audit_log.bill_id has no ON DELETE clause, so any bill in this
+    # group that was ever shared would otherwise fail the whole delete with
+    # a foreign key violation (same issue as jwt_delete_bill_permanent).
+    # Lock existing bills as well as the group so concurrent share/audit
+    # writes cannot recreate a dependent row after cleanup.
+    bills = db.session.execute(
+        db.select(Bill).where(Bill.database_id == database.id).with_for_update()
+    ).scalars().all()
+    bill_ids = [bill.id for bill in bills]
+    if bill_ids:
+        ShareAuditLog.query.filter(ShareAuditLog.bill_id.in_(bill_ids)).delete(
+            synchronize_session=False
+        )
 
     db.session.delete(database)
     db.session.commit()

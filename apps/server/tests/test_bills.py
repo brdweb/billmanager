@@ -10,7 +10,8 @@ import json
 import datetime
 import pytest
 
-from models import Bill, BillShare, Database
+import config
+from models import Bill, BillShare, Database, ShareAuditLog, db
 
 
 class TestBillsCRUD:
@@ -78,7 +79,9 @@ class TestBillsCRUD:
         never the accepted-share fallback that /payments and /pay already had.
         """
         recipient_db = Database(
-            name='recipientdb2', display_name='Recipient DB', owner_id=regular_user.id
+            name='recipientdb2',
+            display_name='Recipient DB',
+            owner_id=regular_user.id if config.is_saas() else None,
         )
         db_session.add(recipient_db)
         db_session.commit()
@@ -537,7 +540,7 @@ class TestBillSettlements:
             name='recipientdb',
             display_name='Recipient Database',
             description='Database for settlement recipient tests',
-            owner_id=regular_user.id
+            owner_id=regular_user.id if config.is_saas() else None,
         )
         db_session.add(database)
         db_session.commit()
@@ -642,7 +645,7 @@ class TestCashFlowForecast:
             name='recipientdb',
             display_name='Recipient Database',
             description='Database for forecast recipient tests',
-            owner_id=regular_user.id
+            owner_id=regular_user.id if config.is_saas() else None,
         )
         db_session.add(database)
         db_session.commit()
@@ -847,6 +850,56 @@ class TestBillShareCreation:
         assert after_data[0]['recipient_paid_date'] is not None
 
 
+class TestPermanentDeleteWithShareHistory:
+    """Regression: share_audit_log.bill_id has no ON DELETE clause, so
+    permanently deleting a bill that had ever been shared (i.e. had any
+    audit log rows) raised a Postgres IntegrityError and surfaced to users
+    as a generic server error, even though the bill's own BillShare rows
+    are cascade-deleted cleanly via the Bill.shares ORM relationship.
+    """
+
+    def test_permanently_deleting_shared_bill_does_not_500(
+        self, client, auth_headers_with_db, db_session, test_bill, admin_user, regular_user
+    ):
+        share = BillShare(
+            bill_id=test_bill.id,
+            owner_user_id=admin_user.id,
+            shared_with_user_id=regular_user.id,
+            shared_with_identifier=regular_user.username,
+            identifier_type='username',
+            status='accepted',
+            accepted_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+        db_session.add(share)
+        db_session.commit()
+        db_session.refresh(share)
+
+        ShareAuditLog.log_action(
+            action='created',
+            bill_id=test_bill.id,
+            actor_user_id=admin_user.id,
+            share_id=share.id,
+            affected_user_id=regular_user.id,
+        )
+        ShareAuditLog.log_action(
+            action='accepted',
+            bill_id=test_bill.id,
+            actor_user_id=regular_user.id,
+            share_id=share.id,
+            affected_user_id=admin_user.id,
+        )
+
+        response = client.delete(
+            f'/api/v2/bills/{test_bill.id}/permanent', headers=auth_headers_with_db
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['success'] is True
+
+        assert db.session.get(Bill, test_bill.id) is None
+        assert ShareAuditLog.query.filter_by(bill_id=test_bill.id).count() == 0
+
+
 class TestOneTimeBills:
     """Regression coverage for frequency='once' bills.
 
@@ -906,9 +959,16 @@ class TestGetBillSharesSelfHosted:
     "not shared with anyone", regardless of actual share state.
     """
 
+    pytestmark = pytest.mark.skipif(
+        config.is_saas(), reason='requires a self-hosted-mode application process'
+    )
+
     def test_owner_can_list_shares_in_self_hosted_mode(
-        self, client, auth_headers_with_db, db_session, test_bill, admin_user, regular_user
+        self, client, auth_headers_with_db, db_session, test_bill, test_database,
+        admin_user, regular_user
     ):
+        assert test_database.owner_id is None
+
         share = BillShare(
             bill_id=test_bill.id,
             owner_user_id=admin_user.id,

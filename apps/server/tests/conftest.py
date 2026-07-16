@@ -26,6 +26,7 @@ os.environ['FLASK_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 os.environ['FLASK_ENV'] = 'testing'
 os.environ['RATE_LIMIT_ENABLED'] = 'false'
 
+import config
 from app import create_app, create_access_token, JWT_SECRET_KEY
 from models import (
     db, User, Database, Bill, Payment,
@@ -90,7 +91,7 @@ def regular_user(app, db_session, admin_user):
         role='user',
         email='user@test.com',
         password_change_required=False,
-        created_by_id=admin_user.id
+        created_by_id=admin_user.id if config.is_saas() else None
     )
     user.set_password('userpassword123')
     db_session.add(user)
@@ -106,7 +107,7 @@ def test_database(app, db_session, admin_user):
         name='testdb',
         display_name='Test Database',
         description='Database for testing',
-        owner_id=admin_user.id
+        owner_id=admin_user.id if config.is_saas() else None
     )
     db_session.add(database)
     db_session.commit()

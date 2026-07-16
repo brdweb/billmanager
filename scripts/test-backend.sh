@@ -58,11 +58,25 @@ run_tests() {
     exit 1
   fi
 
-  (
-    cd "${ROOT_DIR}/apps/server"
-    source "${VENV_DIR}/bin/activate"
-    DATABASE_URL="${DATABASE_URL}" pytest tests -v -s --maxfail=1
-  )
+  local modes="${BACKEND_TEST_MODES:-${DEPLOYMENT_MODE:-self-hosted saas}}"
+  local mode
+
+  for mode in ${modes}; do
+    case "${mode}" in
+      self-hosted|saas) ;;
+      *)
+        printf 'Unsupported backend test deployment mode: %s\n' "${mode}" >&2
+        exit 1
+        ;;
+    esac
+
+    printf 'Running backend tests in %s mode\n' "${mode}"
+    (
+      cd "${ROOT_DIR}/apps/server"
+      source "${VENV_DIR}/bin/activate"
+      DATABASE_URL="${DATABASE_URL}" DEPLOYMENT_MODE="${mode}" pytest tests -v -s --maxfail=1
+    )
+  done
 }
 
 main() {
