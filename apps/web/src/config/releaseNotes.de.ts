@@ -2,6 +2,27 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.4.1',
+    date: '2026-07-19',
+    title: 'Abhängigkeits- und Toolchain-Wartung',
+    sections: [
+      {
+        heading: 'Verbesserungen',
+        items: [
+          'Die Laufzeit-, Navigations-, Formular-, Symbol-, Lokalisierungs- und Build-Pakete von Expo SDK 57 entsprechen jetzt den validierten Versionen für interne iOS- und Android-Builds',
+          'Compiler-, Lint-, Symbol- und Lokalisierungsabhängigkeiten der Webanwendung wurden aktualisiert und GitHub Actions verwendet jetzt die aktuelle Node-Einrichtungsaktion',
+        ],
+      },
+      {
+        heading: 'Backend-Zuverlässigkeit',
+        items: [
+          'Die Resend- und Stripe-SDKs wurden für zusätzliche API-Funktionen, korrigierte Antwort- und Fehlerbehandlung sowie eine geringere Startlatenz des Stripe-Clients aktualisiert',
+          'Die Abhängigkeitsprüfungen fanden keine bekannten Schwachstellen; für diese Wartungsversion ist keine Datenbank- oder API-Migration erforderlich',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.4.0',
     date: '2026-07-16',
     title: 'Sicheres Löschen und zuverlässiges Self-Hosting',
