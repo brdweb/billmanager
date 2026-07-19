@@ -10,16 +10,16 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.4.0
+## 🎉 What's New in v4.4.1
 
-**Deletion Safety and Self-Hosted Reliability** - Account, user, bill, and bill-group deletion now handles related data safely across SaaS and self-hosted installations, with stronger PostgreSQL integrity contracts and full dual-mode backend coverage.
+**Dependency and Toolchain Maintenance** - Web, mobile, backend, and CI dependencies are refreshed within their supported runtime lines, with Expo SDK 57 compatibility restored and no database or API migration required.
 
 ### Highlights
 
-- **Safe Account Erasure** - Full account deletion now includes nested managed users and their bill groups, cancels live Stripe subscriptions first, and preserves local data if Stripe cannot confirm cancellation
-- **Reliable User and Bill Deletion** - Self-hosted and SaaS deletion paths clean up share history, authentication records, ownership, and access without foreign-key server errors or stranded data
-- **PostgreSQL Administrator Notice** - Migration `20260716_01` normalizes three delete cascades; it briefly locks and validates the affected tables, so multi-replica deployments should start one application instance first during a normal maintenance window
-- **Self-Hosted Parity** - Archived bills, bill-share access, reminder translations, and the complete backend suite now behave consistently outside SaaS mode
+- **Expo SDK 57 Compatibility** - Expo runtime, navigation, form, icon, localization, and build packages now match the SDK's validated versions
+- **Web Toolchain Refresh** - Vite, TypeScript ESLint, Tabler icons, and React i18n packages are updated within their supported release lines
+- **Backend SDK Maintenance** - Resend and Stripe SDK updates add API improvements, corrected response handling, and lower Stripe client cold-start latency
+- **Current CI Runtime** - GitHub Actions now uses `setup-node@v7`, with all security, test, build, and multi-architecture image checks passing
 
 ---
 

@@ -48,6 +48,27 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.4.1',
+    date: '2026-07-19',
+    title: 'Dependency and Toolchain Maintenance',
+    sections: [
+      {
+        heading: 'Improvements',
+        items: [
+          'Updated the Expo SDK 57 runtime, navigation, form, icon, localization, and build packages to the versions validated for internal iOS and Android builds',
+          'Refreshed the web compiler, lint, icon, and localization dependencies and moved GitHub Actions to the current Node setup action',
+        ],
+      },
+      {
+        heading: 'Backend Reliability',
+        items: [
+          'Updated the Resend and Stripe SDKs for additive API improvements, corrected response and error handling, and reduced Stripe client cold-start latency',
+          'Dependency audits found no known vulnerabilities, and this maintenance release requires no database or API migration',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.4.0',
     date: '2026-07-16',
     title: 'Deletion Safety and Self-Hosted Reliability',
