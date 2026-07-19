@@ -7,8 +7,8 @@ flask-sqlalchemy==3.1.1
 psycopg[binary]>=3.3.4
 flask-migrate==4.1.0
 PyJWT==2.13.0
-resend==2.32.2
-stripe==15.3.0
+resend==2.34.0
+stripe==15.3.1
 APScheduler==3.11.3
 requests>=2.34.2
 authlib>=1.7.2
