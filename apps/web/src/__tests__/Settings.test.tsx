@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { MemoryRouter } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -61,39 +61,33 @@ function mockAuth(isAdmin: boolean) {
   });
 }
 
-describe('Settings page tabs', () => {
+describe('Settings page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('only exposes the Settings tab to regular users', () => {
+  it('keeps account settings separate from the admin modal', () => {
     mockAuth(false);
 
     renderSettings('/settings?tab=users');
 
-    expect(screen.getByRole('tab', { name: 'Settings' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.queryByRole('tab', { name: 'Users' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Bill Groups' })).not.toBeInTheDocument();
-  });
-
-  it('exposes Users and Bill Groups tabs to administrators', () => {
-    mockAuth(true);
-
-    renderSettings('/settings?tab=users');
-
-    expect(screen.getByRole('tab', { name: 'Users' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Bill Groups' })).toBeInTheDocument();
-    expect(screen.getByText('Users content')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    expect(screen.getByText('Two-factor settings')).toBeVisible();
+    expect(screen.getByText('Linked accounts')).toBeVisible();
+    expect(screen.getByText('Account danger zone')).toBeVisible();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByText('Users content')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bill groups content')).not.toBeInTheDocument();
   });
 
   it('shows language options from discovered catalog metadata', () => {
     mockAuth(false);
     renderSettings();
 
-    const languageSelect = screen.getByRole('combobox', { name: 'Language' });
+    const languageSelect = screen.getByRole('textbox', { name: 'Language' });
     expect(languageSelect).toHaveValue('English');
-    expect(screen.getByRole('option', { name: 'English', hidden: true })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Deutsch', hidden: true })).toBeInTheDocument();
+    fireEvent.click(languageSelect);
+    expect(screen.getByRole('option', { name: 'English' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Deutsch' })).toBeInTheDocument();
   });
 });

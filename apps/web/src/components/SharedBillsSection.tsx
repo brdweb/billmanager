@@ -137,7 +137,7 @@ export function SharedBillsSection({ onRefresh }: SharedBillsSectionProps) {
           </ActionIcon>
         </Group>
 
-        <Collapse expanded={expanded}>
+        <Collapse in={expanded}>
           <Stack gap="sm">
             {/* Pending Invitations */}
             {pendingShares.length > 0 && (

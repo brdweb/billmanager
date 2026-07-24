@@ -417,7 +417,7 @@ export function AllPayments() {
               {chartOpened ? t('allPaymentsPage.hide') : t('allPaymentsPage.show')}
             </Button>
           </Group>
-          <Collapse expanded={chartOpened}>
+          <Collapse in={chartOpened}>
             <BarChart
               h={200}
               data={monthlyChartData}

@@ -25,12 +25,12 @@
     "generate-icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
-    "@mantine/charts": "^9.4.1",
-    "@mantine/core": "^9.4.1",
-    "@mantine/dates": "^9.4.1",
-    "@mantine/form": "^9.4.1",
-    "@mantine/hooks": "^9.4.1",
-    "@mantine/notifications": "^9.4.1",
+    "@mantine/charts": "^8.3.10",
+    "@mantine/core": "^8.3.10",
+    "@mantine/dates": "^8.3.10",
+    "@mantine/form": "^8.3.10",
+    "@mantine/hooks": "^8.3.10",
+    "@mantine/notifications": "^8.3.10",
     "@simplewebauthn/browser": "^13.3.0",
     "@tabler/icons-react": "^3.45.0",
     "axios": "^1.18.1",

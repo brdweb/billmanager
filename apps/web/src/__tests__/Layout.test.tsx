@@ -22,40 +22,39 @@ function mockAuth(isAdmin: boolean) {
   } as unknown as ReturnType<typeof useAuth>);
 }
 
-function renderLayout(onSettingsClick = vi.fn()) {
+function renderLayout(onAdminClick = vi.fn()) {
   render(
     <MantineProvider>
-      <Layout sidebar={<div>Sidebar</div>} onSettingsClick={onSettingsClick}>
+      <Layout sidebar={<div>Sidebar</div>} onAdminClick={onAdminClick}>
         <div>Content</div>
       </Layout>
     </MantineProvider>
   );
 
-  return onSettingsClick;
+  return onAdminClick;
 }
 
-describe('Layout settings navigation', () => {
+describe('Layout admin navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('shows a Settings button to regular users', () => {
+  it('does not expose admin navigation to regular users', () => {
     mockAuth(false);
-    const onSettingsClick = renderLayout();
+    const onAdminClick = renderLayout();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-
-    expect(onSettingsClick).toHaveBeenCalledOnce();
+    expect(onAdminClick).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Admin' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
   });
 
   it('keeps the Admin label for administrators', () => {
     mockAuth(true);
-    const onSettingsClick = renderLayout();
+    const onAdminClick = renderLayout();
 
     fireEvent.click(screen.getByRole('button', { name: 'Admin' }));
 
-    expect(onSettingsClick).toHaveBeenCalledOnce();
+    expect(onAdminClick).toHaveBeenCalledOnce();
     expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
   });
 });

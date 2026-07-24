@@ -21,11 +21,11 @@ import type { ReactNode } from 'react';
 interface LayoutProps {
   children: ReactNode;
   sidebar: ReactNode;
-  onSettingsClick: () => void;
+  onAdminClick: () => void;
   onBillingClick?: () => void;
 }
 
-export function Layout({ children, sidebar, onSettingsClick, onBillingClick }: LayoutProps) {
+export function Layout({ children, sidebar, onAdminClick, onBillingClick }: LayoutProps) {
   const { t } = useTranslation();
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
   const [drawerOpened, { toggle: toggleDrawer, close: closeDrawer }] = useDisclosure();
@@ -92,15 +92,17 @@ export function Layout({ children, sidebar, onSettingsClick, onBillingClick }: L
                       {t('layout.billing')}
                     </Button>
                   )}
-                  <Button
-                    variant="light"
-                    color={isAdmin ? 'orange' : 'billGreen'}
-                    size="sm"
-                    leftSection={<IconSettings size={16} />}
-                    onClick={onSettingsClick}
-                  >
-                    {isAdmin ? t('layout.admin') : t('layout.settings')}
-                  </Button>
+                  {isAdmin && (
+                    <Button
+                      variant="light"
+                      color="orange"
+                      size="sm"
+                      leftSection={<IconSettings size={16} />}
+                      onClick={onAdminClick}
+                    >
+                      {t('layout.admin')}
+                    </Button>
+                  )}
                   <Button
                     variant="subtle"
                     color="gray"
