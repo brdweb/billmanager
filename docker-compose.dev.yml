@@ -9,6 +9,13 @@ services:
       - DATABASE_URL=postgresql://billsuser:billspass@db:5432/billsdb
       - FLASK_SECRET_KEY=dev-secret-key-change-in-prod
       - DEPLOYMENT_MODE=self-hosted
+      # Deployment-wide bill currency, set here with no UI selector.
+      # Supported, in order: USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD,
+      # INR, KRW, SEK, NZD, MXN. JPY/KRW use zero minor units; the rest use two.
+      # Invalid values fail startup. Language changes do not change this currency.
+      # Changing it does not convert stored amounts. Review fractional data before
+      # switching to JPY/KRW. SaaS subscription pricing remains USD.
+      # DEFAULT_LOCALE controls regional formatting and defaults to en-US.
       - DEFAULT_CURRENCY=${DEFAULT_CURRENCY:-USD}
       - DEFAULT_LOCALE=${DEFAULT_LOCALE:-en-US}
     depends_on:

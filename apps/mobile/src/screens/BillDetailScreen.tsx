@@ -19,7 +19,12 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 import { useMobileRuntime } from '../context/MobileRuntimeContext';
-import { formatCurrency, formatDate } from '../i18n/format';
+import {
+  formatCurrency,
+  formatDate,
+  getMoneyInputProps,
+  parseMoneyInput,
+} from '../i18n/format';
 import { Bill, Payment } from '../types';
 import ShareBillModal from '../components/ShareBillModal';
 import { useTranslation } from 'react-i18next';
@@ -66,6 +71,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   const [showShareModal, setShowShareModal] = useState(false);
 
   const styles = createStyles(colors);
+  const moneyInputProps = getMoneyInputProps();
 
   useEffect(() => {
     if (bill) setPayAmount((bill.amount ?? bill.avg_amount ?? '').toString());
@@ -74,8 +80,8 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   const handlePay = async () => {
     if (!bill) return;
 
-    const amount = parseFloat(payAmount);
-    if (isNaN(amount) || amount <= 0) {
+    const amount = parseMoneyInput(payAmount);
+    if (amount === null || amount <= 0) {
       Alert.alert(t('mobileParity.payments.checkDetails'), t('mobileParity.billDetail.invalidAmount'));
       return;
     }
@@ -197,8 +203,8 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   const confirmEditPayment = async () => {
     if (!editPayment) return;
 
-    const amount = parseFloat(editAmount);
-    if (isNaN(amount) || amount <= 0) {
+    const amount = parseMoneyInput(editAmount);
+    if (amount === null || amount <= 0) {
       Alert.alert(t('mobileParity.payments.checkDetails'), t('mobileParity.billDetail.invalidAmount'));
       return;
     }
@@ -508,8 +514,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
               style={styles.input}
               value={payAmount}
               onChangeText={setPayAmount}
-              keyboardType="decimal-pad"
-              placeholder="0.00"
+              {...moneyInputProps}
               placeholderTextColor={colors.textMuted}
               editable={!isSubmitting}
             />
@@ -605,8 +610,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
               style={styles.input}
               value={editAmount}
               onChangeText={setEditAmount}
-              keyboardType="decimal-pad"
-              placeholder="0.00"
+              {...moneyInputProps}
               placeholderTextColor={colors.textMuted}
               editable={!isEditing}
             />

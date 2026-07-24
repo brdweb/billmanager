@@ -3492,6 +3492,22 @@ components:
           type: string
           minLength: 3
           maxLength: 3
+          enum:
+            - USD
+            - EUR
+            - JPY
+            - GBP
+            - CNY
+            - CHF
+            - AUD
+            - CAD
+            - HKD
+            - SGD
+            - INR
+            - KRW
+            - SEK
+            - NZD
+            - MXN
         default_locale:
           type: string
         oauth_providers:
@@ -3565,7 +3581,24 @@ components:
               icon: {type: string}
         twofa_enabled: {type: boolean}
         passkeys_enabled: {type: boolean}
-        default_currency: {type: string}
+        default_currency:
+          type: string
+          enum:
+            - USD
+            - EUR
+            - JPY
+            - GBP
+            - CNY
+            - CHF
+            - AUD
+            - CAD
+            - HKD
+            - SGD
+            - INR
+            - KRW
+            - SEK
+            - NZD
+            - MXN
         default_locale: {type: string}
         mobile:
           $ref: '#/components/schemas/MobileCapabilities'

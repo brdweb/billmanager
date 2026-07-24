@@ -17,6 +17,7 @@
     "start": "expo start --dev-client",
     "start:clear": "expo start --dev-client --clear",
     "i18n:sync": "node scripts/sync-web-translations.mjs",
+    "i18n:check": "node scripts/sync-web-translations.mjs --check",
     "api:generate": "npx --yes openapi-typescript@7.13.0 ../server/openapi.yaml -o src/api/generated/schema.ts",
     "api:check": "npm run api:generate && git diff --exit-code -- src/api/generated/schema.ts",
     "prebuild": "npm run i18n:sync && expo prebuild --clean",
@@ -31,7 +32,7 @@
     "maestro:validate": "node scripts/validate-maestro-flows.mjs",
     "config:validate": "node scripts/validate-build-profiles.mjs",
     "doctor": "npx expo-doctor",
-    "check": "npm run i18n:sync && npm run api:check && npm run lint && npm run typecheck && npm test && npm run maestro:validate && npm run config:validate && npx expo install --check && npm run doctor"
+    "check": "npm run i18n:check && npm run api:check && npm run lint && npm run typecheck && npm test && npm run maestro:validate && npm run config:validate && npx expo install --check && npm run doctor"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.6",

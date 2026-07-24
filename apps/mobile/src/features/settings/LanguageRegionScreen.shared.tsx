@@ -9,7 +9,12 @@ import {
   getFormattingConfig,
   type FormattingConfig,
 } from '../../i18n/format';
-import { normalizeLanguage, setLanguage, type SupportedLanguage } from '../../i18n';
+import {
+  LANGUAGE_OPTIONS,
+  normalizeLanguage,
+  setLanguage,
+  type SupportedLanguage,
+} from '../../i18n';
 import { formatLocaleExample } from './settingsModel';
 import {
   SettingsAction,
@@ -51,21 +56,17 @@ export function LanguageRegionScreenView({
   return (
     <SettingsDetailPage platform={platform} intro={t('mobileSettings.language.intro')}>
       <SettingsSection platform={platform} title={t('mobileSettings.language.appLanguage')}>
-        <SettingsChoiceRow
-          platform={platform}
-          title={t('mobileSettings.language.english')}
-          subtitle="English (US)"
-          selected={language === 'en'}
-          onPress={() => void chooseLanguage('en')}
-        />
-        <SettingsChoiceRow
-          platform={platform}
-          title={t('mobileSettings.language.german')}
-          subtitle="Deutsch (Deutschland)"
-          selected={language === 'de'}
-          onPress={() => void chooseLanguage('de')}
-          isLast
-        />
+        {LANGUAGE_OPTIONS.map((option, index) => (
+          <SettingsChoiceRow
+            key={option.code}
+            platform={platform}
+            title={option.label}
+            subtitle={option.code.toUpperCase()}
+            selected={language === option.code}
+            onPress={() => void chooseLanguage(option.code)}
+            isLast={index === LANGUAGE_OPTIONS.length - 1}
+          />
+        ))}
       </SettingsSection>
 
       <SettingsSection platform={platform} title={t('mobileSettings.language.regionalFormat')}>

@@ -1987,7 +1987,8 @@ export interface components {
             minimum_mobile_version: string | null;
             /** @enum {string} */
             deployment_mode: "saas" | "self-hosted";
-            default_currency: string;
+            /** @enum {string} */
+            default_currency: "USD" | "EUR" | "JPY" | "GBP" | "CNY" | "CHF" | "AUD" | "CAD" | "HKD" | "SGD" | "INR" | "KRW" | "SEK" | "NZD" | "MXN";
             default_locale: string;
             oauth_providers: ("google" | "apple" | "microsoft" | "oidc")[];
             features: {
@@ -2021,7 +2022,8 @@ export interface components {
             }[];
             twofa_enabled: boolean;
             passkeys_enabled: boolean;
-            default_currency: string;
+            /** @enum {string} */
+            default_currency: "USD" | "EUR" | "JPY" | "GBP" | "CNY" | "CHF" | "AUD" | "CAD" | "HKD" | "SGD" | "INR" | "KRW" | "SEK" | "NZD" | "MXN";
             default_locale: string;
             mobile: components["schemas"]["MobileCapabilities"];
             tier_limits?: {

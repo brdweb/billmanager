@@ -35,7 +35,7 @@ import { AdaptivePlatform, typography } from '../../design/tokens';
 import { useAdaptiveLayout } from '../../design/useAdaptiveLayout';
 import { useAdaptiveTheme } from '../../design/useAdaptiveTheme';
 import { getFormattingConfig } from '../../i18n/format';
-import { normalizeLanguage } from '../../i18n';
+import { getLanguageOption, normalizeLanguage } from '../../i18n';
 
 interface SettingsHomeScreenViewProps {
   platform: AdaptivePlatform;
@@ -99,6 +99,7 @@ export function SettingsHomeScreenView({ platform }: SettingsHomeScreenViewProps
   const appLock = useAppLock();
   const formatting = getFormattingConfig();
   const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
+  const languageLabel = getLanguageOption(language).label;
   const appVersion = typeof Constants.expoConfig?.extra?.releaseVersion === 'string'
     ? Constants.expoConfig.extra.releaseVersion
     : Constants.expoConfig?.version ?? '1.0.0';
@@ -174,9 +175,7 @@ export function SettingsHomeScreenView({ platform }: SettingsHomeScreenViewProps
                 <AdaptiveListRow
                   platform={platform}
                   title={t('mobileSettings.home.languageRegion')}
-                  subtitle={(language === 'de'
-                    ? t('mobileSettings.language.german')
-                    : t('mobileSettings.language.english')) + ' • ' + formatting.currency}
+                  subtitle={languageLabel + ' • ' + formatting.currency}
                   leading={<SettingIcon platform={platform}><Languages size={21} color={theme.colors.primary} /></SettingIcon>}
                   onPress={() => navigation.navigate('LanguageRegion')}
                 />

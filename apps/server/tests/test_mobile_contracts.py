@@ -211,6 +211,42 @@ def test_pre_auth_mobile_capability_envelope_is_consistent(client):
     assert isinstance(mobile["oauth_providers"], list)
 
 
+def test_public_and_mobile_config_expose_validated_currency(client, monkeypatch):
+    monkeypatch.setattr(config, "DEFAULT_CURRENCY", "KRW")
+
+    response = client.get("/api/v2/config")
+
+    payload = response.get_json()["data"]
+    assert payload["default_currency"] == "KRW"
+    assert payload["mobile"]["default_currency"] == "KRW"
+
+
+def test_openapi_default_currency_schemas_use_ordered_supported_enum():
+    expected = [
+        "USD",
+        "EUR",
+        "JPY",
+        "GBP",
+        "CNY",
+        "CHF",
+        "AUD",
+        "CAD",
+        "HKD",
+        "SGD",
+        "INR",
+        "KRW",
+        "SEK",
+        "NZD",
+        "MXN",
+    ]
+    spec = yaml.safe_load((SERVER_ROOT / "openapi.yaml").read_text(encoding="utf-8"))
+
+    schemas = spec["components"]["schemas"]
+
+    assert schemas["PublicConfig"]["properties"]["default_currency"]["enum"] == expected
+    assert schemas["MobileCapabilities"]["properties"]["default_currency"]["enum"] == expected
+
+
 def test_authenticated_password_change_requires_current_password(
     client, admin_auth_headers, admin_user, app, db_session
 ):
@@ -973,6 +1009,72 @@ def test_sync_push_replays_complete_batch(client, auth_headers_with_db, app):
     assert second.get_json() == first.get_json()
     with app.app_context():
         assert Bill.query.filter_by(name="Offline-created bill").count() == 1
+
+
+def test_sync_push_rejects_fractional_zero_minor_unit_bill_and_payment_mutations(
+    client,
+    auth_headers_with_db,
+    test_bill,
+    db_session,
+    monkeypatch,
+):
+    payment = Payment(
+        bill_id=test_bill.id,
+        amount=100,
+        payment_date="2026-08-01",
+    )
+    db_session.add(payment)
+    db_session.commit()
+    bill_base = test_bill.last_updated.replace(
+        tzinfo=datetime.timezone.utc
+    ).isoformat().replace("+00:00", "Z")
+    payment_base = payment.updated_at.replace(
+        tzinfo=datetime.timezone.utc
+    ).isoformat().replace("+00:00", "Z")
+    monkeypatch.setattr(config, "DEFAULT_CURRENCY", "JPY")
+
+    response = client.post(
+        "/api/v2/sync/push",
+        headers=auth_headers_with_db,
+        json={
+            "bills": [
+                {
+                    "id": test_bill.id,
+                    "amount": 100.5,
+                    "base_updated_at": bill_base,
+                },
+                {
+                    "name": "Offline fractional yen bill",
+                    "amount": 100.5,
+                    "next_due": "2026-08-15",
+                },
+            ],
+            "payments": [
+                {
+                    "id": payment.id,
+                    "amount": 100.5,
+                    "base_updated_at": payment_base,
+                },
+                {
+                    "bill_id": test_bill.id,
+                    "amount": 100.5,
+                    "payment_date": "2026-08-15",
+                },
+            ],
+        },
+    )
+
+    data = response.get_json()["data"]
+    assert data["accepted_bills"] == []
+    assert data["accepted_payments"] == []
+    assert [item["reason"] for item in data["rejected_bills"]] == [
+        "invalid_amount",
+        "invalid_amount",
+    ]
+    assert [item["reason"] for item in data["rejected_payments"]] == [
+        "invalid_amount",
+        "invalid_amount",
+    ]
 
 
 def test_sync_push_accepts_base_updated_at_alias(

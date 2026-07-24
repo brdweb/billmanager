@@ -27,6 +27,7 @@ import {
   frequencyTypeForSelection,
 } from '../features/bills/formModels';
 import { billMoveChanges } from '../features/bills/listModels';
+import { getMoneyInputProps, parseMoneyInput } from '../i18n/format';
 
 type Props = NativeStackScreenProps<any, 'AddBill'>;
 
@@ -106,6 +107,7 @@ export default function AddBillScreen({ navigation, route }: Props) {
   );
 
   const styles = createStyles(colors);
+  const moneyInputProps = getMoneyInputProps();
 
   function formatDateForDisplay(date: Date): string {
     return date.toLocaleDateString(i18n.resolvedLanguage ?? i18n.language, {
@@ -139,6 +141,12 @@ export default function AddBillScreen({ navigation, route }: Props) {
 
     if (!varies && !amount) {
       Alert.alert(t('mobileParity.common.error'), t('mobileParity.addBill.errors.amountRequired'));
+      return;
+    }
+
+    const parsedAmount = varies ? null : parseMoneyInput(amount);
+    if (!varies && parsedAmount === null) {
+      Alert.alert(t('mobileParity.common.error'), t('mobileParity.billDetail.invalidAmount'));
       return;
     }
 
@@ -188,7 +196,7 @@ export default function AddBillScreen({ navigation, route }: Props) {
 
     const billData: Partial<Bill> = {
       name: name.trim(),
-      amount: varies ? null : parseFloat(amount),
+      amount: parsedAmount,
       varies,
       frequency,
       ...normalizedFrequency,
@@ -294,8 +302,7 @@ export default function AddBillScreen({ navigation, route }: Props) {
               style={[styles.input, varies && styles.inputDisabled]}
               value={amount}
               onChangeText={setAmount}
-              keyboardType="decimal-pad"
-              placeholder="0.00"
+              {...moneyInputProps}
               placeholderTextColor={colors.textMuted}
               editable={!varies}
             />

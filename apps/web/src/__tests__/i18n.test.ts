@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n, { applyLocaleDefault, setLanguage } from '../i18n';
 import {
   formatCurrency,
-  getCurrencySymbol,
   getLocale,
   setCurrencyConfig,
 } from '../lib/currency';
@@ -24,9 +23,9 @@ afterEach(async () => {
 });
 
 describe('language switching', () => {
-  it('updates document metadata, locale formatting, and the saved preference', async () => {
+  it('updates document metadata and locale formatting without replacing deployment currency', async () => {
     addMetadataElements();
-    setCurrencyConfig('en-US', 'USD');
+    setCurrencyConfig('en-US', 'CNY');
 
     setLanguage('de');
     await vi.waitFor(() => expect(i18n.language).toBe('de'));
@@ -42,22 +41,26 @@ describe('language switching', () => {
       'Behalten Sie Ihre Rechnungen und Einnahmen mühelos im Blick'
     );
     expect(getLocale()).toBe('de-US');
-    expect(getCurrencySymbol()).toBe('€');
     expect(formatCurrency(1234.56)).toBe(
       new Intl.NumberFormat('de-US', {
         style: 'currency',
-        currency: 'EUR',
+        currency: 'CNY',
       }).format(1234.56)
     );
   });
 
-  it('reapplies a saved language currency after deployment config loads', () => {
+  it('preserves deployment currency when restoring a saved language', () => {
     vi.mocked(window.localStorage.getItem).mockReturnValue('de');
-    setCurrencyConfig('en-US', 'USD');
+    setCurrencyConfig('en-US', 'JPY');
 
     applyLocaleDefault('en-US');
 
-    expect(getCurrencySymbol()).toBe('€');
+    expect(formatCurrency(1234.56)).toBe(
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'JPY',
+      }).format(1234.56)
+    );
   });
 
   it('uses the server locale when there is no saved browser preference', async () => {

@@ -9,6 +9,9 @@ Tests:
 import json
 import pytest
 
+import config
+from models import Payment
+
 
 class TestPaymentsCRUD:
     """Test payment operations."""
@@ -145,6 +148,31 @@ class TestPaymentValidation:
         data = json.loads(response.data)
         assert data.get('success') is True
         assert 'id' in data['data']
+
+    def test_payment_update_rejects_fractional_zero_minor_unit_amount(
+        self,
+        client,
+        auth_headers_with_db,
+        test_bill,
+        db_session,
+        monkeypatch,
+    ):
+        payment = Payment(
+            bill_id=test_bill.id,
+            amount=100,
+            payment_date='2026-08-15',
+        )
+        db_session.add(payment)
+        db_session.commit()
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+
+        response = client.put(
+            f'/api/v2/payments/{payment.id}',
+            headers=auth_headers_with_db,
+            json={'amount': 100.5},
+        )
+
+        assert response.status_code == 400
 
 
 class TestPaymentAuthorization:

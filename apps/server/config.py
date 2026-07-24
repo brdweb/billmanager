@@ -9,6 +9,10 @@ Supports two modes:
 import os
 import logging
 import re
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import Final
+
 from services.email_config import get_email_config
 
 logger = logging.getLogger(__name__)
@@ -269,8 +273,48 @@ OAUTH_OIDC_SKIP_EMAIL_VERIFICATION = (
 ENABLE_2FA = os.environ.get("ENABLE_2FA", "false").lower() == "true"
 ENABLE_PASSKEYS = os.environ.get("ENABLE_PASSKEYS", "false").lower() == "true"
 
-# Default currency for formatting amounts in the UI (ISO 4217 code)
-DEFAULT_CURRENCY = os.environ.get("DEFAULT_CURRENCY", "USD").upper()
+# Supported deployment currencies and their ISO 4217 minor-unit precision.
+SUPPORTED_CURRENCIES: Final[tuple[str, ...]] = (
+    "USD",
+    "EUR",
+    "JPY",
+    "GBP",
+    "CNY",
+    "CHF",
+    "AUD",
+    "CAD",
+    "HKD",
+    "SGD",
+    "INR",
+    "KRW",
+    "SEK",
+    "NZD",
+    "MXN",
+)
+CURRENCY_MINOR_UNITS: Final[Mapping[str, int]] = MappingProxyType(
+    {
+        currency: 0 if currency in {"JPY", "KRW"} else 2
+        for currency in SUPPORTED_CURRENCIES
+    }
+)
+
+
+def _parse_default_currency(value: str) -> str:
+    normalized = value.strip().upper()
+    if not normalized:
+        message = "DEFAULT_CURRENCY cannot be empty"
+        raise ValueError(message)
+    if normalized not in SUPPORTED_CURRENCIES:
+        supported = ", ".join(SUPPORTED_CURRENCIES)
+        message = f"DEFAULT_CURRENCY must be one of: {supported}; got {normalized!r}"
+        raise ValueError(message)
+    return normalized
+
+
+# Default currency for formatting and validating amounts deployment-wide.
+DEFAULT_CURRENCY: Final = _parse_default_currency(
+    os.environ.get("DEFAULT_CURRENCY", "USD")
+)
 # Default locale for formatting numbers/dates in the UI (BCP 47 tag)
 DEFAULT_LOCALE = os.environ.get("DEFAULT_LOCALE", "en-US")
 

@@ -15,7 +15,12 @@ import { useTheme } from '../context/ThemeContext';
 import { api } from '../api/client';
 import { Bill, BillShare, UserSearchResult } from '../types';
 import { useTranslation } from 'react-i18next';
-import { formatCurrency } from '../i18n/format';
+import {
+  formatCurrency,
+  getMoneyInputKeyboardType,
+  getMoneyInputPlaceholder,
+  parseMoneyInput,
+} from '../i18n/format';
 
 interface ShareBillModalProps {
   visible: boolean;
@@ -94,27 +99,30 @@ export default function ShareBillModal({ visible, onClose, bill, onShareCreated 
       return;
     }
 
+    let parsedSplitValue: number | null = null;
     if (splitType === 'percentage') {
-      const pct = parseFloat(splitValue);
-      if (isNaN(pct) || pct <= 0 || pct > 100) {
+      const percentage = Number.parseFloat(splitValue);
+      if (Number.isNaN(percentage) || percentage <= 0 || percentage > 100) {
         Alert.alert(t('mobileParity.common.error'), t('mobileParity.share.invalidPercentage'));
         return;
       }
+      parsedSplitValue = percentage;
     }
 
     if (splitType === 'fixed') {
-      const fixed = parseFloat(splitValue);
-      if (isNaN(fixed) || fixed <= 0) {
+      const fixedAmount = parseMoneyInput(splitValue);
+      if (fixedAmount === null || fixedAmount <= 0) {
         Alert.alert(t('mobileParity.common.error'), t('mobileParity.share.invalidFixed'));
         return;
       }
+      parsedSplitValue = fixedAmount;
     }
 
     setIsLoading(true);
     const result = await api.shareBill(bill.id, {
       identifier: identifier.trim(),
       split_type: splitType === 'none' ? null : splitType,
-      split_value: splitType === 'percentage' || splitType === 'fixed' ? parseFloat(splitValue) : null,
+      split_value: parsedSplitValue,
     });
     setIsLoading(false);
 
@@ -277,9 +285,9 @@ export default function ShareBillModal({ visible, onClose, bill, onShareCreated 
                 style={[styles.input, { marginTop: 12 }]}
                 value={splitValue}
                 onChangeText={setSplitValue}
-                placeholder={splitType === 'percentage' ? t('mobileParity.share.percentagePlaceholder') : t('mobileParity.share.amountPlaceholder')}
+                placeholder={splitType === 'fixed' ? getMoneyInputPlaceholder() : t('mobileParity.share.percentagePlaceholder')}
                 placeholderTextColor={colors.textMuted}
-                keyboardType="decimal-pad"
+                keyboardType={splitType === 'fixed' ? getMoneyInputKeyboardType() : 'decimal-pad'}
               />
             )}
           </View>

@@ -39,13 +39,35 @@ function renderSettings(path = '/settings') {
   );
 }
 
+function mockAuth(isAdmin: boolean) {
+  vi.mocked(useAuth).mockReturnValue({
+    isLoggedIn: true,
+    isAdmin,
+    role: isAdmin ? 'admin' : 'user',
+    user: null,
+    databases: [],
+    currentDb: null,
+    isLoading: false,
+    pendingPasswordChange: null,
+    pending2FA: null,
+    login: vi.fn(async () => ({ success: true })),
+    loginWithOAuth: vi.fn(async () => ({ success: true })),
+    complete2FA: vi.fn(async () => ({ success: true })),
+    cancel2FA: vi.fn(),
+    logout: vi.fn(async () => undefined),
+    selectDatabase: vi.fn(async () => undefined),
+    completePasswordChange: vi.fn(async () => ({ success: true })),
+    refreshAuth: vi.fn(async () => undefined),
+  });
+}
+
 describe('Settings page tabs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('only exposes the Settings tab to regular users', () => {
-    vi.mocked(useAuth).mockReturnValue({ isAdmin: false } as unknown as ReturnType<typeof useAuth>);
+    mockAuth(false);
 
     renderSettings('/settings?tab=users');
 
@@ -55,7 +77,7 @@ describe('Settings page tabs', () => {
   });
 
   it('exposes Users and Bill Groups tabs to administrators', () => {
-    vi.mocked(useAuth).mockReturnValue({ isAdmin: true } as unknown as ReturnType<typeof useAuth>);
+    mockAuth(true);
 
     renderSettings('/settings?tab=users');
 
@@ -63,5 +85,15 @@ describe('Settings page tabs', () => {
     expect(screen.getByRole('tab', { name: 'Settings' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Bill Groups' })).toBeInTheDocument();
     expect(screen.getByText('Users content')).toBeVisible();
+  });
+
+  it('shows language options from discovered catalog metadata', () => {
+    mockAuth(false);
+    renderSettings();
+
+    const languageSelect = screen.getByRole('combobox', { name: 'Language' });
+    expect(languageSelect).toHaveValue('English');
+    expect(screen.getByRole('option', { name: 'English', hidden: true })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Deutsch', hidden: true })).toBeInTheDocument();
   });
 });

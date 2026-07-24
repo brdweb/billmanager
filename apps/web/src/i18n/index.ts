@@ -1,35 +1,30 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import { setCurrency, setFormattingLanguage } from '../lib/currency';
-import en from './locales/en.json';
-import de from './locales/de.json';
+import { setFormattingLanguage } from '../lib/currency';
+import { buildLocaleRegistry, normalizeSupportedLanguage } from './registry';
 
-export const SUPPORTED_LANGUAGES = ['en', 'de'] as const;
+export { normalizeSupportedLanguage } from './registry';
+
+const localeModules = import.meta.glob('./locales/*.json', {
+  eager: true,
+  import: 'default',
+});
+const localeRegistry = buildLocaleRegistry(localeModules);
+
+export const SUPPORTED_LANGUAGES = localeRegistry.supportedLanguages;
+export const LANGUAGE_OPTIONS = localeRegistry.languageOptions;
+export const TRANSLATION_CATALOGS = localeRegistry.catalogs;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
-
-const DEFAULT_CURRENCY_BY_LANGUAGE: Record<SupportedLanguage, string> = {
-  en: 'USD',
-  de: 'EUR',
-};
 
 const STORAGE_KEY = 'billmanager:language';
 
-function isSupportedLanguage(language: string): language is SupportedLanguage {
-  return (SUPPORTED_LANGUAGES as readonly string[]).includes(language);
-}
-
-function normalizeLanguage(language: string): SupportedLanguage {
-  const normalized = language.split(/[-_]/)[0].toLowerCase();
-  return isSupportedLanguage(normalized) ? normalized : 'en';
+export function isSupportedLanguage(language: string): language is SupportedLanguage {
+  return SUPPORTED_LANGUAGES.includes(language);
 }
 
 function getStoredLanguage(): SupportedLanguage | null {
   const stored = window.localStorage.getItem(STORAGE_KEY);
   return stored && isSupportedLanguage(stored) ? stored : null;
-}
-
-function applyLanguageCurrency(language: SupportedLanguage): void {
-  setCurrency(DEFAULT_CURRENCY_BY_LANGUAGE[language]);
 }
 
 function updateDocumentMetadata(language: SupportedLanguage): void {
@@ -51,7 +46,7 @@ function updateDocumentMetadata(language: SupportedLanguage): void {
 const initialLanguage = getStoredLanguage() ?? 'en';
 
 i18n.on('languageChanged', (language) => {
-  const supportedLanguage = normalizeLanguage(language);
+  const supportedLanguage = normalizeSupportedLanguage(language, SUPPORTED_LANGUAGES);
   setFormattingLanguage(supportedLanguage);
   updateDocumentMetadata(supportedLanguage);
 });
@@ -59,10 +54,7 @@ i18n.on('languageChanged', (language) => {
 void i18n
   .use(initReactI18next)
   .init({
-    resources: {
-      en: { translation: en },
-      de: { translation: de },
-    },
+    resources: localeRegistry.resources,
     lng: initialLanguage,
     fallbackLng: 'en',
     supportedLngs: [...SUPPORTED_LANGUAGES],
@@ -71,11 +63,12 @@ void i18n
       escapeValue: false,
     },
   })
-  .then(() => updateDocumentMetadata(normalizeLanguage(i18n.language)));
+  .then(() =>
+    updateDocumentMetadata(normalizeSupportedLanguage(i18n.language, SUPPORTED_LANGUAGES))
+  );
 
 export function setLanguage(language: SupportedLanguage): void {
   window.localStorage.setItem(STORAGE_KEY, language);
-  applyLanguageCurrency(language);
   void i18n.changeLanguage(language);
 }
 
@@ -86,11 +79,10 @@ export function setLanguage(language: SupportedLanguage): void {
 export function applyLocaleDefault(locale: string): void {
   const storedLanguage = getStoredLanguage();
   if (storedLanguage) {
-    applyLanguageCurrency(storedLanguage);
     return;
   }
 
-  const language = normalizeLanguage(locale);
+  const language = normalizeSupportedLanguage(locale, SUPPORTED_LANGUAGES);
   void i18n.changeLanguage(language);
 }
 

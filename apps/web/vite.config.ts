@@ -36,6 +36,10 @@ export default defineConfig({
             return undefined;
           }
 
+          if (id.includes('/dayjs/locale/')) {
+            return undefined;
+          }
+
           if (id.includes('react') || id.includes('scheduler')) {
             return 'vendor-react';
           }

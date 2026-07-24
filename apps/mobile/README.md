@@ -35,7 +35,7 @@ Run the mobile verification suite with:
 npm run check
 ```
 
-This synchronizes the web translation catalogs, checks generated OpenAPI drift, runs ESLint, TypeScript, and unit tests, validates Maestro flow definitions and native build-profile transport policy, checks Expo package compatibility, and runs Expo Doctor. Device execution remains a separate release-candidate gate documented in the Maestro guide.
+This checks translation codegen and generated OpenAPI drift, runs ESLint, TypeScript, and unit tests, validates Maestro flow definitions and native build-profile transport policy, checks Expo package compatibility, and runs Expo Doctor. Device execution remains a separate release-candidate gate documented in the Maestro guide.
 
 ## Source-of-truth rules
 
@@ -43,8 +43,12 @@ This synchronizes the web translation catalogs, checks generated OpenAPI drift, 
 - `app.config.ts` owns bundle identifiers, application identifiers, entitlements, plugins, runtime policy, release-build transport restrictions, and derives the store-compatible numeric native version from `package.json`.
 - `eas.json` owns repeatable development, preview, and production build profiles.
 - `../server/openapi.yaml` owns the generated API schema in `src/api/generated/schema.ts`.
-- `../web/src/i18n/locales` owns shared English and German translation catalogs; `npm run i18n:sync` copies them into the mobile catalog.
+- `../web/src/i18n/locales` owns shared translation catalogs; `npm run i18n:sync` validates and copies them into the mobile catalog and regenerates Metro's static locale registry.
 - `ios/` and `android/` are generated and ignored. Make durable native changes through Expo config, config plugins, `widgets/`, or `modules/`, then regenerate with `npm run prebuild`.
+
+## Add a shared locale
+
+Add one `<code>.json` catalog to `../web/src/i18n/locales`, using a lowercase two- or three-letter code and a non-empty `_meta.languageName`. English (`en.json`) remains required. Then run `npm run i18n:sync` and commit the copied catalogs with `src/i18n/generated.ts`. Shared keys use the new catalog immediately; mobile-only keys fall back to English until localized mobile resources are added.
 
 ## Architecture map
 

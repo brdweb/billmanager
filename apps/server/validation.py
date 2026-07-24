@@ -2,7 +2,10 @@
 
 import re
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Tuple, Optional
+
+import config
 
 
 def validate_email(email: str) -> Tuple[bool, Optional[str]]:
@@ -98,39 +101,55 @@ def validate_password(password: str) -> Tuple[bool, Optional[str]]:
     return True, None
 
 
-def validate_amount(amount: any) -> Tuple[bool, Optional[str]]:
+def validate_amount(
+    amount: Decimal | int | float | str | bool | None,
+    *,
+    allow_none: bool = False,
+    allow_zero: bool = False,
+) -> Tuple[bool, Optional[str]]:
     """
     Validate monetary amount.
 
     Rules:
     - Must be a number
     - Must be positive (> 0)
-    - Maximum 2 decimal places
+    - Must respect the deployment currency's minor units
     - Cannot exceed 1 billion
 
     Returns:
         Tuple of (is_valid, error_message)
     """
     if amount is None:
-        return True, None  # Amount can be None for variable bills
-
-    try:
-        amount_float = float(amount)
-    except (TypeError, ValueError):
+        if allow_none:
+            return True, None
         return False, "Amount must be a valid number"
 
-    if amount_float <= 0:
+    if type(amount) is bool:
+        return False, "Amount must be a valid number"
+
+    try:
+        amount_decimal = Decimal(str(amount))
+    except (InvalidOperation, TypeError, ValueError):
+        return False, "Amount must be a valid number"
+
+    if not amount_decimal.is_finite():
+        return False, "Amount must be a valid number"
+
+    if amount_decimal < 0 or (amount_decimal == 0 and not allow_zero):
         return False, "Amount must be greater than 0"
 
-    if amount_float > 1_000_000_000:
+    if amount_decimal > Decimal("1000000000"):
         return False, "Amount cannot exceed 1 billion"
 
-    # Check decimal places
-    amount_str = str(amount_float)
-    if '.' in amount_str:
-        decimal_places = len(amount_str.split('.')[1])
-        if decimal_places > 2:
-            return False, "Amount cannot have more than 2 decimal places"
+    minor_units = config.CURRENCY_MINOR_UNITS[config.DEFAULT_CURRENCY]
+    quantum = Decimal(1).scaleb(-minor_units)
+    if amount_decimal != amount_decimal.quantize(quantum):
+        if minor_units == 0:
+            return (
+                False,
+                f"Amount cannot have fractional units for {config.DEFAULT_CURRENCY}",
+            )
+        return False, "Amount cannot have more than 2 decimal places"
 
     return True, None
 

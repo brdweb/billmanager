@@ -8,13 +8,7 @@ import { AccountDangerZone } from '../components/AccountDangerZone';
 import { UsersTab } from '../components/AdminPanel/UsersTab';
 import { DatabasesTab } from '../components/AdminPanel/DatabasesTab';
 import { useAuth } from '../context/AuthContext';
-import { SUPPORTED_LANGUAGES, setLanguage, type SupportedLanguage } from '../i18n';
-
-// Language names are shown in their own language (endonyms), not translated.
-const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
-  en: 'English',
-  de: 'Deutsch',
-};
+import { isSupportedLanguage, LANGUAGE_OPTIONS, setLanguage } from '../i18n';
 
 export function Settings() {
   const { t, i18n } = useTranslation();
@@ -67,9 +61,9 @@ export function Settings() {
                 <Select
                   label={t('settingsPage.languageLabel')}
                   leftSection={<IconLanguage size={16} />}
-                  data={SUPPORTED_LANGUAGES.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))}
+                  data={LANGUAGE_OPTIONS}
                   value={i18n.language}
-                  onChange={(value) => value && setLanguage(value as SupportedLanguage)}
+                  onChange={(value) => value && isSupportedLanguage(value) && setLanguage(value)}
                   allowDeselect={false}
                   w={220}
                 />

@@ -27,6 +27,8 @@ import requests
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 
+from currency import format_currency_amount
+
 logger = logging.getLogger(__name__)
 
 # Firebase Cloud Messaging configuration
@@ -214,7 +216,7 @@ def send_bill_reminder(
         body = f"{bill_name} is due in {days_until_due} days"
 
     if amount:
-        body += f" (${amount:.2f})"
+        body += f" ({format_currency_amount(amount)})"
 
     data = {
         'bill_id': str(bill_id),

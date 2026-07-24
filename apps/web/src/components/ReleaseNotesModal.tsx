@@ -2,8 +2,8 @@ import { Modal, Stack, Text, Button, Group, List, Badge, ActionIcon, Divider } f
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { releaseNotes, markVersionAsSeen, getVersionIndex } from '../config/releaseNotes';
-import { germanReleaseNotes } from '../config/releaseNotes.de';
+import { markVersionAsSeen, getVersionIndex } from '../config/releaseNotes';
+import { getReleaseNotesForLanguage } from '../config/localizedReleaseNotes';
 import { getLocale } from '../lib/currency';
 
 interface ReleaseNotesModalProps {
@@ -17,7 +17,9 @@ export function ReleaseNotesModal({ opened, onClose, initialVersion }: ReleaseNo
   // State initializes from props; parent should use key prop to force reset when modal reopens
   const [currentIndex, setCurrentIndex] = useState(() => getVersionIndex(initialVersion));
 
-  const localizedReleaseNotes = i18n.resolvedLanguage === 'de' ? germanReleaseNotes : releaseNotes;
+  const localizedReleaseNotes = getReleaseNotesForLanguage(
+    i18n.resolvedLanguage ?? i18n.language
+  );
   const release = localizedReleaseNotes[currentIndex];
   const canGoNewer = currentIndex > 0;
   const canGoOlder = currentIndex < localizedReleaseNotes.length - 1;

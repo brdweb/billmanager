@@ -14,7 +14,12 @@ import {
 
 import { useMobileRuntime } from '../../context/MobileRuntimeContext';
 import { useTheme } from '../../context/ThemeContext';
-import { formatDate, getFormattingConfig } from '../../i18n/format';
+import {
+  formatDate,
+  getFormattingConfig,
+  getMoneyInputProps,
+  parseMoneyInput,
+} from '../../i18n/format';
 import { createAndSharePdf, printHtml, shareCsv } from '../../native/shareExport';
 import type { Payment } from '../../types';
 import PaymentHistoryScreen from './PaymentHistoryScreen';
@@ -59,6 +64,7 @@ export default function PaymentHistoryContainer() {
   const runtime = useMobileRuntime();
   const { colors } = useTheme();
   const formatting = getFormattingConfig();
+  const moneyInputProps = getMoneyInputProps();
   const [filters, setFilters] = useState<PaymentHistoryFilters>(() => localizedEmptyFilters(t));
   const [sort, setSort] = useState<PaymentSort>('date_desc');
   const [page, setPage] = useState(1);
@@ -167,11 +173,13 @@ export default function PaymentHistoryContainer() {
   };
 
   const applyAmountRange = () => {
-    const minimum = minAmountDraft.trim() ? Number(minAmountDraft) : null;
-    const maximum = maxAmountDraft.trim() ? Number(maxAmountDraft) : null;
+    const hasMinimum = Boolean(minAmountDraft.trim());
+    const hasMaximum = Boolean(maxAmountDraft.trim());
+    const minimum = hasMinimum ? parseMoneyInput(minAmountDraft) : null;
+    const maximum = hasMaximum ? parseMoneyInput(maxAmountDraft) : null;
     if (
-      (minimum !== null && (!Number.isFinite(minimum) || minimum < 0))
-      || (maximum !== null && (!Number.isFinite(maximum) || maximum < 0))
+      (hasMinimum && minimum === null)
+      || (hasMaximum && maximum === null)
       || (minimum !== null && maximum !== null && minimum > maximum)
     ) {
       Alert.alert(t('mobileParity.payments.checkAmountRange'), t('mobileParity.payments.amountRangeError'));
@@ -213,8 +221,8 @@ export default function PaymentHistoryContainer() {
 
   const saveEdit = async () => {
     if (!editing) return;
-    const amount = Number(editAmount);
-    if (!Number.isFinite(amount) || amount < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(editDate)) {
+    const amount = parseMoneyInput(editAmount);
+    if (amount === null || !/^\d{4}-\d{2}-\d{2}$/.test(editDate)) {
       Alert.alert(t('mobileParity.payments.checkDetails'), t('mobileParity.payments.invalidDetails'));
       return;
     }
@@ -351,9 +359,9 @@ export default function PaymentHistoryContainer() {
               <>
                 <Text style={[styles.filterHelp, { color: colors.textSecondary }]}>{t('mobileParity.payments.amountHelp')}</Text>
                 <Text style={[styles.label, { color: colors.textSecondary }]}>{t('mobileParity.payments.minimumAmount')}</Text>
-                <TextInput accessibilityLabel={t('mobileParity.payments.minimumA11y')} keyboardType="decimal-pad" placeholder={t('mobileParity.payments.noMinimum')} placeholderTextColor={colors.textMuted} value={minAmountDraft} onChangeText={setMinAmountDraft} style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]} />
+                <TextInput accessibilityLabel={t('mobileParity.payments.minimumA11y')} {...moneyInputProps} placeholderTextColor={colors.textMuted} value={minAmountDraft} onChangeText={setMinAmountDraft} style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]} />
                 <Text style={[styles.label, { color: colors.textSecondary }]}>{t('mobileParity.payments.maximumAmount')}</Text>
-                <TextInput accessibilityLabel={t('mobileParity.payments.maximumA11y')} keyboardType="decimal-pad" placeholder={t('mobileParity.payments.noMaximum')} placeholderTextColor={colors.textMuted} value={maxAmountDraft} onChangeText={setMaxAmountDraft} style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]} />
+                <TextInput accessibilityLabel={t('mobileParity.payments.maximumA11y')} {...moneyInputProps} placeholderTextColor={colors.textMuted} value={maxAmountDraft} onChangeText={setMaxAmountDraft} style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]} />
                 <Pressable accessibilityRole="button" onPress={applyAmountRange} style={[styles.applyButton, { backgroundColor: colors.primary }]}>
                   <Text style={styles.applyButtonText}>{t('mobileParity.payments.applyAmount')}</Text>
                 </Pressable>
@@ -426,7 +434,7 @@ export default function PaymentHistoryContainer() {
           </View>
           <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
             <Text style={[styles.label, { color: colors.textSecondary }]}>{t('billModal.amountLabel')}</Text>
-            <TextInput accessibilityLabel={t('mobileParity.payments.amountA11y')} keyboardType="decimal-pad" value={editAmount} onChangeText={setEditAmount} style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]} />
+            <TextInput accessibilityLabel={t('mobileParity.payments.amountA11y')} {...moneyInputProps} value={editAmount} onChangeText={setEditAmount} style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]} />
             <Text style={[styles.label, { color: colors.textSecondary }]}>{t('mobileParity.billDetail.paymentDate')}</Text>
             <TextInput accessibilityLabel={t('mobileParity.payments.dateA11y')} autoCapitalize="none" value={editDate} onChangeText={setEditDate} style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]} />
             <Text style={[styles.label, { color: colors.textSecondary }]}>{t('billModal.notesLabel')}</Text>

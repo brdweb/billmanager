@@ -68,6 +68,10 @@ What these commands do:
 
 Mobile development uses an Expo development client rather than Expo Go. See the [mobile build and release-readiness guide](apps/mobile/README.md).
 
+### Add a Language
+
+Add one complete `<code>.json` catalog to [`apps/web/src/i18n/locales`](apps/web/src/i18n/locales), using a lowercase two- or three-letter language code. Copy `en.json`, translate every value, keep the same keys, and set a non-empty `_meta.languageName` for the language picker. The web app discovers the new file automatically. For the existing mobile sync and code-generation steps, see [Add a shared locale](apps/mobile/README.md#add-a-shared-locale).
+
 Useful day-to-day commands:
 
 ```bash
@@ -197,7 +201,7 @@ postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
 | `RESEND_API_KEY` | Resend API key for hosted/existing installs | None |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | Uses `APP_URL` or localhost |
 | `DEPLOYMENT_MODE` | `self-hosted` or `saas` | `self-hosted` |
-| `DEFAULT_CURRENCY` | ISO 4217 currency code used to format bill amounts | `USD` |
+| `DEFAULT_CURRENCY` | Deployment-wide bill currency. Supported: `USD`, `EUR`, `JPY`, `GBP`, `CNY`, `CHF`, `AUD`, `CAD`, `HKD`, `SGD`, `INR`, `KRW`, `SEK`, `NZD`, `MXN` | `USD` |
 | `DEFAULT_LOCALE` | BCP 47 locale used to format bill amounts | `en-US` |
 | `ENABLE_2FA` | Enable two-factor authentication flows | `false` |
 | `ENABLE_PASSKEYS` | Enable passkey (WebAuthn) support | `false` |
@@ -230,6 +234,14 @@ postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
 | `OAUTH_OIDC_USERNAME_CLAIM` | Claim name for username | `preferred_username` |
 | `OAUTH_OIDC_NAME_CLAIM` | Claim name for display name | `name` |
 | `OAUTH_OIDC_SKIP_EMAIL_VERIFICATION` | Skip email verification check (for providers that don't include `email_verified`) | `false` |
+
+#### Currency and Language
+
+`DEFAULT_CURRENCY` is a Docker environment setting for the whole deployment, not a per-transaction choice. There is no currency selector in the web or mobile UI. Changing the interface language or `DEFAULT_LOCALE` changes language and regional formatting only, never the configured currency.
+
+The supported currency order follows the final 2025 BIS foreign-exchange turnover table: `USD`, `EUR`, `JPY`, `GBP`, `CNY`, `CHF`, `AUD`, `CAD`, `HKD`, `SGD`, `INR`, `KRW`, `SEK`, `NZD`, `MXN`. `JPY` and `KRW` use zero minor units, so amounts must be whole numbers. Every other supported currency uses two minor units. An empty or unsupported `DEFAULT_CURRENCY` stops the server during startup.
+
+Changing `DEFAULT_CURRENCY` changes validation and display, but does not convert stored amounts. Review existing fractional data before switching to `JPY` or `KRW`. SaaS subscription prices remain in USD regardless of this setting.
 
 **Security Note:** In production, `JWT_SECRET_KEY` or `FLASK_SECRET_KEY` **must** be explicitly set. The application will refuse to start without it. Generate secure keys with: `openssl rand -hex 32`
 

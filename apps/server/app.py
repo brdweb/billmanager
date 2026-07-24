@@ -100,6 +100,8 @@ from config import (
     WEBAUTHN_RP_NAME,
     WEBAUTHN_EXPECTED_ORIGINS,
 )
+from currency import currency_amount_value, quantize_currency_amount
+from percentage import validate_percentage
 from validation import (
     validate_email,
     validate_username,
@@ -1247,8 +1249,8 @@ def forecast_bill_occurrences(bill, amount, start_date, end_date, source, db_nam
                 "source": source,
                 "share_id": share.id if share else None,
                 "counterparty_name": share.owner.username if share and share.owner else None,
-                "amount": round(abs(amount), 2),
-                "signed_amount": round(signed_amount, 2),
+                "amount": currency_amount_value(abs(amount)),
+                "signed_amount": currency_amount_value(signed_amount),
                 "category": bill.category,
                 "account": bill.account,
                 "is_variable": bool(bill.is_variable),
@@ -2618,11 +2620,11 @@ def jwt_create_bill():
     if not is_valid:
         return jsonify({"success": False, "error": error}), 400
 
-    # Validate amount if not variable
-    if not data.get("varies", False):
-        is_valid, error = validate_amount(data.get("amount"))
-        if not is_valid:
-            return jsonify({"success": False, "error": error}), 400
+    is_valid, error = validate_amount(
+        data.get("amount"), allow_none=bool(data.get("varies", False))
+    )
+    if not is_valid:
+        return jsonify({"success": False, "error": error}), 400
 
     # Validate frequency
     is_valid, error = validate_frequency(data.get("frequency", "monthly"))
@@ -2830,6 +2832,14 @@ def jwt_update_bill(bill_id):
     )
     if conflict:
         return conflict
+
+    if "amount" in data or "varies" in data:
+        is_valid, error = validate_amount(
+            data.get("amount", bill.amount),
+            allow_none=bool(data.get("varies", bill.is_variable)),
+        )
+        if not is_valid:
+            return jsonify({"success": False, "error": error}), 400
 
     # Handle moving bill to a different database
     if destination_db:
@@ -3078,9 +3088,14 @@ def jwt_pay_bill(bill_id):
     if conflict:
         return conflict
 
+    payment_amount = data.get("amount", bill.amount)
+    is_valid, error = validate_amount(payment_amount)
+    if not is_valid:
+        return jsonify({"success": False, "error": error}), 400
+
     payment = Payment(
         bill_id=bill.id,
-        amount=data.get("amount", bill.amount),
+        amount=payment_amount,
         payment_date=data.get("payment_date", datetime.date.today().isoformat()),
         notes=data.get("notes"),
     )
@@ -3359,6 +3374,9 @@ def jwt_update_payment(payment_id):
         return conflict
 
     if "amount" in data:
+        is_valid, error = validate_amount(data["amount"])
+        if not is_valid:
+            return jsonify({"success": False, "error": error}), 400
         payment.amount = data["amount"]
     if "payment_date" in data:
         payment.payment_date = data["payment_date"]
@@ -3503,14 +3521,15 @@ def jwt_share_bill(bill_id):
                     "error": f"Split value required for {split_type} split",
                 }
             ), 400
-        if split_type == "percentage" and (split_value < 0 or split_value > 100):
-            return jsonify(
-                {"success": False, "error": "Percentage must be between 0 and 100"}
-            ), 400
-        if split_type == "fixed" and split_value < 0:
-            return jsonify(
-                {"success": False, "error": "Fixed amount cannot be negative"}
-            ), 400
+        if split_type == "percentage":
+            percentage, error = validate_percentage(split_value)
+            if percentage is None:
+                return jsonify({"success": False, "error": error}), 400
+            split_value = percentage
+        if split_type == "fixed":
+            is_valid, error = validate_amount(split_value, allow_zero=True)
+            if not is_valid:
+                return jsonify({"success": False, "error": error}), 400
 
     # Check for existing active share
     existing = (
@@ -3827,8 +3846,8 @@ def jwt_get_settlements():
     i_owe.sort(key=open_sort_key)
     settled.sort(key=lambda item: item["paid_date"] or "", reverse=True)
 
-    total_owed_to_me = round(sum(item["amount"] for item in owed_to_me), 2)
-    total_i_owe = round(sum(item["amount"] for item in i_owe), 2)
+    total_owed_to_me = currency_amount_value(sum(item["amount"] for item in owed_to_me))
+    total_i_owe = currency_amount_value(sum(item["amount"] for item in i_owe))
     overdue_owed_to_me = sum(1 for item in owed_to_me if item["due_status"] == "overdue")
     overdue_i_owe = sum(1 for item in i_owe if item["due_status"] == "overdue")
 
@@ -3845,7 +3864,7 @@ def jwt_get_settlements():
                 "summary": {
                     "owed_to_me": total_owed_to_me,
                     "i_owe": total_i_owe,
-                    "net_balance": round(total_owed_to_me - total_i_owe, 2),
+                    "net_balance": currency_amount_value(total_owed_to_me - total_i_owe),
                     "open_count": len(owed_to_me) + len(i_owe),
                     "settled_count": len(settled),
                     "overdue_owed_to_me": overdue_owed_to_me,
@@ -4270,26 +4289,34 @@ def jwt_update_share(share_id):
     if conflict:
         return conflict
 
-    # Update split configuration
-    if "split_type" in data:
-        split_type = data["split_type"]
-        if split_type and split_type not in ("percentage", "fixed", "equal"):
-            return jsonify({"success": False, "error": "Invalid split type"}), 400
-        share.split_type = split_type
+    split_type = data.get("split_type", share.split_type)
+    if split_type and split_type not in ("percentage", "fixed", "equal"):
+        return jsonify({"success": False, "error": "Invalid split type"}), 400
 
-    if "split_value" in data:
+    if split_type == "percentage":
+        percentage, error = validate_percentage(
+            data.get("split_value", share.split_value)
+        )
+        if percentage is None:
+            return jsonify({"success": False, "error": error}), 400
+        if "split_value" in data:
+            share.split_value = percentage
+
+    if "split_value" in data and split_type != "percentage":
         split_value = data["split_value"]
-        if share.split_type == "percentage" and split_value is not None:
-            if split_value < 0 or split_value > 100:
-                return jsonify(
-                    {"success": False, "error": "Percentage must be between 0 and 100"}
-                ), 400
-        if share.split_type == "fixed" and split_value is not None:
-            if split_value < 0:
-                return jsonify(
-                    {"success": False, "error": "Fixed amount cannot be negative"}
-                ), 400
+        if split_type == "fixed":
+            is_valid, error = validate_amount(split_value, allow_zero=True)
+            if not is_valid:
+                return jsonify({"success": False, "error": error}), 400
         share.split_value = split_value
+
+    if split_type == "fixed" and "split_value" not in data:
+        is_valid, error = validate_amount(share.split_value, allow_zero=True)
+        if not is_valid:
+            return jsonify({"success": False, "error": error}), 400
+
+    if "split_type" in data:
+        share.split_type = split_type
 
     db.session.flush()
 
@@ -4425,6 +4452,11 @@ def jwt_mark_share_paid(share_id):
         # Get recipient's username for the note
         recipient = db.session.get(User, g.jwt_user_id)
         recipient_name = recipient.username if recipient else "Unknown"
+
+        portion_amount = quantize_currency_amount(portion_amount)
+        is_valid, error = validate_amount(portion_amount, allow_zero=True)
+        if not is_valid:
+            return jsonify({"success": False, "error": error}), 400
 
         payment = Payment(
             bill_id=share.bill_id,
@@ -4924,10 +4956,11 @@ def jwt_get_cash_flow_forecast():
         )
     )
 
+    starting_balance = currency_amount_value(starting_balance)
     balance = starting_balance
     for item in occurrences:
         balance += item["signed_amount"]
-        item["balance_after"] = round(balance, 2)
+        item["balance_after"] = currency_amount_value(balance)
 
     daily_net = {}
     for item in occurrences:
@@ -4951,18 +4984,18 @@ def jwt_get_cash_flow_forecast():
         daily.append(
             {
                 "date": day_key,
-                "balance": round(running_balance, 2),
-                "net_change": round(net_change, 2),
+                "balance": currency_amount_value(running_balance),
+                "net_change": currency_amount_value(net_change),
             }
         )
 
-    total_income = round(
-        sum(item["signed_amount"] for item in occurrences if item["signed_amount"] > 0), 2
+    total_income = currency_amount_value(
+        sum(item["signed_amount"] for item in occurrences if item["signed_amount"] > 0)
     )
-    total_expenses = round(
-        abs(sum(item["signed_amount"] for item in occurrences if item["signed_amount"] < 0)), 2
+    total_expenses = currency_amount_value(
+        abs(sum(item["signed_amount"] for item in occurrences if item["signed_amount"] < 0))
     )
-    ending_balance = round(daily[-1]["balance"] if daily else starting_balance, 2)
+    ending_balance = currency_amount_value(daily[-1]["balance"] if daily else starting_balance)
     runway_days = None
     if first_negative_date:
         runway_days = (
@@ -4977,13 +5010,13 @@ def jwt_get_cash_flow_forecast():
                     "start_date": start_date.isoformat(),
                     "end_date": end_date.isoformat(),
                     "days": days,
-                    "starting_balance": round(starting_balance, 2),
+                    "starting_balance": currency_amount_value(starting_balance),
                     "ending_balance": ending_balance,
-                    "lowest_balance": round(lowest_balance, 2),
+                    "lowest_balance": currency_amount_value(lowest_balance),
                     "lowest_balance_date": lowest_balance_date,
                     "total_income": total_income,
                     "total_expenses": total_expenses,
-                    "net_change": round(total_income - total_expenses, 2),
+                    "net_change": currency_amount_value(total_income - total_expenses),
                     "runway_days": runway_days,
                     "first_negative_date": first_negative_date,
                     "occurrence_count": len(occurrences),
@@ -8677,6 +8710,15 @@ def jwt_sync_push():
                 )
                 continue
 
+            if "amount" in bill_data or "varies" in bill_data:
+                is_valid, _ = validate_amount(
+                    bill_data.get("amount", bill.amount),
+                    allow_none=bool(bill_data.get("varies", bill.is_variable)),
+                )
+                if not is_valid:
+                    rejected_bills.append({"id": bill_id, "reason": "invalid_amount"})
+                    continue
+
             next_reminder_days = None
             if "reminder_days" in bill_data:
                 try:
@@ -8724,6 +8766,14 @@ def jwt_sync_push():
                 rejected_bills.append(
                     {"id": None, "reason": "missing_required_fields", "data": bill_data}
                 )
+                continue
+
+            is_valid, _ = validate_amount(
+                bill_data.get("amount"),
+                allow_none=bool(bill_data.get("varies", False)),
+            )
+            if not is_valid:
+                rejected_bills.append({"id": None, "reason": "invalid_amount"})
                 continue
 
             try:
@@ -8818,6 +8868,14 @@ def jwt_sync_push():
                 )
                 continue
 
+            if "amount" in payment_data:
+                is_valid, _ = validate_amount(payment_data["amount"])
+                if not is_valid:
+                    rejected_payments.append(
+                        {"id": payment_id, "reason": "invalid_amount"}
+                    )
+                    continue
+
             # Apply changes
             if "amount" in payment_data:
                 payment.amount = payment_data["amount"]
@@ -8835,7 +8893,7 @@ def jwt_sync_push():
                     {"id": None, "reason": "invalid_bill_id", "data": payment_data}
                 )
                 continue
-            if not payment_data.get("amount") or not payment_data.get("payment_date"):
+            if "amount" not in payment_data or not payment_data.get("payment_date"):
                 rejected_payments.append(
                     {
                         "id": None,
@@ -8843,6 +8901,11 @@ def jwt_sync_push():
                         "data": payment_data,
                     }
                 )
+                continue
+
+            is_valid, _ = validate_amount(payment_data["amount"])
+            if not is_valid:
+                rejected_payments.append({"id": None, "reason": "invalid_amount"})
                 continue
 
             # Verify bill exists and belongs to this database

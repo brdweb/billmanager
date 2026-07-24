@@ -8,10 +8,12 @@ Tests:
 """
 import json
 import datetime
+from decimal import Decimal
+
 import pytest
 
 import config
-from models import Bill, BillShare, Database, ShareAuditLog, db
+from models import Bill, BillShare, CategoryBudget, Database, Payment, ShareAuditLog, db
 
 
 class TestBillsCRUD:
@@ -636,6 +638,82 @@ class TestBillSettlements:
         assert recipient_data['summary']['settled_count'] == 1
         assert recipient_data['settled'][0]['direction'] == 'i_owe'
 
+    def test_zero_minor_unit_settlements_quantize_derived_portions(
+        self,
+        client,
+        auth_headers_with_db,
+        db_session,
+        test_bill,
+        admin_user,
+        regular_user,
+        monkeypatch,
+    ):
+        test_bill.amount = 101
+        db_session.commit()
+        self._create_accepted_share(db_session, test_bill, admin_user, regular_user)
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+
+        response = client.get('/api/v2/settlements', headers=auth_headers_with_db)
+
+        assert response.status_code == 200
+        data = response.get_json()['data']
+        assert data['owed_to_me'][0]['amount'] == 51
+        assert data['summary']['owed_to_me'] == 51
+        assert data['summary']['net_balance'] == 51
+
+    @pytest.mark.parametrize(
+        ('currency', 'bill_amount', 'split_type', 'split_value', 'expected_amount'),
+        [
+            ('JPY', 101, 'equal', None, 51),
+            ('JPY', 101, 'percentage', 50, 51),
+            ('USD', 1.01, 'equal', None, 0.51),
+        ],
+    )
+    def test_mark_share_paid_quantizes_derived_amount_half_up_to_minor_units(
+        self,
+        client,
+        user_auth_headers,
+        db_session,
+        test_bill,
+        admin_user,
+        regular_user,
+        monkeypatch,
+        currency,
+        bill_amount,
+        split_type,
+        split_value,
+        expected_amount,
+    ):
+        recipient_db = self._create_recipient_database(db_session, regular_user)
+        test_bill.amount = bill_amount
+        db_session.commit()
+        share = self._create_accepted_share(
+            db_session,
+            test_bill,
+            admin_user,
+            regular_user,
+            split_type=split_type,
+            split_value=split_value,
+        )
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', currency)
+        recipient_headers = {
+            **user_auth_headers,
+            'X-Database': recipient_db.name,
+        }
+
+        response = client.post(
+            f'/api/v2/shares/{share.id}/mark-paid',
+            headers=recipient_headers,
+        )
+
+        assert response.status_code == 200
+        payment_id = response.get_json()['data']['payment_id']
+        payment = db_session.get(Payment, payment_id)
+        assert payment.amount == expected_amount
+        payment_decimal = Decimal(str(payment.amount))
+        quantum = Decimal(1).scaleb(-config.CURRENCY_MINOR_UNITS[currency])
+        assert payment_decimal == payment_decimal.quantize(quantum)
+
 
 class TestCashFlowForecast:
     """Test cash-flow forecast projections."""
@@ -744,6 +822,57 @@ class TestCashFlowForecast:
         assert forecast['occurrences'][0]['source'] == 'shared'
         assert forecast['occurrences'][0]['amount'] == 50
 
+    def test_zero_minor_unit_cash_flow_quantizes_derived_amounts(
+        self,
+        client,
+        user_auth_headers,
+        db_session,
+        test_database,
+        admin_user,
+        regular_user,
+        monkeypatch,
+    ):
+        today = datetime.date.today().isoformat()
+        bill = Bill(
+            database_id=test_database.id,
+            name='Odd yen share',
+            amount=101,
+            frequency='monthly',
+            due_date=today,
+            type='expense',
+            account='Checking',
+        )
+        db_session.add(bill)
+        db_session.commit()
+        db_session.add(BillShare(
+            bill_id=bill.id,
+            owner_user_id=admin_user.id,
+            shared_with_user_id=regular_user.id,
+            shared_with_identifier=regular_user.username,
+            identifier_type='username',
+            status='accepted',
+            split_type='equal',
+            accepted_at=datetime.datetime.now(datetime.timezone.utc),
+        ))
+        db_session.commit()
+        recipient_db = self._create_recipient_database(db_session, regular_user)
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+        recipient_headers = {
+            **user_auth_headers,
+            'X-Database': recipient_db.name,
+        }
+
+        response = client.get(
+            '/api/v2/forecast/cash-flow?starting_balance=100&days=7',
+            headers=recipient_headers,
+        )
+
+        assert response.status_code == 200
+        forecast = response.get_json()['data']
+        assert forecast['occurrences'][0]['amount'] == 51
+        assert forecast['summary']['total_expenses'] == 51
+        assert forecast['summary']['ending_balance'] == 49
+
 
 class TestBillValidation:
     """Test bill input validation."""
@@ -784,6 +913,316 @@ class TestBillValidation:
                                })
         # Should either reject or handle appropriately
         assert response.status_code in [400, 201]
+
+    def test_fixed_bill_create_rejects_fractional_zero_minor_unit_amount(
+        self, client, auth_headers_with_db, monkeypatch
+    ):
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+
+        response = client.post('/api/v2/bills', headers=auth_headers_with_db, json={
+            'name': 'Fractional yen',
+            'amount': 100.5,
+            'frequency': 'monthly',
+            'next_due': '2026-08-15',
+        })
+
+        assert response.status_code == 400
+
+    def test_fixed_bill_create_requires_an_amount(
+        self, client, auth_headers_with_db
+    ):
+        response = client.post('/api/v2/bills', headers=auth_headers_with_db, json={
+            'name': 'Missing fixed amount',
+            'frequency': 'monthly',
+            'next_due': '2026-08-15',
+        })
+
+        assert response.status_code == 400
+
+    def test_variable_bill_create_allows_none_amount(
+        self, client, auth_headers_with_db
+    ):
+        response = client.post('/api/v2/bills', headers=auth_headers_with_db, json={
+            'name': 'Variable utility',
+            'amount': None,
+            'varies': True,
+            'frequency': 'monthly',
+            'next_due': '2026-08-15',
+        })
+
+        assert response.status_code == 201
+
+    def test_bill_update_rejects_fractional_zero_minor_unit_amount(
+        self, client, auth_headers_with_db, test_bill, monkeypatch
+    ):
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+
+        response = client.put(
+            f'/api/v2/bills/{test_bill.id}',
+            headers=auth_headers_with_db,
+            json={'amount': 100.5},
+        )
+
+        assert response.status_code == 400
+
+    def test_bill_update_cannot_make_a_variable_bill_fixed_without_an_amount(
+        self, client, auth_headers_with_db, test_bill, db_session
+    ):
+        test_bill.is_variable = True
+        test_bill.amount = None
+        db_session.commit()
+
+        response = client.put(
+            f'/api/v2/bills/{test_bill.id}',
+            headers=auth_headers_with_db,
+            json={'varies': False},
+        )
+
+        assert response.status_code == 400
+
+    def test_bill_payment_rejects_fractional_zero_minor_unit_amount(
+        self, client, auth_headers_with_db, test_bill, monkeypatch
+    ):
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+
+        response = client.post(
+            f'/api/v2/bills/{test_bill.id}/pay',
+            headers=auth_headers_with_db,
+            json={'amount': 100.5, 'payment_date': '2026-08-15'},
+        )
+
+        assert response.status_code == 400
+
+
+class TestCurrencyAwareBudgetValidation:
+    def test_budget_create_rejects_fractional_zero_minor_unit_amount(
+        self, client, auth_headers_with_db, monkeypatch
+    ):
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'KRW')
+
+        response = client.post(
+            '/api/v2/budgets',
+            headers=auth_headers_with_db,
+            json={'category': 'Dining', 'monthly_limit': 100.5},
+        )
+
+        assert response.status_code == 400
+
+    def test_budget_update_rejects_fractional_zero_minor_unit_amount(
+        self, client, auth_headers_with_db, test_database, db_session, monkeypatch
+    ):
+        budget = CategoryBudget(
+            database_id=test_database.id,
+            category='Dining',
+            monthly_limit=100,
+        )
+        db_session.add(budget)
+        db_session.commit()
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'KRW')
+
+        response = client.put(
+            f'/api/v2/budgets/{budget.id}',
+            headers=auth_headers_with_db,
+            json={'monthly_limit': 100.5},
+        )
+
+        assert response.status_code == 400
+
+
+class TestCurrencyAwareFixedShareValidation:
+    def test_fixed_share_create_rejects_fractional_zero_minor_unit_amount(
+        self, client, auth_headers_with_db, test_bill, regular_user, monkeypatch
+    ):
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+
+        response = client.post(
+            f'/api/v2/bills/{test_bill.id}/share',
+            headers=auth_headers_with_db,
+            json={
+                'identifier': regular_user.username,
+                'split_type': 'fixed',
+                'split_value': 1.5,
+            },
+        )
+
+        assert response.status_code == 400
+
+    def test_fixed_share_create_preserves_zero_amount_semantics(
+        self,
+        client,
+        auth_headers_with_db,
+        test_bill,
+        regular_user,
+        db_session,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+
+        response = client.post(
+            f'/api/v2/bills/{test_bill.id}/share',
+            headers=auth_headers_with_db,
+            json={
+                'identifier': regular_user.username,
+                'split_type': 'fixed',
+                'split_value': 0,
+            },
+        )
+
+        assert response.status_code == 201
+        share = db_session.get(BillShare, response.get_json()['data']['id'])
+        assert share.split_value == Decimal('0.00')
+        assert share.calculate_portion() == 0
+
+    def test_fixed_share_update_rejects_fractional_zero_minor_unit_amount(
+        self,
+        client,
+        auth_headers_with_db,
+        test_bill,
+        admin_user,
+        regular_user,
+        db_session,
+        monkeypatch,
+    ):
+        share = BillShare(
+            bill_id=test_bill.id,
+            owner_user_id=admin_user.id,
+            shared_with_user_id=regular_user.id,
+            shared_with_identifier=regular_user.username,
+            identifier_type='username',
+            status='accepted',
+            split_type='fixed',
+            split_value=1,
+        )
+        db_session.add(share)
+        db_session.commit()
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+
+        response = client.put(
+            f'/api/v2/shares/{share.id}',
+            headers=auth_headers_with_db,
+            json={'split_value': 1.5},
+        )
+
+        assert response.status_code == 400
+
+    def test_percentage_share_accepts_and_persists_two_decimal_precision(
+        self,
+        client,
+        auth_headers_with_db,
+        test_bill,
+        regular_user,
+        db_session,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+
+        response = client.post(
+            f'/api/v2/bills/{test_bill.id}/share',
+            headers=auth_headers_with_db,
+            json={
+                'identifier': regular_user.username,
+                'split_type': 'percentage',
+                'split_value': 33.33,
+            },
+        )
+
+        assert response.status_code == 201
+        share = db_session.get(BillShare, response.get_json()['data']['id'])
+        assert share.split_value == Decimal('33.33')
+
+    def test_percentage_share_rejects_precision_unsupported_by_numeric_column(
+        self, client, auth_headers_with_db, test_bill, regular_user, monkeypatch
+    ):
+        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+
+        response = client.post(
+            f'/api/v2/bills/{test_bill.id}/share',
+            headers=auth_headers_with_db,
+            json={
+                'identifier': regular_user.username,
+                'split_type': 'percentage',
+                'split_value': 33.333,
+            },
+        )
+
+        assert response.status_code == 400
+
+    def test_percentage_share_zero_is_persisted_and_calculated_as_zero(
+        self,
+        client,
+        auth_headers_with_db,
+        test_bill,
+        regular_user,
+        db_session,
+    ):
+        response = client.post(
+            f'/api/v2/bills/{test_bill.id}/share',
+            headers=auth_headers_with_db,
+            json={
+                'identifier': regular_user.username,
+                'split_type': 'percentage',
+                'split_value': 0,
+            },
+        )
+
+        assert response.status_code == 201
+        share = db_session.get(BillShare, response.get_json()['data']['id'])
+        assert share.split_value == Decimal('0.00')
+        assert share.calculate_portion() == 0
+
+    @pytest.mark.parametrize(
+        'split_value',
+        [True, '33.33%', float('nan'), float('inf')],
+    )
+    def test_percentage_share_create_rejects_malformed_values(
+        self, client, auth_headers_with_db, test_bill, regular_user, split_value
+    ):
+        response = client.post(
+            f'/api/v2/bills/{test_bill.id}/share',
+            headers=auth_headers_with_db,
+            json={
+                'identifier': regular_user.username,
+                'split_type': 'percentage',
+                'split_value': split_value,
+            },
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.parametrize(
+        'split_value',
+        [True, '33.33%', float('nan'), float('inf'), 33.333],
+    )
+    def test_percentage_share_update_rejects_malformed_values(
+        self,
+        client,
+        auth_headers_with_db,
+        test_bill,
+        admin_user,
+        regular_user,
+        db_session,
+        split_value,
+    ):
+        share = BillShare(
+            bill_id=test_bill.id,
+            owner_user_id=admin_user.id,
+            shared_with_user_id=regular_user.id,
+            shared_with_identifier=regular_user.username,
+            identifier_type='username',
+            status='accepted',
+            split_type='percentage',
+            split_value=50,
+        )
+        db_session.add(share)
+        db_session.commit()
+
+        response = client.put(
+            f'/api/v2/shares/{share.id}',
+            headers=auth_headers_with_db,
+            json={'split_value': split_value},
+        )
+
+        assert response.status_code == 400
 
 
 class TestBillShareCreation:

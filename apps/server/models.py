@@ -5,6 +5,8 @@ import secrets
 from sqlalchemy import or_
 from werkzeug.security import generate_password_hash, check_password_hash
 
+from currency import currency_amount_value
+
 db = SQLAlchemy()
 
 
@@ -663,16 +665,16 @@ class BillShare(db.Model):
         if self.bill.amount is None:
             return None
         if not self.split_type:
-            return self.bill.amount  # Full amount if no split
+            return currency_amount_value(self.bill.amount)
         if self.split_type == 'equal':
-            return self.bill.amount / 2
-        if self.split_type == 'percentage' and self.split_value:
-            # Convert Decimal to float for arithmetic (split_value is Numeric)
-            return self.bill.amount * (float(self.split_value) / 100)
-        if self.split_type == 'fixed' and self.split_value:
-            # Convert Decimal to float for comparison
-            return min(float(self.split_value), self.bill.amount)
-        return self.bill.amount
+            return currency_amount_value(self.bill.amount / 2)
+        if self.split_type == 'percentage' and self.split_value is not None:
+            return currency_amount_value(
+                self.bill.amount * (float(self.split_value) / 100)
+            )
+        if self.split_type == 'fixed' and self.split_value is not None:
+            return currency_amount_value(min(float(self.split_value), self.bill.amount))
+        return currency_amount_value(self.bill.amount)
 
     def set_invite_token(self, token=None):
         raw_token = token or secrets.token_urlsafe(32)

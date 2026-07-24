@@ -6,6 +6,13 @@ export interface FormattingConfig {
   language: SupportedLanguage;
 }
 
+export type MoneyInputKeyboardType = 'decimal-pad' | 'number-pad';
+
+export interface MoneyInputProps {
+  readonly keyboardType: MoneyInputKeyboardType;
+  readonly placeholder: string;
+}
+
 const FALLBACK_CONFIG: FormattingConfig = {
   locale: 'en-US',
   currency: 'USD',
@@ -13,6 +20,19 @@ const FALLBACK_CONFIG: FormattingConfig = {
 };
 
 let formattingConfig = FALLBACK_CONFIG;
+
+function currencyFormatter(): Intl.NumberFormat {
+  return new Intl.NumberFormat(formattingConfig.locale, {
+    style: 'currency',
+    currency: formattingConfig.currency,
+  });
+}
+
+function decimalSeparator(): string {
+  return new Intl.NumberFormat(formattingConfig.locale)
+    .formatToParts(1.1)
+    .find((part) => part.type === 'decimal')?.value ?? '.';
+}
 
 function resolveLocale(locale: string, language: SupportedLanguage): string {
   try {
@@ -25,7 +45,7 @@ function resolveLocale(locale: string, language: SupportedLanguage): string {
       numberingSystem: base.numberingSystem,
     }).toString();
   } catch {
-    return language === 'de' ? 'de-DE' : 'en-US';
+    return language;
   }
 }
 
@@ -57,10 +77,66 @@ export function getFormattingConfig(): FormattingConfig {
 }
 
 export function formatCurrency(value: number | null | undefined): string {
-  return new Intl.NumberFormat(formattingConfig.locale, {
-    style: 'currency',
-    currency: formattingConfig.currency,
-  }).format(value ?? 0);
+  return currencyFormatter().format(value ?? 0);
+}
+
+export function getCurrencyFractionDigits(): number {
+  const options = currencyFormatter().resolvedOptions();
+  return options.maximumFractionDigits ?? options.minimumFractionDigits ?? 0;
+}
+
+export function getMoneyInputPlaceholder(): string {
+  const fractionDigits = getCurrencyFractionDigits();
+  return fractionDigits === 0
+    ? '0'
+    : `0${decimalSeparator()}${'0'.repeat(fractionDigits)}`;
+}
+
+export function getMoneyInputKeyboardType(): MoneyInputKeyboardType {
+  return getCurrencyFractionDigits() === 0 ? 'number-pad' : 'decimal-pad';
+}
+
+export function getMoneyInputProps(): MoneyInputProps {
+  return {
+    keyboardType: getMoneyInputKeyboardType(),
+    placeholder: getMoneyInputPlaceholder(),
+  };
+}
+
+export function parseMoneyInput(value: string): number | null {
+  const text = value.trim();
+  if (!text) return null;
+
+  const fractionDigits = getCurrencyFractionDigits();
+  if (fractionDigits === 0) {
+    if (!/^\d+$/.test(text)) return null;
+  } else {
+    const separators = [...new Set([decimalSeparator(), '.', ','])];
+    const usedSeparators = separators.filter((separator) => text.includes(separator));
+    if (usedSeparators.length > 1) return null;
+
+    const separator = usedSeparators[0];
+    if (separator) {
+      const parts = text.split(separator);
+      const integer = parts[0];
+      const fraction = parts[1];
+      if (
+        parts.length !== 2
+        || !integer
+        || !fraction
+        || !/^\d+$/.test(integer)
+        || !/^\d+$/.test(fraction)
+        || fraction.length > fractionDigits
+      ) return null;
+    } else if (!/^\d+$/.test(text)) {
+      return null;
+    }
+  }
+
+  const normalized = [...new Set([decimalSeparator(), ','])]
+    .reduce((current, separator) => current.replace(separator, '.'), text);
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount >= 0 ? amount : null;
 }
 
 export function formatCurrencyCompact(value: number | null | undefined): string {

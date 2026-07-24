@@ -429,3 +429,5 @@ export const germanReleaseNotes: ReleaseNote[] = [
     ],
   },
 ];
+
+export default germanReleaseNotes;

@@ -32,7 +32,7 @@ npm run check
 
 The check command performs these steps:
 
-1. copies current English and German web catalogs into the mobile catalog;
+1. fails when copied web catalogs or the generated Metro locale registry drift;
 2. regenerates the OpenAPI TypeScript schema and fails on drift;
 3. runs the mobile lint, TypeScript, and unit-test gates;
 4. validates every Maestro flow definition;
@@ -43,6 +43,7 @@ Useful focused commands:
 
 ```bash
 npm run i18n:sync
+npm run i18n:check
 npm run api:generate
 npm run lint
 npm run typecheck

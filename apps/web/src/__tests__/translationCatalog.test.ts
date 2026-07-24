@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import en from '../i18n/locales/en.json';
-import de from '../i18n/locales/de.json';
+import { TRANSLATION_CATALOGS } from '../i18n';
 
 function flatten(value: unknown, prefix = ''): Record<string, string> {
   if (typeof value === 'string') return { [prefix]: value };
@@ -22,21 +21,34 @@ function placeholders(value: string): string[] {
 }
 
 describe('translation catalogs', () => {
-  const english = flatten(en);
-  const german = flatten(de);
+  const english = flatten(TRANSLATION_CATALOGS['en']);
+  const discoveredCatalogs = Object.entries(TRANSLATION_CATALOGS);
 
-  it('has the same keys in English and German', () => {
-    expect(Object.keys(german).sort()).toEqual(Object.keys(english).sort());
-  });
-
-  it('uses the same interpolation placeholders in both languages', () => {
-    for (const key of Object.keys(english)) {
-      expect(placeholders(german[key]), key).toEqual(placeholders(english[key]));
+  it('has the same keys in every discovered catalog', () => {
+    for (const [language, catalog] of discoveredCatalogs) {
+      expect(Object.keys(flatten(catalog)).sort(), language).toEqual(
+        Object.keys(english).sort()
+      );
     }
   });
 
-  it('does not contain empty translations', () => {
-    expect(Object.entries(english).filter(([, value]) => !value.trim())).toEqual([]);
-    expect(Object.entries(german).filter(([, value]) => !value.trim())).toEqual([]);
+  it('uses the same interpolation placeholders in every discovered catalog', () => {
+    for (const [language, catalog] of discoveredCatalogs) {
+      const translations = flatten(catalog);
+      for (const key of Object.keys(english)) {
+        expect(placeholders(translations[key]), `${language}:${key}`).toEqual(
+          placeholders(english[key])
+        );
+      }
+    }
+  });
+
+  it('does not contain empty translations in discovered catalogs', () => {
+    for (const [language, catalog] of discoveredCatalogs) {
+      expect(
+        Object.entries(flatten(catalog)).filter(([, value]) => !value.trim()),
+        language
+      ).toEqual([]);
+    }
   });
 });
