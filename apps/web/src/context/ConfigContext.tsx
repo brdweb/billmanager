@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useRef, useState, useEffect, type ReactNode } from 'react';
 import * as api from '../api/client';
 import { setCurrencyConfig } from '../lib/currency';
 import i18n, { applyLocaleDefault } from '../i18n';
@@ -20,6 +20,7 @@ export interface AppConfig {
   passkeys_enabled?: boolean;
   default_currency?: string;
   default_locale?: string;
+  supported_currencies?: string[];
 }
 
 interface ConfigContextType {
@@ -33,6 +34,7 @@ interface ConfigContextType {
   registrationEnabled: boolean;
   currency: string;
   locale: string;
+  setCurrency: (currency: string) => void;
   refetch: () => Promise<void>;
 }
 
@@ -47,6 +49,7 @@ const defaultConfig: AppConfig = {
   passkeys_enabled: false,
   default_currency: 'USD',
   default_locale: 'en-US',
+  supported_currencies: ['USD'],
 };
 
 const ConfigContext = createContext<ConfigContextType>({
@@ -60,6 +63,7 @@ const ConfigContext = createContext<ConfigContextType>({
   registrationEnabled: false,
   currency: 'USD',
   locale: 'en-US',
+  setCurrency: () => {},
   refetch: async () => {},
 });
 
@@ -67,15 +71,14 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currency, setCurrencyState] = useState('USD');
+  const currencyRef = useRef(currency);
 
-  const fetchConfig = async () => {
+  const fetchConfig = useCallback(async () => {
     try {
       const response = await api.getAppConfig();
       setConfig(response);
-      setCurrencyConfig(
-        response.default_locale ?? 'en-US',
-        response.default_currency ?? 'USD'
-      );
+      setCurrencyConfig(response.default_locale ?? 'en-US', currencyRef.current);
       applyLocaleDefault(response.default_locale ?? 'en-US');
       setError(null);
     } catch (err) {
@@ -86,11 +89,17 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchConfig();
-  }, []);
+  }, [fetchConfig]);
+
+  const setCurrency = useCallback((nextCurrency: string) => {
+    setCurrencyConfig(config?.default_locale ?? 'en-US', nextCurrency);
+    currencyRef.current = nextCurrency;
+    setCurrencyState(nextCurrency);
+  }, [config?.default_locale]);
 
   const value: ConfigContextType = {
     config,
@@ -101,8 +110,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     emailEnabled: config?.email_enabled ?? false,
     billingEnabled: config?.billing_enabled ?? false,
     registrationEnabled: config?.registration_enabled ?? false,
-    currency: config?.default_currency ?? 'USD',
+    currency,
     locale: config?.default_locale ?? 'en-US',
+    setCurrency,
     refetch: fetchConfig,
   };
 

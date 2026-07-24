@@ -14,7 +14,7 @@ info:
 
     Access tokens expire after 15 minutes. Refresh tokens expire after 7 days.
 
-  version: 4.5.2
+  version: 4.6.0
   license:
     name: O'Saasy License
     url: https://osaasy.dev/
@@ -302,14 +302,23 @@ paths:
                     type: boolean
                   data:
                     type: object
+                    required: [user, databases, current_db]
                     properties:
-                      id:
-                        type: integer
-                      username:
-                        type: string
-                      role:
-                        type: string
-                        enum: [admin, user]
+                      user:
+                        type: object
+                        required: [id, username, role, is_account_owner, has_password, currency]
+                        properties:
+                          id: {type: integer}
+                          username: {type: string}
+                          email: {type: string, nullable: true}
+                          role:
+                            type: string
+                            enum: [admin, user]
+                          is_account_owner: {type: boolean}
+                          has_password: {type: boolean}
+                          currency:
+                            type: string
+                            enum: [USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD, INR, KRW, SEK, NZD, MXN]
                       databases:
                         type: array
                         items:
@@ -317,6 +326,61 @@ paths:
                       current_db:
                         type: string
                         nullable: true
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    patch:
+      tags: [Authentication]
+      summary: Update current user preferences
+      operationId: updateCurrentUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currency]
+              properties:
+                currency:
+                  type: string
+                  enum: [USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD, INR, KRW, SEK, NZD, MXN]
+      responses:
+        '200':
+          description: Updated user information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required: [user, databases, current_db]
+                    properties:
+                      user:
+                        type: object
+                        required: [id, username, role, is_account_owner, has_password, currency]
+                        properties:
+                          id: {type: integer}
+                          username: {type: string}
+                          email: {type: string, nullable: true}
+                          role:
+                            type: string
+                            enum: [admin, user]
+                          is_account_owner: {type: boolean}
+                          has_password: {type: boolean}
+                          currency:
+                            type: string
+                            enum: [USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD, INR, KRW, SEK, NZD, MXN]
+                      databases:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/DatabaseInfo'
+                      current_db:
+                        type: string
+                        nullable: true
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
 
   /bills:
@@ -3561,6 +3625,7 @@ components:
         - passkeys_enabled
         - default_currency
         - default_locale
+        - supported_currencies
         - mobile
       properties:
         deployment_mode:
@@ -3600,6 +3665,11 @@ components:
             - NZD
             - MXN
         default_locale: {type: string}
+        supported_currencies:
+          type: array
+          items:
+            type: string
+            enum: [USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD, INR, KRW, SEK, NZD, MXN]
         mobile:
           $ref: '#/components/schemas/MobileCapabilities'
         tier_limits:

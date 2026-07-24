@@ -60,6 +60,7 @@ class User(db.Model):
     change_token_expires = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     last_login_at = db.Column(db.DateTime, nullable=True, index=True)
+    currency = db.Column(db.String(3), nullable=False, default="USD", server_default="USD")
 
     # SaaS multi-tenancy: track which admin created this user (null for self-registered admins)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -658,23 +659,25 @@ class BillShare(db.Model):
         """Check if recipient has marked their portion as paid"""
         return self.recipient_paid_date is not None
 
-    def calculate_portion(self):
+    def calculate_portion(self, currency="USD"):
         """Calculate the recipient's portion of the bill amount"""
         # Explicitly check for None to handle variable bills properly
         # (bills with amount=0 should proceed with calculation)
         if self.bill.amount is None:
             return None
         if not self.split_type:
-            return currency_amount_value(self.bill.amount)
+            return currency_amount_value(self.bill.amount, currency)
         if self.split_type == 'equal':
-            return currency_amount_value(self.bill.amount / 2)
+            return currency_amount_value(self.bill.amount / 2, currency)
         if self.split_type == 'percentage' and self.split_value is not None:
             return currency_amount_value(
-                self.bill.amount * (float(self.split_value) / 100)
+                self.bill.amount * (float(self.split_value) / 100), currency
             )
         if self.split_type == 'fixed' and self.split_value is not None:
-            return currency_amount_value(min(float(self.split_value), self.bill.amount))
-        return currency_amount_value(self.bill.amount)
+            return currency_amount_value(
+                min(float(self.split_value), self.bill.amount), currency
+            )
+        return currency_amount_value(self.bill.amount, currency)
 
     def set_invite_token(self, token=None):
         raw_token = token or secrets.token_urlsafe(32)

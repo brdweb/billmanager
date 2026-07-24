@@ -181,6 +181,7 @@ export interface User {
   email?: string | null;
   is_account_owner?: boolean;
   has_password?: boolean;
+  currency?: string;
 }
 
 export interface Database {
@@ -303,6 +304,9 @@ export const refreshSession = async (): Promise<boolean> => {
 
 export const getMe = () =>
   unwrap(api.get<ApiResponse<MeResponse>>('/me'));
+
+export const updateMe = (payload: { currency: string }) =>
+  unwrap(api.patch<ApiResponse<MeResponse>>('/me', payload));
 
 export const deleteMyAccount = (payload: { password?: string; confirm?: boolean }) =>
   unwrap(api.delete<ApiResponse<{ message: string }>>('/account', { data: payload }));
@@ -584,6 +588,7 @@ export interface AppConfig {
   passkeys_enabled?: boolean;
   default_currency?: string;
   default_locale?: string;
+  supported_currencies?: string[];
 }
 
 export interface AppConfigResponse {

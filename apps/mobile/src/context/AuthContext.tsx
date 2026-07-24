@@ -16,6 +16,8 @@ import {
 } from '../services/authSession';
 import type { AuthFlowResult, AuthSessionScope } from '../features/auth';
 import type { DatabaseInfo, User } from '../types';
+import i18n from '../i18n';
+import { configureFormatting } from '../i18n/format';
 import {
   AuthOperationGuard,
   SerializedAuthSessionWrites,
@@ -76,6 +78,12 @@ function authenticatedState(
   snapshot: AuthenticatedSessionSnapshot,
   serverType = serverTypeForActiveProfile(),
 ): AuthState {
+  const capabilities = api.getActiveProfile().capabilities;
+  configureFormatting(
+    capabilities?.defaultLocale,
+    snapshot.user.currency ?? capabilities?.defaultCurrency,
+    i18n.resolvedLanguage ?? i18n.language,
+  );
   return {
     isLoading: false,
     isAuthenticated: true,
@@ -328,6 +336,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return isAuthCurrent(authOperation) && isDatabaseCurrent(databaseOperation);
     });
     if (!persisted || !isAuthCurrent(authOperation)) return;
+    const capabilities = api.getActiveProfile().capabilities;
+    configureFormatting(
+      capabilities?.defaultLocale,
+      snapshot.user.currency ?? capabilities?.defaultCurrency,
+      i18n.resolvedLanguage ?? i18n.language,
+    );
     const selectionUnchanged = isDatabaseCurrent(databaseOperation);
     updateState((previous) => ({
       ...previous,

@@ -99,6 +99,8 @@ from config import (
     WEBAUTHN_RP_ID,
     WEBAUTHN_RP_NAME,
     WEBAUTHN_EXPECTED_ORIGINS,
+    DEFAULT_USER_CURRENCY,
+    SUPPORTED_CURRENCIES,
 )
 from currency import currency_amount_value, quantize_currency_amount
 from percentage import validate_percentage
@@ -715,7 +717,7 @@ def parse_bill_due_date(value):
         return None
 
 
-def serialize_settlement_share(share, direction, db_name_lookup=None):
+def serialize_settlement_share(share, direction, currency, db_name_lookup=None):
     """Serialize a shared bill as a settlement ledger row."""
     bill = share.bill
     due_date = parse_bill_due_date(bill.due_date)
@@ -740,7 +742,7 @@ def serialize_settlement_share(share, direction, db_name_lookup=None):
         else share.shared_with_identifier
     )
 
-    portion = share.calculate_portion()
+    portion = share.calculate_portion(currency)
     amount = float(portion) if portion is not None else 0.0
     total_amount = float(bill.amount) if bill.amount is not None else None
 
@@ -1216,7 +1218,9 @@ def parse_frequency_config(value):
         return {}
 
 
-def forecast_bill_occurrences(bill, amount, start_date, end_date, source, db_name, share=None):
+def forecast_bill_occurrences(
+    bill, amount, start_date, end_date, source, db_name, currency, share=None
+):
     """Generate projected bill occurrences inside a date range."""
     due_date = parse_bill_due_date(bill.due_date)
     if not due_date:
@@ -1249,8 +1253,8 @@ def forecast_bill_occurrences(bill, amount, start_date, end_date, source, db_nam
                 "source": source,
                 "share_id": share.id if share else None,
                 "counterparty_name": share.owner.username if share and share.owner else None,
-                "amount": currency_amount_value(abs(amount)),
-                "signed_amount": currency_amount_value(signed_amount),
+                "amount": currency_amount_value(abs(amount), currency),
+                "signed_amount": currency_amount_value(signed_amount, currency),
                 "category": bill.category,
                 "account": bill.account,
                 "is_variable": bool(bill.is_variable),
@@ -1280,6 +1284,12 @@ def _record_login_if_due(user, now=None):
 
     user.last_login_at = current_naive
     return True
+
+
+def _current_user_currency():
+    """Return the authenticated user's persisted currency preference."""
+    user = db.session.get(User, g.jwt_user_id)
+    return user.currency if user and user.currency else DEFAULT_USER_CURRENCY
 
 
 # --- API v2 Routes (JWT Auth for Mobile) ---
@@ -1383,7 +1393,12 @@ def jwt_login():
                 "refresh_token": refresh_token,
                 "expires_in": int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds()),
                 "token_type": "Bearer",  # nosec B105
-                "user": {"id": user.id, "username": user.username, "role": user.role},
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "role": user.role,
+                    "currency": user.currency,
+                },
                 "databases": databases,
             },
         }
@@ -1564,7 +1579,12 @@ def register():
             "message": message,
             "email_sent": email_sent,
             "email_verification_required": REQUIRE_EMAIL_VERIFICATION,
-            "user": {"id": user.id, "username": user.username, "email": user.email},
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "currency": user.currency,
+            },
         }
     ), 201
 
@@ -2178,11 +2198,27 @@ def stripe_webhook():
     return jsonify({"received": True}), 200
 
 
-@api_v2_bp.route("/me", methods=["GET"])
+@api_v2_bp.route("/me", methods=["GET", "PATCH"])
 @jwt_required
 def jwt_me():
-    """Get current user info (JWT version)."""
+    """Get or update the current user's account preferences."""
     user = db.session.get(User, g.jwt_user_id)
+    if request.method == "PATCH":
+        data = request.get_json(force=True, silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"success": False, "error": "Invalid JSON body"}), 400
+
+        currency = data.get("currency")
+        if not isinstance(currency, str) or currency.strip().upper() not in SUPPORTED_CURRENCIES:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Currency must be one of: " + ", ".join(SUPPORTED_CURRENCIES),
+                }
+            ), 400
+        user.currency = currency.strip().upper()
+        db.session.commit()
+
     databases = [
         {"id": d.id, "name": d.name, "display_name": d.display_name}
         for d in user.accessible_databases
@@ -2200,6 +2236,7 @@ def jwt_me():
                     if is_saas()
                     else (user.role == "admin"),
                     "has_password": bool(user.password_hash),
+                    "currency": user.currency,
                 },
                 "databases": databases,
                 "current_db": g.jwt_db_name,
@@ -2512,7 +2549,7 @@ def jwt_get_bills():
         # Calculate recipient's portion
         my_portion = None
         if share.split_type and bill.amount is not None:
-            my_portion = share.calculate_portion()
+            my_portion = share.calculate_portion(_current_user_currency())
 
         # Get owner username from database owner
         database_owner = db.session.get(Database, bill.database_id)
@@ -2621,7 +2658,9 @@ def jwt_create_bill():
         return jsonify({"success": False, "error": error}), 400
 
     is_valid, error = validate_amount(
-        data.get("amount"), allow_none=bool(data.get("varies", False))
+        data.get("amount"),
+        allow_none=bool(data.get("varies", False)),
+        currency=_current_user_currency(),
     )
     if not is_valid:
         return jsonify({"success": False, "error": error}), 400
@@ -2738,7 +2777,7 @@ def jwt_get_bill(bill_id):
     if share:
         my_portion = None
         if share.split_type and bill.amount is not None:
-            my_portion = share.calculate_portion()
+            my_portion = share.calculate_portion(_current_user_currency())
         owner = db.session.get(User, share.owner_user_id)
         b_dict["is_shared"] = True
         b_dict["share_info"] = {
@@ -2837,6 +2876,7 @@ def jwt_update_bill(bill_id):
         is_valid, error = validate_amount(
             data.get("amount", bill.amount),
             allow_none=bool(data.get("varies", bill.is_variable)),
+            currency=_current_user_currency(),
         )
         if not is_valid:
             return jsonify({"success": False, "error": error}), 400
@@ -3089,7 +3129,7 @@ def jwt_pay_bill(bill_id):
         return conflict
 
     payment_amount = data.get("amount", bill.amount)
-    is_valid, error = validate_amount(payment_amount)
+    is_valid, error = validate_amount(payment_amount, currency=_current_user_currency())
     if not is_valid:
         return jsonify({"success": False, "error": error}), 400
 
@@ -3374,7 +3414,7 @@ def jwt_update_payment(payment_id):
         return conflict
 
     if "amount" in data:
-        is_valid, error = validate_amount(data["amount"])
+        is_valid, error = validate_amount(data["amount"], currency=_current_user_currency())
         if not is_valid:
             return jsonify({"success": False, "error": error}), 400
         payment.amount = data["amount"]
@@ -3527,7 +3567,9 @@ def jwt_share_bill(bill_id):
                 return jsonify({"success": False, "error": error}), 400
             split_value = percentage
         if split_type == "fixed":
-            is_valid, error = validate_amount(split_value, allow_zero=True)
+            is_valid, error = validate_amount(
+                split_value, allow_zero=True, currency=_current_user_currency()
+            )
             if not is_valid:
                 return jsonify({"success": False, "error": error}), 400
 
@@ -3817,7 +3859,9 @@ def jwt_get_settlements():
         people[name]["open_count"] += 1
 
     for share in owned_shares:
-        item = serialize_settlement_share(share, "owed_to_me", db_name_lookup)
+        item = serialize_settlement_share(
+            share, "owed_to_me", _current_user_currency(), db_name_lookup
+        )
         if item["paid"]:
             settled.append(item)
         else:
@@ -3831,7 +3875,9 @@ def jwt_get_settlements():
             if shared_bill_db
             else "Unknown"
         }
-        item = serialize_settlement_share(share, "i_owe", received_db_lookup)
+        item = serialize_settlement_share(
+            share, "i_owe", _current_user_currency(), received_db_lookup
+        )
         if item["paid"]:
             settled.append(item)
         else:
@@ -3846,8 +3892,12 @@ def jwt_get_settlements():
     i_owe.sort(key=open_sort_key)
     settled.sort(key=lambda item: item["paid_date"] or "", reverse=True)
 
-    total_owed_to_me = currency_amount_value(sum(item["amount"] for item in owed_to_me))
-    total_i_owe = currency_amount_value(sum(item["amount"] for item in i_owe))
+    total_owed_to_me = currency_amount_value(
+        sum(item["amount"] for item in owed_to_me), _current_user_currency()
+    )
+    total_i_owe = currency_amount_value(
+        sum(item["amount"] for item in i_owe), _current_user_currency()
+    )
     overdue_owed_to_me = sum(1 for item in owed_to_me if item["due_status"] == "overdue")
     overdue_i_owe = sum(1 for item in i_owe if item["due_status"] == "overdue")
 
@@ -3864,7 +3914,9 @@ def jwt_get_settlements():
                 "summary": {
                     "owed_to_me": total_owed_to_me,
                     "i_owe": total_i_owe,
-                    "net_balance": currency_amount_value(total_owed_to_me - total_i_owe),
+                    "net_balance": currency_amount_value(
+                        total_owed_to_me - total_i_owe, _current_user_currency()
+                    ),
                     "open_count": len(owed_to_me) + len(i_owe),
                     "settled_count": len(settled),
                     "overdue_owed_to_me": overdue_owed_to_me,
@@ -3917,7 +3969,7 @@ def jwt_get_shared_bills():
                 "owner_id": share.owner_user_id,
                 "split_type": share.split_type,
                 "split_value": share.split_value,
-                "my_portion": share.calculate_portion(),
+                "my_portion": share.calculate_portion(_current_user_currency()),
                 "last_payment": {
                     "id": latest_payment.id,
                     "amount": latest_payment.amount,
@@ -3973,7 +4025,7 @@ def jwt_get_pending_shares():
                 "owner": share.owner.username,
                 "split_type": share.split_type,
                 "split_value": share.split_value,
-                "my_portion": share.calculate_portion(),
+                "my_portion": share.calculate_portion(_current_user_currency()),
                 "expires_at": share.expires_at.isoformat()
                 if share.expires_at
                 else None,
@@ -4170,7 +4222,11 @@ def jwt_get_share_info():
                 "shared_with_email": share.shared_with_identifier,
                 "split_type": share.split_type,
                 "split_value": share.split_value,
-                "my_portion": share.calculate_portion(),
+                # This endpoint is intentionally public, so use the bill
+                # owner's persisted preference for currency precision.
+                "my_portion": share.calculate_portion(
+                    share.owner.currency or DEFAULT_USER_CURRENCY
+                ),
                 "expires_at": share.expires_at.isoformat()
                 if share.expires_at
                 else None,
@@ -4305,13 +4361,17 @@ def jwt_update_share(share_id):
     if "split_value" in data and split_type != "percentage":
         split_value = data["split_value"]
         if split_type == "fixed":
-            is_valid, error = validate_amount(split_value, allow_zero=True)
+            is_valid, error = validate_amount(
+                split_value, allow_zero=True, currency=_current_user_currency()
+            )
             if not is_valid:
                 return jsonify({"success": False, "error": error}), 400
         share.split_value = split_value
 
     if split_type == "fixed" and "split_value" not in data:
-        is_valid, error = validate_amount(share.split_value, allow_zero=True)
+        is_valid, error = validate_amount(
+            share.split_value, allow_zero=True, currency=_current_user_currency()
+        )
         if not is_valid:
             return jsonify({"success": False, "error": error}), 400
 
@@ -4445,7 +4505,7 @@ def jwt_mark_share_paid(share_id):
         message = "Marked as unpaid"
     else:
         # Mark as paid - create a payment record for tracking
-        portion_amount = share.calculate_portion()
+        portion_amount = share.calculate_portion(_current_user_currency())
         if portion_amount is None:
             portion_amount = share.bill.amount or 0
 
@@ -4453,8 +4513,10 @@ def jwt_mark_share_paid(share_id):
         recipient = db.session.get(User, g.jwt_user_id)
         recipient_name = recipient.username if recipient else "Unknown"
 
-        portion_amount = quantize_currency_amount(portion_amount)
-        is_valid, error = validate_amount(portion_amount, allow_zero=True)
+        portion_amount = quantize_currency_amount(portion_amount, _current_user_currency())
+        is_valid, error = validate_amount(
+            portion_amount, allow_zero=True, currency=_current_user_currency()
+        )
         if not is_valid:
             return jsonify({"success": False, "error": error}), 400
 
@@ -4616,7 +4678,9 @@ def jwt_create_budget():
     if data.get("monthly_limit") is None:
         return jsonify({"success": False, "error": "Monthly budget is required"}), 400
 
-    is_valid, error = validate_amount(data.get("monthly_limit"))
+    is_valid, error = validate_amount(
+        data.get("monthly_limit"), currency=_current_user_currency()
+    )
     if not is_valid:
         return jsonify({"success": False, "error": error}), 400
 
@@ -4667,7 +4731,9 @@ def jwt_update_budget(budget_id):
     if "monthly_limit" in data:
         if data["monthly_limit"] is None:
             return jsonify({"success": False, "error": "Monthly budget is required"}), 400
-        is_valid, error = validate_amount(data["monthly_limit"])
+        is_valid, error = validate_amount(
+            data["monthly_limit"], currency=_current_user_currency()
+        )
         if not is_valid:
             return jsonify({"success": False, "error": error}), 400
         budget.monthly_limit = float(data["monthly_limit"])
@@ -4925,11 +4991,12 @@ def jwt_get_cash_flow_forecast():
                 end_date,
                 "bill",
                 db_name_lookup.get(bill.database_id, "Unknown"),
+                _current_user_currency(),
             )
         )
 
     for share in received_shares:
-        amount = share.calculate_portion()
+        amount = share.calculate_portion(_current_user_currency())
         if amount is None:
             amount = avg_amounts.get(share.bill_id, 0) if share.bill.is_variable else (share.bill.amount or 0)
         amount = float(amount or 0)
@@ -4944,6 +5011,7 @@ def jwt_get_cash_flow_forecast():
                 end_date,
                 "shared",
                 shared_bill_db.display_name if shared_bill_db else "Unknown",
+                _current_user_currency(),
                 share=share,
             )
         )
@@ -4956,11 +5024,11 @@ def jwt_get_cash_flow_forecast():
         )
     )
 
-    starting_balance = currency_amount_value(starting_balance)
+    starting_balance = currency_amount_value(starting_balance, _current_user_currency())
     balance = starting_balance
     for item in occurrences:
         balance += item["signed_amount"]
-        item["balance_after"] = currency_amount_value(balance)
+        item["balance_after"] = currency_amount_value(balance, _current_user_currency())
 
     daily_net = {}
     for item in occurrences:
@@ -4984,18 +5052,23 @@ def jwt_get_cash_flow_forecast():
         daily.append(
             {
                 "date": day_key,
-                "balance": currency_amount_value(running_balance),
-                "net_change": currency_amount_value(net_change),
+                "balance": currency_amount_value(running_balance, _current_user_currency()),
+                "net_change": currency_amount_value(net_change, _current_user_currency()),
             }
         )
 
     total_income = currency_amount_value(
-        sum(item["signed_amount"] for item in occurrences if item["signed_amount"] > 0)
+        sum(item["signed_amount"] for item in occurrences if item["signed_amount"] > 0),
+        _current_user_currency(),
     )
     total_expenses = currency_amount_value(
-        abs(sum(item["signed_amount"] for item in occurrences if item["signed_amount"] < 0))
+        abs(sum(item["signed_amount"] for item in occurrences if item["signed_amount"] < 0)),
+        _current_user_currency(),
     )
-    ending_balance = currency_amount_value(daily[-1]["balance"] if daily else starting_balance)
+    ending_balance = currency_amount_value(
+        daily[-1]["balance"] if daily else starting_balance,
+        _current_user_currency(),
+    )
     runway_days = None
     if first_negative_date:
         runway_days = (
@@ -5010,13 +5083,19 @@ def jwt_get_cash_flow_forecast():
                     "start_date": start_date.isoformat(),
                     "end_date": end_date.isoformat(),
                     "days": days,
-                    "starting_balance": currency_amount_value(starting_balance),
+                    "starting_balance": currency_amount_value(
+                        starting_balance, _current_user_currency()
+                    ),
                     "ending_balance": ending_balance,
-                    "lowest_balance": currency_amount_value(lowest_balance),
+                    "lowest_balance": currency_amount_value(
+                        lowest_balance, _current_user_currency()
+                    ),
                     "lowest_balance_date": lowest_balance_date,
                     "total_income": total_income,
                     "total_expenses": total_expenses,
-                    "net_change": currency_amount_value(total_income - total_expenses),
+                    "net_change": currency_amount_value(
+                        total_income - total_expenses, _current_user_currency()
+                    ),
                     "runway_days": runway_days,
                     "first_negative_date": first_negative_date,
                     "occurrence_count": len(occurrences),
@@ -5434,7 +5513,12 @@ def jwt_change_password():
                 "refresh_token": refresh_token,
                 "expires_in": int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds()),
                 "token_type": "Bearer",  # nosec B105
-                "user": {"id": user.id, "username": user.username, "role": user.role},
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "role": user.role,
+                    "currency": user.currency,
+                },
                 "databases": databases,
             },
         }
@@ -6272,6 +6356,7 @@ def oauth_callback(provider):
                     "username": user.username,
                     "role": user.role,
                     "is_new_user": is_new_user,
+                    "currency": user.currency,
                 },
                 "databases": databases,
             },
@@ -7337,7 +7422,12 @@ def twofa_verify():
                 "refresh_token": refresh_token,
                 "expires_in": int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds()),
                 "token_type": "Bearer",  # nosec B105
-                "user": {"id": user.id, "username": user.username, "role": user.role},
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "role": user.role,
+                    "currency": user.currency,
+                },
                 "databases": databases,
             },
         }
@@ -8714,6 +8804,7 @@ def jwt_sync_push():
                 is_valid, _ = validate_amount(
                     bill_data.get("amount", bill.amount),
                     allow_none=bool(bill_data.get("varies", bill.is_variable)),
+                    currency=_current_user_currency(),
                 )
                 if not is_valid:
                     rejected_bills.append({"id": bill_id, "reason": "invalid_amount"})
@@ -8771,6 +8862,7 @@ def jwt_sync_push():
             is_valid, _ = validate_amount(
                 bill_data.get("amount"),
                 allow_none=bool(bill_data.get("varies", False)),
+                currency=_current_user_currency(),
             )
             if not is_valid:
                 rejected_bills.append({"id": None, "reason": "invalid_amount"})
@@ -8869,7 +8961,9 @@ def jwt_sync_push():
                 continue
 
             if "amount" in payment_data:
-                is_valid, _ = validate_amount(payment_data["amount"])
+                is_valid, _ = validate_amount(
+                    payment_data["amount"], currency=_current_user_currency()
+                )
                 if not is_valid:
                     rejected_payments.append(
                         {"id": payment_id, "reason": "invalid_amount"}
@@ -8903,7 +8997,9 @@ def jwt_sync_push():
                 )
                 continue
 
-            is_valid, _ = validate_amount(payment_data["amount"])
+            is_valid, _ = validate_amount(
+                payment_data["amount"], currency=_current_user_currency()
+            )
             if not is_valid:
                 rejected_payments.append({"id": None, "reason": "invalid_amount"})
                 continue

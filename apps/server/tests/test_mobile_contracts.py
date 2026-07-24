@@ -211,14 +211,13 @@ def test_pre_auth_mobile_capability_envelope_is_consistent(client):
     assert isinstance(mobile["oauth_providers"], list)
 
 
-def test_public_and_mobile_config_expose_validated_currency(client, monkeypatch):
-    monkeypatch.setattr(config, "DEFAULT_CURRENCY", "KRW")
-
+def test_public_config_exposes_supported_user_currencies(client):
     response = client.get("/api/v2/config")
 
     payload = response.get_json()["data"]
-    assert payload["default_currency"] == "KRW"
-    assert payload["mobile"]["default_currency"] == "KRW"
+    assert payload["default_currency"] == "USD"
+    assert payload["supported_currencies"] == list(config.SUPPORTED_CURRENCIES)
+    assert payload["mobile"]["default_currency"] == "USD"
 
 
 def test_openapi_default_currency_schemas_use_ordered_supported_enum():
@@ -1016,7 +1015,7 @@ def test_sync_push_rejects_fractional_zero_minor_unit_bill_and_payment_mutations
     auth_headers_with_db,
     test_bill,
     db_session,
-    monkeypatch,
+    admin_user,
 ):
     payment = Payment(
         bill_id=test_bill.id,
@@ -1031,7 +1030,8 @@ def test_sync_push_rejects_fractional_zero_minor_unit_bill_and_payment_mutations
     payment_base = payment.updated_at.replace(
         tzinfo=datetime.timezone.utc
     ).isoformat().replace("+00:00", "Z")
-    monkeypatch.setattr(config, "DEFAULT_CURRENCY", "JPY")
+    admin_user.currency = "JPY"
+    db_session.commit()
 
     response = client.post(
         "/api/v2/sync/push",

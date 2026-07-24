@@ -37,7 +37,6 @@ const Settings = lazy(() => import('./pages/Settings').then((module) => ({ defau
 const BillModal = lazy(() => import('./components/BillModal').then((module) => ({ default: module.BillModal })));
 const PaymentHistory = lazy(() => import('./components/PaymentHistory').then((module) => ({ default: module.PaymentHistory })));
 const PasswordChangeModal = lazy(() => import('./components/PasswordChangeModal').then((module) => ({ default: module.PasswordChangeModal })));
-const AdminModal = lazy(() => import('./components/AdminPanel/AdminModal').then((module) => ({ default: module.AdminModal })));
 const TelemetryNoticeModal = lazy(() => import('./components/TelemetryNoticeModal').then((module) => ({ default: module.TelemetryNoticeModal })));
 const ReleaseNotesModal = lazy(() => import('./components/ReleaseNotesModal').then((module) => ({ default: module.ReleaseNotesModal })));
 
@@ -87,7 +86,7 @@ export interface BillFilter {
 
 function App() {
   const { t } = useTranslation();
-  const { isLoggedIn, isLoading, pendingPasswordChange, currentDb, databases } = useAuth();
+  const { isLoggedIn, isAdmin, isLoading, pendingPasswordChange, currentDb, databases } = useAuth();
   const { config } = useConfig();
   const navigate = useNavigate();
   const location = useLocation();
@@ -110,7 +109,6 @@ function App() {
   });
 
   // Modal states
-  const [adminOpened, { open: openAdmin, close: closeAdmin }] = useDisclosure(false);
   const [billModalOpened, { open: openBillModal, close: closeBillModal }] = useDisclosure(false);
   const [payModalOpened, { open: openPayModal, close: closePayModal }] = useDisclosure(false);
   const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false);
@@ -424,7 +422,7 @@ function App() {
   return (
     <>
       <Layout
-        onAdminClick={openAdmin}
+        onSettingsClick={() => navigate(isAdmin ? '/settings?tab=users' : '/settings')}
         onBillingClick={billingEnabled ? () => navigate('/billing') : undefined}
         sidebar={
           <Stack gap="xs" style={{ minHeight: 'calc(100vh - 92px)' }}>
@@ -568,8 +566,6 @@ function App() {
 
       {/* Modals */}
       <Suspense fallback={null}>
-        {adminOpened && <AdminModal opened={adminOpened} onClose={closeAdmin} />}
-
         {passwordChangeOpened && (
           <PasswordChangeModal
             opened={passwordChangeOpened}

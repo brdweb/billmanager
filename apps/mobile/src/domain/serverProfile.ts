@@ -7,6 +7,7 @@ export interface ServerCapabilities {
   serverVersion: string;
   minimumMobileVersion: string | null;
   defaultCurrency: string;
+  supportedCurrencies: string[];
   defaultLocale: string;
   registration: boolean;
   oauthProviders: string[];

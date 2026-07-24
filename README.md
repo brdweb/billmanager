@@ -10,17 +10,17 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.5.2
+## 🎉 What's New in v4.6.0
 
-**Localization and Currency Foundation** - BillManager now has a scalable shared translation pipeline and explicit, deployment-wide support for the most-traded currencies, while retaining the familiar web layout.
+**Unified Settings and Personal Currency** - The complete tabbed Settings experience is accessible from the application again, and every user can choose their own display currency on web or mobile.
 
 ### Highlights
 
-- **Add-Ready Localization** - Web language catalogs are discovered automatically and shared translations synchronize to mobile, making future language additions a focused catalog change
-- **Currency Support** - Deployments can select from USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD, INR, KRW, SEK, NZD, and MXN, with correct whole-unit handling for JPY and KRW
-- **Reliable Financial Calculations** - Shared-bill settlements and cash-flow forecasts now consistently use the configured currency precision
-- **Restored Web Experience** - The compact Settings page and separate Admin modal are back, preserving the prior web layout while keeping the new localization controls
-- **Expo SDK 57 Compatibility** - Mobile dependencies are aligned to the current validated SDK 57 patch versions for reproducible CI and native preview builds
+- **Reachable Settings** - The application menu now opens the full `/settings` page instead of hiding administration in a modal
+- **Tabbed Administration** - Administrators can manage account settings, users, and bill groups from one responsive page with direct-linkable tabs
+- **Personal Currency** - Each user can select USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD, INR, KRW, SEK, NZD, or MXN independently
+- **Cross-Device Preference** - Currency changes persist to the account and are applied on both web and mobile
+- **Safe Upgrade** - Existing installations inherit their former `DEFAULT_CURRENCY` once during migration; currency is no longer a runtime environment setting
 
 ---
 
@@ -202,7 +202,6 @@ postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
 | `RESEND_API_KEY` | Resend API key for hosted/existing installs | None |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | Uses `APP_URL` or localhost |
 | `DEPLOYMENT_MODE` | `self-hosted` or `saas` | `self-hosted` |
-| `DEFAULT_CURRENCY` | Deployment-wide bill currency. Supported: `USD`, `EUR`, `JPY`, `GBP`, `CNY`, `CHF`, `AUD`, `CAD`, `HKD`, `SGD`, `INR`, `KRW`, `SEK`, `NZD`, `MXN` | `USD` |
 | `DEFAULT_LOCALE` | BCP 47 locale used to format bill amounts | `en-US` |
 | `ENABLE_2FA` | Enable two-factor authentication flows | `false` |
 | `ENABLE_PASSKEYS` | Enable passkey (WebAuthn) support | `false` |
@@ -238,11 +237,11 @@ postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
 
 #### Currency and Language
 
-`DEFAULT_CURRENCY` is a Docker environment setting for the whole deployment, not a per-transaction choice. There is no currency selector in the web or mobile UI. Changing the interface language or `DEFAULT_LOCALE` changes language and regional formatting only, never the configured currency.
+Each user selects their currency from Settings. The preference is stored on their account and follows them across devices. `DEFAULT_LOCALE` still controls regional formatting conventions for the deployment, while the interface language controls translated text.
 
-The supported currency order follows the final 2025 BIS foreign-exchange turnover table: `USD`, `EUR`, `JPY`, `GBP`, `CNY`, `CHF`, `AUD`, `CAD`, `HKD`, `SGD`, `INR`, `KRW`, `SEK`, `NZD`, `MXN`. `JPY` and `KRW` use zero minor units, so amounts must be whole numbers. Every other supported currency uses two minor units. An empty or unsupported `DEFAULT_CURRENCY` stops the server during startup.
+The supported currency order follows the final 2025 BIS foreign-exchange turnover table: `USD`, `EUR`, `JPY`, `GBP`, `CNY`, `CHF`, `AUD`, `CAD`, `HKD`, `SGD`, `INR`, `KRW`, `SEK`, `NZD`, `MXN`. `JPY` and `KRW` use zero minor units, so amounts must be whole numbers. Every other supported currency uses two minor units.
 
-Changing `DEFAULT_CURRENCY` changes validation and display, but does not convert stored amounts. Review existing fractional data before switching to `JPY` or `KRW`. SaaS subscription prices remain in USD regardless of this setting.
+Changing a user's currency changes validation and display but does not convert stored amounts. SaaS subscription prices remain in USD regardless of this preference. During upgrade, existing users inherit the former `DEFAULT_CURRENCY` value once; the environment variable is no longer used afterward.
 
 **Security Note:** In production, `JWT_SECRET_KEY` or `FLASK_SECRET_KEY` **must** be explicitly set. The application will refuse to start without it. Generate secure keys with: `openssl rand -hex 32`
 

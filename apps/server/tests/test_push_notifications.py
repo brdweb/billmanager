@@ -2,7 +2,6 @@
 
 import pytest
 
-import config
 from services import push_notifications
 
 
@@ -14,7 +13,7 @@ from services import push_notifications
         ("CNY", 12.34, "CNY 12.34"),
     ],
 )
-def test_bill_reminder_uses_deployment_currency_and_minor_units(
+def test_bill_reminder_uses_user_currency_and_minor_units(
     monkeypatch, currency, amount, expected_amount
 ):
     delivered_bodies = []
@@ -23,7 +22,6 @@ def test_bill_reminder_uses_deployment_currency_and_minor_units(
         delivered_bodies.append(body)
         return 1
 
-    monkeypatch.setattr(config, "DEFAULT_CURRENCY", currency)
     monkeypatch.setattr(push_notifications, "send_push_to_user", capture_push)
 
     sent = push_notifications.send_bill_reminder(
@@ -33,6 +31,7 @@ def test_bill_reminder_uses_deployment_currency_and_minor_units(
         due_date="2026-07-24",
         amount=amount,
         days_until_due=1,
+        currency=currency,
     )
 
     assert sent == 1

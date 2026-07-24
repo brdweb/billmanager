@@ -1,10 +1,6 @@
-"""Focused tests for deployment currency and monetary precision contracts."""
+"""Focused tests for user currency and monetary precision contracts."""
 
-import os
-import subprocess
-import sys
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
 
@@ -13,7 +9,6 @@ import percentage as percentage_validation
 from validation import validate_amount
 
 
-SERVER_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_CURRENCIES = (
     "USD",
     "EUR",
@@ -33,19 +28,6 @@ EXPECTED_CURRENCIES = (
 )
 
 
-def _import_config(default_currency: str) -> subprocess.CompletedProcess[str]:
-    environment = os.environ.copy()
-    environment["DEFAULT_CURRENCY"] = default_currency
-    return subprocess.run(
-        [sys.executable, "-c", "import config; print(config.DEFAULT_CURRENCY)"],
-        cwd=SERVER_ROOT,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-
 def test_supported_currency_catalog_and_minor_units_are_immutable_and_ordered():
     assert config.SUPPORTED_CURRENCIES == EXPECTED_CURRENCIES
     assert tuple(config.CURRENCY_MINOR_UNITS) == EXPECTED_CURRENCIES
@@ -60,36 +42,14 @@ def test_supported_currency_catalog_and_minor_units_are_immutable_and_ordered():
         config.CURRENCY_MINOR_UNITS["USD"] = 0
 
 
-def test_default_currency_is_normalized_during_startup():
-    result = _import_config("  krw  ")
-
-    assert result.returncode == 0
-    assert result.stdout.strip() == "KRW"
-
-
-@pytest.mark.parametrize(
-    ("configured_value", "expected_error"),
-    [
-        ("   ", "DEFAULT_CURRENCY cannot be empty"),
-        ("BTC", "DEFAULT_CURRENCY must be one of"),
-    ],
-)
-def test_invalid_default_currency_fails_startup_clearly(
-    configured_value, expected_error
-):
-    result = _import_config(configured_value)
-
-    assert result.returncode != 0
-    assert expected_error in result.stderr
+def test_new_users_have_a_stable_non_environment_default():
+    assert config.DEFAULT_USER_CURRENCY == "USD"
+    assert not hasattr(config, "DEFAULT_CURRENCY")
 
 
 @pytest.mark.parametrize("currency", ["JPY", "KRW"])
-def test_zero_minor_unit_currencies_reject_meaningful_fractions(
-    monkeypatch, currency
-):
-    monkeypatch.setattr(config, "DEFAULT_CURRENCY", currency)
-
-    is_valid, error = validate_amount("12.01")
+def test_zero_minor_unit_currencies_reject_meaningful_fractions(currency):
+    is_valid, error = validate_amount("12.01", currency=currency)
 
     assert is_valid is False
     assert currency in error
@@ -98,23 +58,15 @@ def test_zero_minor_unit_currencies_reject_meaningful_fractions(
 @pytest.mark.parametrize(
     "currency", [currency for currency in EXPECTED_CURRENCIES if currency not in {"JPY", "KRW"}]
 )
-def test_two_minor_unit_currencies_accept_two_meaningful_decimals(
-    monkeypatch, currency
-):
-    monkeypatch.setattr(config, "DEFAULT_CURRENCY", currency)
-
-    assert validate_amount("12.34") == (True, None)
+def test_two_minor_unit_currencies_accept_two_meaningful_decimals(currency):
+    assert validate_amount("12.34", currency=currency) == (True, None)
 
 
 @pytest.mark.parametrize(
     "currency", [currency for currency in EXPECTED_CURRENCIES if currency not in {"JPY", "KRW"}]
 )
-def test_two_minor_unit_currencies_reject_more_than_two_meaningful_decimals(
-    monkeypatch, currency
-):
-    monkeypatch.setattr(config, "DEFAULT_CURRENCY", currency)
-
-    assert validate_amount("12.345") == (
+def test_two_minor_unit_currencies_reject_more_than_two_meaningful_decimals(currency):
+    assert validate_amount("12.345", currency=currency) == (
         False,
         "Amount cannot have more than 2 decimal places",
     )
@@ -124,10 +76,8 @@ def test_two_minor_unit_currencies_reject_more_than_two_meaningful_decimals(
     ("currency", "amount"),
     [("USD", "12.3400"), ("JPY", "12.000")],
 )
-def test_insignificant_trailing_zeroes_are_valid(monkeypatch, currency, amount):
-    monkeypatch.setattr(config, "DEFAULT_CURRENCY", currency)
-
-    assert validate_amount(amount) == (True, None)
+def test_insignificant_trailing_zeroes_are_valid(currency, amount):
+    assert validate_amount(amount, currency=currency) == (True, None)
 
 
 @pytest.mark.parametrize(
