@@ -10,17 +10,15 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.6.0
+## 🎉 What's New in v4.6.1
 
-**Unified Settings and Personal Currency** - The complete tabbed Settings experience is accessible from the application again, and every user can choose their own display currency on web or mobile.
+**Currency Preference Reliability** - Personal currency now remains active while changing mobile language, and generated API clients receive the complete login contract.
 
 ### Highlights
 
-- **Reachable Settings** - The application menu now opens the full `/settings` page instead of hiding administration in a modal
-- **Tabbed Administration** - Administrators can manage account settings, users, and bill groups from one responsive page with direct-linkable tabs
-- **Personal Currency** - Each user can select USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD, INR, KRW, SEK, NZD, or MXN independently
-- **Cross-Device Preference** - Currency changes persist to the account and are applied on both web and mobile
-- **Safe Upgrade** - Existing installations inherit their former `DEFAULT_CURRENCY` once during migration; currency is no longer a runtime environment setting
+- **Stable Mobile Formatting** - Changing language no longer resets formatting or money-input precision to the server default currency
+- **Complete API Contract** - The documented and generated login response now includes the authenticated user's currency
+- **Regression Coverage** - Mobile behavior and OpenAPI generation are protected by focused tests
 
 ---
 

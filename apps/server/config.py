@@ -307,7 +307,7 @@ DEFAULT_LOCALE = os.environ.get("DEFAULT_LOCALE", "en-US")
 # version: it only changes when a mobile client must handle a breaking contract
 # change. An unset minimum version means that any client implementing the
 # advertised contract is accepted.
-SERVER_VERSION = os.environ.get("APP_VERSION", "4.6.0")
+SERVER_VERSION = os.environ.get("APP_VERSION", "4.6.1")
 MOBILE_CONTRACT_VERSION = 1
 MINIMUM_MOBILE_VERSION = os.environ.get("MINIMUM_MOBILE_VERSION") or None
 

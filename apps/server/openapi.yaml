@@ -14,7 +14,7 @@ info:
 
     Access tokens expire after 15 minutes. Refresh tokens expire after 7 days.
 
-  version: 4.6.0
+  version: 4.6.1
   license:
     name: O'Saasy License
     url: https://osaasy.dev/
@@ -3722,6 +3722,7 @@ components:
               example: Bearer
             user:
               type: object
+              required: [id, username, role, currency]
               properties:
                 id:
                   type: integer
@@ -3729,6 +3730,9 @@ components:
                   type: string
                 role:
                   type: string
+                currency:
+                  type: string
+                  enum: [USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD, INR, KRW, SEK, NZD, MXN]
             databases:
               type: array
               items:

@@ -244,6 +244,9 @@ def test_openapi_default_currency_schemas_use_ordered_supported_enum():
 
     assert schemas["PublicConfig"]["properties"]["default_currency"]["enum"] == expected
     assert schemas["MobileCapabilities"]["properties"]["default_currency"]["enum"] == expected
+    login_user = schemas["LoginResponse"]["properties"]["data"]["properties"]["user"]
+    assert "currency" in login_user["required"]
+    assert login_user["properties"]["currency"]["enum"] == expected
 
 
 def test_authenticated_password_change_requires_current_password(

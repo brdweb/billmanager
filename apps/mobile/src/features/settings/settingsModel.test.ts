@@ -4,9 +4,16 @@ import {
   buildMobileVersionInfo,
   formatLocaleExample,
   resolveTelemetryStatus,
+  resolveUserCurrency,
 } from './settingsModel';
 
 describe('settings model', () => {
+  it('preserves the authenticated user currency over the server default', () => {
+    expect(resolveUserCurrency('EUR', 'USD')).toBe('EUR');
+    expect(resolveUserCurrency(undefined, 'USD')).toBe('USD');
+    expect(resolveUserCurrency(null, null)).toBeUndefined();
+  });
+
   it('keeps telemetry undecided until the owner makes a choice', () => {
     expect(resolveTelemetryStatus({
       show_notice: true,
