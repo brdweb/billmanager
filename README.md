@@ -10,7 +10,7 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.5.1
+## 🎉 What's New in v4.5.2
 
 **Localization and Currency Foundation** - BillManager now has a scalable shared translation pipeline and explicit, deployment-wide support for the most-traded currencies, while retaining the familiar web layout.
 
@@ -20,6 +20,7 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 - **Currency Support** - Deployments can select from USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD, INR, KRW, SEK, NZD, and MXN, with correct whole-unit handling for JPY and KRW
 - **Reliable Financial Calculations** - Shared-bill settlements and cash-flow forecasts now consistently use the configured currency precision
 - **Restored Web Experience** - The compact Settings page and separate Admin modal are back, preserving the prior web layout while keeping the new localization controls
+- **Expo SDK 57 Compatibility** - Mobile dependencies are aligned to the current validated SDK 57 patch versions for reproducible CI and native preview builds
 
 ---
 

@@ -2,6 +2,20 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.5.2',
+    date: '2026-07-24',
+    title: 'Kompatibilität des mobilen SDK',
+    sections: [
+      {
+        heading: 'Verbesserungen',
+        items: [
+          'Die Laufzeit- und nativen Modulversionen von Expo SDK 57 wurden an die aktuelle Kompatibilitätsmatrix angepasst',
+          'Die reproduzierbare mobile Kompatibilitätsprüfung in GitHub Actions ist für Android- und iOS-Vorschau-Builds wiederhergestellt',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.5.1',
     date: '2026-07-24',
     title: 'Grundlage für Lokalisierung und Währungen',

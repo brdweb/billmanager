@@ -48,6 +48,20 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.5.2',
+    date: '2026-07-24',
+    title: 'Mobile SDK Compatibility',
+    sections: [
+      {
+        heading: 'Improvements',
+        items: [
+          'Aligned Expo SDK 57 runtime and native module patch versions with the current compatibility matrix',
+          'Restored reproducible mobile compatibility validation in GitHub Actions for Android and iOS preview builds',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.5.1',
     date: '2026-07-24',
     title: 'Localization and Currency Foundation',
