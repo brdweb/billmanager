@@ -10,16 +10,16 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.4.1
+## 🎉 What's New in v4.5.1
 
-**Dependency and Toolchain Maintenance** - Web, mobile, backend, and CI dependencies are refreshed within their supported runtime lines, with Expo SDK 57 compatibility restored and no database or API migration required.
+**Localization and Currency Foundation** - BillManager now has a scalable shared translation pipeline and explicit, deployment-wide support for the most-traded currencies, while retaining the familiar web layout.
 
 ### Highlights
 
-- **Expo SDK 57 Compatibility** - Expo runtime, navigation, form, icon, localization, and build packages now match the SDK's validated versions
-- **Web Toolchain Refresh** - Vite, TypeScript ESLint, Tabler icons, and React i18n packages are updated within their supported release lines
-- **Backend SDK Maintenance** - Resend and Stripe SDK updates add API improvements, corrected response handling, and lower Stripe client cold-start latency
-- **Current CI Runtime** - GitHub Actions now uses `setup-node@v7`, with all security, test, build, and multi-architecture image checks passing
+- **Add-Ready Localization** - Web language catalogs are discovered automatically and shared translations synchronize to mobile, making future language additions a focused catalog change
+- **Currency Support** - Deployments can select from USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD, INR, KRW, SEK, NZD, and MXN, with correct whole-unit handling for JPY and KRW
+- **Reliable Financial Calculations** - Shared-bill settlements and cash-flow forecasts now consistently use the configured currency precision
+- **Restored Web Experience** - The compact Settings page and separate Admin modal are back, preserving the prior web layout while keeping the new localization controls
 
 ---
 

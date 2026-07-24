@@ -75,6 +75,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     android: {
       package: ANDROID_PACKAGE,
+      // Keep this above the highest previously distributed Android build so
+      // preview APKs can be installed as updates on test devices.
+      versionCode: 6,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#005a45',

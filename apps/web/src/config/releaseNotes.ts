@@ -48,6 +48,28 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.5.1',
+    date: '2026-07-24',
+    title: 'Localization and Currency Foundation',
+    sections: [
+      {
+        heading: 'New Features',
+        items: [
+          'Language catalogs are now discovered automatically on the web and synchronized to mobile, making future language additions a focused translation task',
+          'Deployments can select from USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD, INR, KRW, SEK, NZD, and MXN for consistent currency formatting and validation',
+        ],
+      },
+      {
+        heading: 'Reliability and Experience',
+        items: [
+          'Shared-bill settlements and cash-flow forecasts now respect the configured currency precision, including whole-unit JPY and KRW amounts',
+          'Restored the compact Settings page and separate Admin modal to retain the familiar web layout',
+          'Android preview builds use version code 6 so they can install as updates on existing test devices',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.4.1',
     date: '2026-07-19',
     title: 'Dependency and Toolchain Maintenance',

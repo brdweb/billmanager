@@ -2,6 +2,28 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.5.1',
+    date: '2026-07-24',
+    title: 'Grundlage für Lokalisierung und Währungen',
+    sections: [
+      {
+        heading: 'Neue Funktionen',
+        items: [
+          'Sprachkataloge werden im Web jetzt automatisch erkannt und mit der mobilen Anwendung synchronisiert, sodass weitere Sprachen gezielt als Übersetzungsaufgabe ergänzt werden können',
+          'Bereitstellungen können USD, EUR, JPY, GBP, CNY, CHF, AUD, CAD, HKD, SGD, INR, KRW, SEK, NZD oder MXN für einheitliche Währungsformatierung und -prüfung auswählen',
+        ],
+      },
+      {
+        heading: 'Zuverlässigkeit und Bedienung',
+        items: [
+          'Abrechnungen geteilter Rechnungen und Cashflow-Prognosen berücksichtigen jetzt die konfigurierte Währungspräzision, einschließlich ganzer JPY- und KRW-Beträge',
+          'Die kompakte Einstellungsseite und das separate Administrationsfenster stellen das vertraute Web-Layout wieder her',
+          'Android-Vorschau-Builds verwenden Versionscode 6, damit sie auf vorhandenen Testgeräten als Updates installiert werden können',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.4.1',
     date: '2026-07-19',
     title: 'Abhängigkeits- und Toolchain-Wartung',

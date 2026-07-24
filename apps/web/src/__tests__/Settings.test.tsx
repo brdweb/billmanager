@@ -84,7 +84,7 @@ describe('Settings page', () => {
     mockAuth(false);
     renderSettings();
 
-    const languageSelect = screen.getByRole('textbox', { name: 'Language' });
+    const languageSelect = screen.getByLabelText('Language', { selector: 'input' });
     expect(languageSelect).toHaveValue('English');
     fireEvent.click(languageSelect);
     expect(screen.getByRole('option', { name: 'English' })).toBeInTheDocument();
