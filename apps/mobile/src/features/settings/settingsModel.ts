@@ -14,6 +14,13 @@ export type TelemetryStatus =
   | 'managed'
   | 'unavailable';
 
+export function resolveUserCurrency(
+  userCurrency?: string | null,
+  serverDefaultCurrency?: string | null,
+): string | undefined {
+  return userCurrency || serverDefaultCurrency || undefined;
+}
+
 export function resolveTelemetryStatus(
   state: TelemetryNoticeState | null,
   isAccountOwner: boolean,

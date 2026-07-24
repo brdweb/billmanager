@@ -2,6 +2,20 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.6.1',
+    date: '2026-07-24',
+    title: 'Zuverlässige Währungseinstellungen',
+    sections: [
+      {
+        heading: 'Fehlerbehebungen',
+        items: [
+          'Beim Ändern der mobilen Oberflächensprache bleiben die ausgewählte Benutzerwährung und die Genauigkeit der Betragseingabe erhalten',
+          'Der veröffentlichte Anmelde-API-Vertrag enthält jetzt die Benutzerwährung, die generierte Clients direkt nach der Anmeldung verwenden',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.6.0',
     date: '2026-07-24',
     title: 'Einheitliche Einstellungen und persönliche Währung',

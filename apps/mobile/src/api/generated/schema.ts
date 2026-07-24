@@ -2058,9 +2058,11 @@ export interface components {
                 /** @example Bearer */
                 token_type?: string;
                 user?: {
-                    id?: number;
-                    username?: string;
-                    role?: string;
+                    id: number;
+                    username: string;
+                    role: string;
+                    /** @enum {string} */
+                    currency: "USD" | "EUR" | "JPY" | "GBP" | "CNY" | "CHF" | "AUD" | "CAD" | "HKD" | "SGD" | "INR" | "KRW" | "SEK" | "NZD" | "MXN";
                 };
                 databases?: components["schemas"]["DatabaseInfo"][];
             };

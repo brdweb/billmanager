@@ -17,7 +17,7 @@ import {
   setLanguage,
   type SupportedLanguage,
 } from '../../i18n';
-import { formatLocaleExample } from './settingsModel';
+import { formatLocaleExample, resolveUserCurrency } from './settingsModel';
 import {
   SettingsAction,
   SettingsChoiceRow,
@@ -47,7 +47,7 @@ export function LanguageRegionScreenView({
       await setLanguage(nextLanguage);
       setFormatting(configureFormatting(
         activeProfile.capabilities?.defaultLocale,
-        activeProfile.capabilities?.defaultCurrency,
+        resolveUserCurrency(user?.currency, activeProfile.capabilities?.defaultCurrency),
         nextLanguage,
       ));
       void Haptics.selectionAsync();

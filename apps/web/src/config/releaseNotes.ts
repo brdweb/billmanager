@@ -48,6 +48,20 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.6.1',
+    date: '2026-07-24',
+    title: 'Currency Preference Reliability',
+    sections: [
+      {
+        heading: 'Bug Fixes',
+        items: [
+          'Changing the mobile interface language now preserves the signed-in user\'s selected currency and money-input precision',
+          'The published login API contract now includes the user currency used by generated clients immediately after authentication',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.6.0',
     date: '2026-07-24',
     title: 'Unified Settings and Personal Currency',
