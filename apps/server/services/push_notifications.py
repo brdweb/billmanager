@@ -186,7 +186,8 @@ def send_bill_reminder(
     bill_name: str,
     due_date: str,
     amount: Optional[float] = None,
-    days_until_due: int = 0
+    days_until_due: int = 0,
+    currency: str = "USD",
 ) -> int:
     """
     Send a bill reminder notification to a user.
@@ -216,7 +217,7 @@ def send_bill_reminder(
         body = f"{bill_name} is due in {days_until_due} days"
 
     if amount:
-        body += f" ({format_currency_amount(amount)})"
+        body += f" ({format_currency_amount(amount, currency)})"
 
     data = {
         'bill_id': str(bill_id),
@@ -360,7 +361,7 @@ def process_bill_reminders(days_ahead: List[int] = None) -> Dict[str, int]:
         days_ahead = [0, 1, 3, 7, 14, 30]  # Common per-bill reminder windows
 
     # Import here to avoid circular imports
-    from models import Bill, Database, db
+    from models import Bill, Database, User, db
 
     def parse_bill_reminder_days(value):
         if not value:
@@ -394,6 +395,9 @@ def process_bill_reminders(days_ahead: List[int] = None) -> Dict[str, int]:
             database = db.session.get(Database, bill.database_id)
             if not database or not database.owner_id:
                 continue
+            owner = db.session.get(User, database.owner_id)
+            if not owner:
+                continue
 
             sent = send_bill_reminder(
                 user_id=database.owner_id,
@@ -401,7 +405,8 @@ def process_bill_reminders(days_ahead: List[int] = None) -> Dict[str, int]:
                 bill_name=bill.name,
                 due_date=bill.due_date,
                 amount=bill.amount,
-                days_until_due=days
+                days_until_due=days,
+                currency=owner.currency,
             )
             stats['notifications_sent'] += sent
 

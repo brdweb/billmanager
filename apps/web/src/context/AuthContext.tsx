@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import * as api from '../api/client';
 import type { Database, TwoFARequiredResponse, LoginResponse, User } from '../api/client';
 import { TokenStorage } from '../utils/tokenStorage';
+import { useConfig } from './ConfigContext';
 
 interface AuthState {
   isLoggedIn: boolean;
@@ -46,11 +47,13 @@ interface AuthContextType extends AuthState {
     newPassword: string
   ) => Promise<{ success: boolean; error?: string }>;
   refreshAuth: () => Promise<void>;
+  updateCurrency: (currency: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { setCurrency } = useConfig();
   const [state, setState] = useState<AuthState>({
     isLoggedIn: false,
     isAdmin: false,
@@ -64,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const clearAuthState = useCallback(() => {
+    setCurrency('USD');
     setState({
       isLoggedIn: false,
       isAdmin: false,
@@ -75,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       pendingPasswordChange: null,
       pending2FA: null,
     });
-  }, []);
+  }, [setCurrency]);
 
   const refreshAuth = useCallback(async () => {
     try {
@@ -95,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const response = await api.getMe();
+      setCurrency(response.user.currency ?? 'USD');
       const currentDb = TokenStorage.getCurrentDatabase();
 
       setState({
@@ -113,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       TokenStorage.clearTokens();
       clearAuthState();
     }
-  }, [clearAuthState]);
+  }, [clearAuthState, setCurrency]);
 
   useEffect(() => {
     refreshAuth();
@@ -156,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // api.loginWith2FA already stored the tokens and set the first database
       const currentDb = TokenStorage.getCurrentDatabase();
+      setCurrency(loginResp.user.currency ?? 'USD');
 
       setState({
         isLoggedIn: true,
@@ -180,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await api.oauthCallback(provider, code, state);
 
       const currentDb = TokenStorage.getCurrentDatabase();
+      setCurrency(response.user.currency ?? 'USD');
 
       setState({
         isLoggedIn: true,
@@ -226,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await api.verify2FA(state.pending2FA.sessionToken, method, payload);
       const currentDb = TokenStorage.getCurrentDatabase();
+      setCurrency(response.user.currency ?? 'USD');
 
       setState({
         isLoggedIn: true,
@@ -282,6 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api.logout();
     } finally {
+      setCurrency('USD');
       setState({
         isLoggedIn: false,
         isAdmin: false,
@@ -293,6 +302,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         pendingPasswordChange: null,
         pending2FA: null,
       });
+    }
+  };
+
+  const updateCurrency = async (currency: string) => {
+    try {
+      const response = await api.updateMe({ currency });
+      setCurrency(response.user.currency ?? 'USD');
+      setState((previous) => ({ ...previous, user: response.user }));
+      return { success: true };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : undefined;
+      return { success: false, error: message };
     }
   };
 
@@ -320,6 +341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         selectDatabase,
         completePasswordChange,
         refreshAuth,
+        updateCurrency,
       }}
     >
       {children}

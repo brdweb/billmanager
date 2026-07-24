@@ -72,6 +72,36 @@ class TestJWTAuth:
         assert data["data"]["refresh_token"] != refresh_token
 
 
+class TestUserPreferences:
+    """Test persisted authenticated-user preferences."""
+
+    def test_currency_is_returned_and_updated(self, client, admin_auth_headers):
+        initial = client.get("/api/v2/me", headers=admin_auth_headers)
+        assert initial.get_json()["data"]["user"]["currency"] == "USD"
+
+        updated = client.patch(
+            "/api/v2/me",
+            headers=admin_auth_headers,
+            json={"currency": " eur "},
+        )
+
+        assert updated.status_code == 200
+        assert updated.get_json()["data"]["user"]["currency"] == "EUR"
+        persisted = client.get("/api/v2/me", headers=admin_auth_headers)
+        assert persisted.get_json()["data"]["user"]["currency"] == "EUR"
+
+    def test_currency_update_rejects_unsupported_codes(
+        self, client, admin_auth_headers
+    ):
+        response = client.patch(
+            "/api/v2/me",
+            headers=admin_auth_headers,
+            json={"currency": "BTC"},
+        )
+
+        assert response.status_code == 400
+
+
 class TestPasswordChange:
     """Test password change functionality."""
 

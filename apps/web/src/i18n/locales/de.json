@@ -1047,6 +1047,8 @@
   "settingsPage": {
     "title": "Einstellungen",
     "languageLabel": "Sprache",
+    "currencyLabel": "Währung",
+    "currencyDescription": "Legt fest, wie Ihre Beträge eingegeben und angezeigt werden. Bestehende Beträge werden nicht umgerechnet.",
     "tabs": {
       "settings": "Einstellungen"
     }

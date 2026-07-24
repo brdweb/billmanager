@@ -13,6 +13,7 @@ interface PublicConfig {
   passkeys_enabled?: boolean;
   default_currency?: string;
   default_locale?: string;
+  supported_currencies?: string[];
   oauth_providers?: Array<string | { id?: string }>;
   mobile?: MobileCapabilityEnvelope;
 }
@@ -79,6 +80,7 @@ export function parseServerCapabilities(payload: unknown): ServerCapabilities {
     serverVersion: mobile.server_version ?? 'unknown',
     minimumMobileVersion: mobile.minimum_mobile_version ?? null,
     defaultCurrency: mobile.default_currency ?? config.default_currency ?? 'USD',
+    supportedCurrencies: config.supported_currencies ?? [mobile.default_currency ?? config.default_currency ?? 'USD'],
     defaultLocale: mobile.default_locale ?? config.default_locale ?? 'en-US',
     registration: features.registration ?? config.registration_enabled ?? false,
     oauthProviders: providerIds(config, mobile),

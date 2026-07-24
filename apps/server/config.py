@@ -299,22 +299,7 @@ CURRENCY_MINOR_UNITS: Final[Mapping[str, int]] = MappingProxyType(
 )
 
 
-def _parse_default_currency(value: str) -> str:
-    normalized = value.strip().upper()
-    if not normalized:
-        message = "DEFAULT_CURRENCY cannot be empty"
-        raise ValueError(message)
-    if normalized not in SUPPORTED_CURRENCIES:
-        supported = ", ".join(SUPPORTED_CURRENCIES)
-        message = f"DEFAULT_CURRENCY must be one of: {supported}; got {normalized!r}"
-        raise ValueError(message)
-    return normalized
-
-
-# Default currency for formatting and validating amounts deployment-wide.
-DEFAULT_CURRENCY: Final = _parse_default_currency(
-    os.environ.get("DEFAULT_CURRENCY", "USD")
-)
+DEFAULT_USER_CURRENCY: Final = "USD"
 # Default locale for formatting numbers/dates in the UI (BCP 47 tag)
 DEFAULT_LOCALE = os.environ.get("DEFAULT_LOCALE", "en-US")
 
@@ -322,7 +307,7 @@ DEFAULT_LOCALE = os.environ.get("DEFAULT_LOCALE", "en-US")
 # version: it only changes when a mobile client must handle a breaking contract
 # change. An unset minimum version means that any client implementing the
 # advertised contract is accepted.
-SERVER_VERSION = os.environ.get("APP_VERSION", "4.5.2")
+SERVER_VERSION = os.environ.get("APP_VERSION", "4.6.0")
 MOBILE_CONTRACT_VERSION = 1
 MINIMUM_MOBILE_VERSION = os.environ.get("MINIMUM_MOBILE_VERSION") or None
 
@@ -369,7 +354,8 @@ def get_public_config():
         ],
         "twofa_enabled": ENABLE_2FA,
         "passkeys_enabled": ENABLE_PASSKEYS,
-        "default_currency": DEFAULT_CURRENCY,
+        "default_currency": DEFAULT_USER_CURRENCY,
+        "supported_currencies": list(SUPPORTED_CURRENCIES),
         "default_locale": DEFAULT_LOCALE,
         "mobile": get_mobile_capabilities(enabled_providers),
         "tier_limits": TIER_LIMITS if is_saas() else None,
@@ -400,7 +386,7 @@ def get_mobile_capabilities(enabled_providers=None):
         "server_version": SERVER_VERSION,
         "minimum_mobile_version": MINIMUM_MOBILE_VERSION,
         "deployment_mode": DEPLOYMENT_MODE,
-        "default_currency": DEFAULT_CURRENCY,
+        "default_currency": DEFAULT_USER_CURRENCY,
         "default_locale": DEFAULT_LOCALE,
         "oauth_providers": list(enabled_providers),
         "features": {

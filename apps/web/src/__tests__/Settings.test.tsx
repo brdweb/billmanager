@@ -3,10 +3,17 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { MemoryRouter } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useConfig } from '../context/ConfigContext';
 import { Settings } from '../pages/Settings';
+
+const updateCurrency = vi.fn(async () => ({ success: true }));
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: vi.fn(),
+}));
+
+vi.mock('../context/ConfigContext', () => ({
+  useConfig: vi.fn(),
 }));
 
 vi.mock('../components/TwoFactorSettings', () => ({
@@ -44,7 +51,12 @@ function mockAuth(isAdmin: boolean) {
     isLoggedIn: true,
     isAdmin,
     role: isAdmin ? 'admin' : 'user',
-    user: null,
+    user: {
+      id: 1,
+      username: 'tester',
+      role: isAdmin ? 'admin' : 'user',
+      currency: 'USD',
+    },
     databases: [],
     currentDb: null,
     isLoading: false,
@@ -58,26 +70,37 @@ function mockAuth(isAdmin: boolean) {
     selectDatabase: vi.fn(async () => undefined),
     completePasswordChange: vi.fn(async () => ({ success: true })),
     refreshAuth: vi.fn(async () => undefined),
+    updateCurrency,
   });
 }
 
-describe('Settings page', () => {
+describe('Settings page tabs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useConfig).mockReturnValue({
+      config: { supported_currencies: ['USD', 'EUR'] },
+    } as ReturnType<typeof useConfig>);
   });
 
-  it('keeps account settings separate from the admin modal', () => {
+  it('only exposes the Settings tab to regular users', () => {
     mockAuth(false);
 
     renderSettings('/settings?tab=users');
 
-    expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible();
-    expect(screen.getByText('Two-factor settings')).toBeVisible();
-    expect(screen.getByText('Linked accounts')).toBeVisible();
-    expect(screen.getByText('Account danger zone')).toBeVisible();
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
-    expect(screen.queryByText('Users content')).not.toBeInTheDocument();
-    expect(screen.queryByText('Bill groups content')).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Settings' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('tab', { name: 'Users' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Bill Groups' })).not.toBeInTheDocument();
+  });
+
+  it('exposes Users and Bill Groups tabs to administrators', () => {
+    mockAuth(true);
+
+    renderSettings('/settings?tab=users');
+
+    expect(screen.getByRole('tab', { name: 'Users' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Bill Groups' })).toBeInTheDocument();
+    expect(screen.getByText('Users content')).toBeVisible();
   });
 
   it('shows language options from discovered catalog metadata', () => {
@@ -89,5 +112,17 @@ describe('Settings page', () => {
     fireEvent.click(languageSelect);
     expect(screen.getByRole('option', { name: 'English' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Deutsch' })).toBeInTheDocument();
+  });
+
+  it('saves currency as a user preference', () => {
+    mockAuth(false);
+    renderSettings();
+
+    const currencySelect = screen.getByLabelText('Currency', { selector: 'input' });
+    expect(currencySelect).toHaveValue('USD — US Dollar');
+    fireEvent.click(currencySelect);
+    fireEvent.click(screen.getByRole('option', { name: 'EUR — Euro' }));
+
+    expect(updateCurrency).toHaveBeenCalledWith('EUR');
   });
 });

@@ -106,6 +106,7 @@ def validate_amount(
     *,
     allow_none: bool = False,
     allow_zero: bool = False,
+    currency: str = config.DEFAULT_USER_CURRENCY,
 ) -> Tuple[bool, Optional[str]]:
     """
     Validate monetary amount.
@@ -113,7 +114,7 @@ def validate_amount(
     Rules:
     - Must be a number
     - Must be positive (> 0)
-    - Must respect the deployment currency's minor units
+    - Must respect the selected user's currency minor units
     - Cannot exceed 1 billion
 
     Returns:
@@ -141,13 +142,13 @@ def validate_amount(
     if amount_decimal > Decimal("1000000000"):
         return False, "Amount cannot exceed 1 billion"
 
-    minor_units = config.CURRENCY_MINOR_UNITS[config.DEFAULT_CURRENCY]
+    minor_units = config.CURRENCY_MINOR_UNITS[currency]
     quantum = Decimal(1).scaleb(-minor_units)
     if amount_decimal != amount_decimal.quantize(quantum):
         if minor_units == 0:
             return (
                 False,
-                f"Amount cannot have fractional units for {config.DEFAULT_CURRENCY}",
+                f"Amount cannot have fractional units for {currency}",
             )
         return False, "Amount cannot have more than 2 decimal places"
 

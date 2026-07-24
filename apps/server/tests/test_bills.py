@@ -646,12 +646,12 @@ class TestBillSettlements:
         test_bill,
         admin_user,
         regular_user,
-        monkeypatch,
     ):
         test_bill.amount = 101
         db_session.commit()
         self._create_accepted_share(db_session, test_bill, admin_user, regular_user)
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+        admin_user.currency = 'JPY'
+        db_session.commit()
 
         response = client.get('/api/v2/settlements', headers=auth_headers_with_db)
 
@@ -677,7 +677,6 @@ class TestBillSettlements:
         test_bill,
         admin_user,
         regular_user,
-        monkeypatch,
         currency,
         bill_amount,
         split_type,
@@ -695,7 +694,8 @@ class TestBillSettlements:
             split_type=split_type,
             split_value=split_value,
         )
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', currency)
+        regular_user.currency = currency
+        db_session.commit()
         recipient_headers = {
             **user_auth_headers,
             'X-Database': recipient_db.name,
@@ -830,7 +830,6 @@ class TestCashFlowForecast:
         test_database,
         admin_user,
         regular_user,
-        monkeypatch,
     ):
         today = datetime.date.today().isoformat()
         bill = Bill(
@@ -856,7 +855,8 @@ class TestCashFlowForecast:
         ))
         db_session.commit()
         recipient_db = self._create_recipient_database(db_session, regular_user)
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+        regular_user.currency = 'JPY'
+        db_session.commit()
         recipient_headers = {
             **user_auth_headers,
             'X-Database': recipient_db.name,
@@ -915,9 +915,10 @@ class TestBillValidation:
         assert response.status_code in [400, 201]
 
     def test_fixed_bill_create_rejects_fractional_zero_minor_unit_amount(
-        self, client, auth_headers_with_db, monkeypatch
+        self, client, auth_headers_with_db, admin_user, db_session
     ):
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+        admin_user.currency = 'JPY'
+        db_session.commit()
 
         response = client.post('/api/v2/bills', headers=auth_headers_with_db, json={
             'name': 'Fractional yen',
@@ -953,9 +954,10 @@ class TestBillValidation:
         assert response.status_code == 201
 
     def test_bill_update_rejects_fractional_zero_minor_unit_amount(
-        self, client, auth_headers_with_db, test_bill, monkeypatch
+        self, client, auth_headers_with_db, test_bill, admin_user, db_session
     ):
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+        admin_user.currency = 'JPY'
+        db_session.commit()
 
         response = client.put(
             f'/api/v2/bills/{test_bill.id}',
@@ -981,9 +983,10 @@ class TestBillValidation:
         assert response.status_code == 400
 
     def test_bill_payment_rejects_fractional_zero_minor_unit_amount(
-        self, client, auth_headers_with_db, test_bill, monkeypatch
+        self, client, auth_headers_with_db, test_bill, admin_user, db_session
     ):
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+        admin_user.currency = 'JPY'
+        db_session.commit()
 
         response = client.post(
             f'/api/v2/bills/{test_bill.id}/pay',
@@ -996,9 +999,10 @@ class TestBillValidation:
 
 class TestCurrencyAwareBudgetValidation:
     def test_budget_create_rejects_fractional_zero_minor_unit_amount(
-        self, client, auth_headers_with_db, monkeypatch
+        self, client, auth_headers_with_db, admin_user, db_session
     ):
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'KRW')
+        admin_user.currency = 'KRW'
+        db_session.commit()
 
         response = client.post(
             '/api/v2/budgets',
@@ -1009,7 +1013,7 @@ class TestCurrencyAwareBudgetValidation:
         assert response.status_code == 400
 
     def test_budget_update_rejects_fractional_zero_minor_unit_amount(
-        self, client, auth_headers_with_db, test_database, db_session, monkeypatch
+        self, client, auth_headers_with_db, test_database, db_session, admin_user
     ):
         budget = CategoryBudget(
             database_id=test_database.id,
@@ -1018,7 +1022,8 @@ class TestCurrencyAwareBudgetValidation:
         )
         db_session.add(budget)
         db_session.commit()
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'KRW')
+        admin_user.currency = 'KRW'
+        db_session.commit()
 
         response = client.put(
             f'/api/v2/budgets/{budget.id}',
@@ -1031,9 +1036,10 @@ class TestCurrencyAwareBudgetValidation:
 
 class TestCurrencyAwareFixedShareValidation:
     def test_fixed_share_create_rejects_fractional_zero_minor_unit_amount(
-        self, client, auth_headers_with_db, test_bill, regular_user, monkeypatch
+        self, client, auth_headers_with_db, test_bill, regular_user, admin_user, db_session
     ):
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+        admin_user.currency = 'JPY'
+        db_session.commit()
 
         response = client.post(
             f'/api/v2/bills/{test_bill.id}/share',
@@ -1054,9 +1060,10 @@ class TestCurrencyAwareFixedShareValidation:
         test_bill,
         regular_user,
         db_session,
-        monkeypatch,
+        admin_user,
     ):
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+        admin_user.currency = 'JPY'
+        db_session.commit()
 
         response = client.post(
             f'/api/v2/bills/{test_bill.id}/share',
@@ -1081,7 +1088,6 @@ class TestCurrencyAwareFixedShareValidation:
         admin_user,
         regular_user,
         db_session,
-        monkeypatch,
     ):
         share = BillShare(
             bill_id=test_bill.id,
@@ -1095,7 +1101,8 @@ class TestCurrencyAwareFixedShareValidation:
         )
         db_session.add(share)
         db_session.commit()
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+        admin_user.currency = 'JPY'
+        db_session.commit()
 
         response = client.put(
             f'/api/v2/shares/{share.id}',
@@ -1112,9 +1119,10 @@ class TestCurrencyAwareFixedShareValidation:
         test_bill,
         regular_user,
         db_session,
-        monkeypatch,
+        admin_user,
     ):
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+        admin_user.currency = 'JPY'
+        db_session.commit()
 
         response = client.post(
             f'/api/v2/bills/{test_bill.id}/share',
@@ -1131,9 +1139,10 @@ class TestCurrencyAwareFixedShareValidation:
         assert share.split_value == Decimal('33.33')
 
     def test_percentage_share_rejects_precision_unsupported_by_numeric_column(
-        self, client, auth_headers_with_db, test_bill, regular_user, monkeypatch
+        self, client, auth_headers_with_db, test_bill, regular_user, admin_user, db_session
     ):
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+        admin_user.currency = 'JPY'
+        db_session.commit()
 
         response = client.post(
             f'/api/v2/bills/{test_bill.id}/share',

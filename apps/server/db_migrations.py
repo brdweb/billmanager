@@ -19,6 +19,7 @@ Adding new migrations:
 """
 
 import logging
+import os
 from datetime import datetime, timezone
 from sqlalchemy import text, inspect
 
@@ -996,6 +997,34 @@ def migrate_20260716_01_normalize_delete_cascades(db):
     db.session.commit()
 
 
+def migrate_20260724_01_add_user_currency(db):
+    """Move the legacy deployment currency into each user's preferences."""
+    from config import DEFAULT_USER_CURRENCY, SUPPORTED_CURRENCIES
+
+    legacy_currency = (
+        os.environ.get("DEFAULT_CURRENCY", DEFAULT_USER_CURRENCY).strip().upper()
+    )
+    if legacy_currency not in SUPPORTED_CURRENCIES:
+        logger.warning(
+            "Ignoring unsupported legacy DEFAULT_CURRENCY %r during user backfill",
+            legacy_currency,
+        )
+        legacy_currency = DEFAULT_USER_CURRENCY
+
+    columns = {column["name"] for column in inspect(db.engine).get_columns("users")}
+    if "currency" not in columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN currency VARCHAR(3)"))
+
+    db.session.execute(
+        text("UPDATE users SET currency = :currency WHERE currency IS NULL"),
+        {"currency": legacy_currency},
+    )
+    db.session.execute(text("ALTER TABLE users ALTER COLUMN currency SET DEFAULT 'USD'"))
+    db.session.execute(text("ALTER TABLE users ALTER COLUMN currency SET NOT NULL"))
+    db.session.commit()
+    logger.info("Backfilled users.currency with %s", legacy_currency)
+
+
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -1028,6 +1057,7 @@ MIGRATIONS = [
     ('20260715_03', 'Create instance-wide telemetry consent settings', migrate_20260715_03_create_telemetry_settings),
     ('20260715_04', 'Add coarse user last-login tracking', migrate_20260715_04_add_user_last_login_at),
     ('20260716_01', 'Normalize destructive foreign-key cascades', migrate_20260716_01_normalize_delete_cascades),
+    ('20260724_01', 'Add persisted per-user currency preference', migrate_20260724_01_add_user_currency),
 ]
 
 

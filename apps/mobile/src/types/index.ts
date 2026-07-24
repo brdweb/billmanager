@@ -28,6 +28,7 @@ export interface User {
   role: 'admin' | 'user';
   is_account_owner?: boolean;
   has_password?: boolean;
+  currency?: string;
 }
 
 export interface DatabaseInfo {

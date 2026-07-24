@@ -125,7 +125,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update current user preferences */
+        patch: operations["updateCurrentUser"];
         trace?: never;
     };
     "/bills": {
@@ -2025,6 +2026,7 @@ export interface components {
             /** @enum {string} */
             default_currency: "USD" | "EUR" | "JPY" | "GBP" | "CNY" | "CHF" | "AUD" | "CAD" | "HKD" | "SGD" | "INR" | "KRW" | "SEK" | "NZD" | "MXN";
             default_locale: string;
+            supported_currencies: ("USD" | "EUR" | "JPY" | "GBP" | "CNY" | "CHF" | "AUD" | "CAD" | "HKD" | "SGD" | "INR" | "KRW" | "SEK" | "NZD" | "MXN")[];
             mobile: components["schemas"]["MobileCapabilities"];
             tier_limits?: {
                 [key: string]: unknown;
@@ -2832,16 +2834,69 @@ export interface operations {
                     "application/json": {
                         success?: boolean;
                         data?: {
-                            id?: number;
-                            username?: string;
-                            /** @enum {string} */
-                            role?: "admin" | "user";
-                            databases?: components["schemas"]["DatabaseInfo"][];
-                            current_db?: string | null;
+                            user: {
+                                id: number;
+                                username: string;
+                                email?: string | null;
+                                /** @enum {string} */
+                                role: "admin" | "user";
+                                is_account_owner: boolean;
+                                has_password: boolean;
+                                /** @enum {string} */
+                                currency: "USD" | "EUR" | "JPY" | "GBP" | "CNY" | "CHF" | "AUD" | "CAD" | "HKD" | "SGD" | "INR" | "KRW" | "SEK" | "NZD" | "MXN";
+                            };
+                            databases: components["schemas"]["DatabaseInfo"][];
+                            current_db: string | null;
                         };
                     };
                 };
             };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    updateCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    currency: "USD" | "EUR" | "JPY" | "GBP" | "CNY" | "CHF" | "AUD" | "CAD" | "HKD" | "SGD" | "INR" | "KRW" | "SEK" | "NZD" | "MXN";
+                };
+            };
+        };
+        responses: {
+            /** @description Updated user information */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        data?: {
+                            user: {
+                                id: number;
+                                username: string;
+                                email?: string | null;
+                                /** @enum {string} */
+                                role: "admin" | "user";
+                                is_account_owner: boolean;
+                                has_password: boolean;
+                                /** @enum {string} */
+                                currency: "USD" | "EUR" | "JPY" | "GBP" | "CNY" | "CHF" | "AUD" | "CAD" | "HKD" | "SGD" | "INR" | "KRW" | "SEK" | "NZD" | "MXN";
+                            };
+                            databases: components["schemas"]["DatabaseInfo"][];
+                            current_db: string | null;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };

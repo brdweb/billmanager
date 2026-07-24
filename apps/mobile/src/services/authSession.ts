@@ -65,6 +65,7 @@ export function authenticatedSessionFromPayload(
       role: source.role,
       is_account_owner: source.is_account_owner,
       has_password: source.has_password,
+      currency: source.currency,
     },
     databases,
     currentDatabase,

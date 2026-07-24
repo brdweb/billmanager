@@ -2,6 +2,27 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.6.0',
+    date: '2026-07-24',
+    title: 'Einheitliche Einstellungen und persönliche Währung',
+    sections: [
+      {
+        heading: 'Einstellungen',
+        items: [
+          'Die vollständige Einstellungsseite mit Konto-, Benutzerverwaltungs- und Rechnungsgruppen-Tabs ist wiederhergestellt',
+          'Das Anwendungsmenü öffnet die Einstellungen jetzt für Administratoren und reguläre Benutzer direkt',
+        ],
+      },
+      {
+        heading: 'Persönliche Währung',
+        items: [
+          'Jeder Benutzer kann seine eigene Währung im Web oder in der mobilen Anwendung auswählen und geräteübergreifend synchronisieren',
+          'Bestehende Installationen übernehmen bei der Migration einmalig die bisherige Bereitstellungswährung; DEFAULT_CURRENCY wird zur Laufzeit nicht mehr benötigt',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.5.2',
     date: '2026-07-24',
     title: 'Kompatibilität des mobilen SDK',

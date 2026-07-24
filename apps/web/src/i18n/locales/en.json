@@ -1047,6 +1047,8 @@
   "settingsPage": {
     "title": "Settings",
     "languageLabel": "Language",
+    "currencyLabel": "Currency",
+    "currencyDescription": "Controls how your amounts are entered and displayed. Existing amounts are not converted.",
     "tabs": {
       "settings": "Settings"
     }

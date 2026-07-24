@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useServerProfiles } from '../../context/ServerProfileContext';
+import { useAuth } from '../../context/AuthContext';
+import { api } from '../../api/client';
 import { AdaptivePlatform } from '../../design/tokens';
 import {
   configureFormatting,
@@ -33,6 +35,7 @@ export function LanguageRegionScreenView({
 }) {
   const { t, i18n } = useTranslation();
   const { activeProfile } = useServerProfiles();
+  const { user, refreshUserInfo } = useAuth();
   const [formatting, setFormatting] = useState<FormattingConfig>(() => getFormattingConfig());
   const [saving, setSaving] = useState(false);
   const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
@@ -53,6 +56,24 @@ export function LanguageRegionScreenView({
     }
   };
 
+  const chooseCurrency = async (currency: string) => {
+    if (saving || currency === (user?.currency ?? formatting.currency)) return;
+    setSaving(true);
+    try {
+      const response = await api.updateUserCurrency(currency);
+      if (!response.success) return;
+      setFormatting(configureFormatting(
+        activeProfile.capabilities?.defaultLocale,
+        currency,
+        language,
+      ));
+      await refreshUserInfo();
+      void Haptics.selectionAsync();
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <SettingsDetailPage platform={platform} intro={t('mobileSettings.language.intro')}>
       <SettingsSection platform={platform} title={t('mobileSettings.language.appLanguage')}>
@@ -65,6 +86,20 @@ export function LanguageRegionScreenView({
             selected={language === option.code}
             onPress={() => void chooseLanguage(option.code)}
             isLast={index === LANGUAGE_OPTIONS.length - 1}
+          />
+        ))}
+      </SettingsSection>
+
+      <SettingsSection platform={platform} title={t('mobileSettings.language.currency')}>
+        {(activeProfile.capabilities?.supportedCurrencies ?? ['USD']).map((currency, index, currencies) => (
+          <SettingsChoiceRow
+            key={currency}
+            platform={platform}
+            title={currency}
+            subtitle={new Intl.DisplayNames([language], { type: 'currency' }).of(currency) ?? currency}
+            selected={(user?.currency ?? formatting.currency) === currency}
+            onPress={() => void chooseCurrency(currency)}
+            isLast={index === currencies.length - 1}
           />
         ))}
       </SettingsSection>
@@ -88,19 +123,6 @@ export function LanguageRegionScreenView({
         />
       </SettingsSection>
 
-      <SettingsSection
-        platform={platform}
-        title={t('mobileSettings.groups.connection')}
-      >
-        <SettingsInfoRow
-          platform={platform}
-          label={activeProfile.displayName}
-          value={t('mobileSettings.language.serverManaged', {
-            profile: activeProfile.displayName,
-          })}
-          isLast
-        />
-      </SettingsSection>
       <SettingsAction
         platform={platform}
         kind="secondary"

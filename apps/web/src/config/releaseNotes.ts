@@ -48,6 +48,27 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.6.0',
+    date: '2026-07-24',
+    title: 'Unified Settings and Personal Currency',
+    sections: [
+      {
+        heading: 'Settings Experience',
+        items: [
+          'Restored the full Settings page with accessible account, user administration, and bill group tabs',
+          'The application menu now navigates directly to Settings for both administrators and regular users',
+        ],
+      },
+      {
+        heading: 'Personal Currency',
+        items: [
+          'Each user can select their own currency from Settings on web or mobile, with the preference synchronized across devices',
+          'Existing installations inherit the former deployment currency during migration; DEFAULT_CURRENCY is no longer required at runtime',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.5.2',
     date: '2026-07-24',
     title: 'Mobile SDK Compatibility',

@@ -1304,6 +1304,23 @@ export class BillManagerApi {
     }
   }
 
+  async updateUserCurrency(
+    currency: string,
+    requestedScope?: AuthSessionScope,
+  ): Promise<ApiResponse<{ user: User; databases: DatabaseInfo[] }>> {
+    try {
+      const binding = await this.authenticationBinding(requestedScope);
+      const response = await this.client.patch<ApiResponse<{ user: User; databases: DatabaseInfo[] }>>(
+        '/me',
+        { currency },
+        this.authenticationRequestConfig(binding),
+      );
+      return { ...response.data, httpStatus: response.status };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
   // ============ Bills ============
 
   async getBills(includeArchived = false): Promise<ApiResponse<Bill[]>> {

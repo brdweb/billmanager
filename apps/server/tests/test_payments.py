@@ -155,7 +155,7 @@ class TestPaymentValidation:
         auth_headers_with_db,
         test_bill,
         db_session,
-        monkeypatch,
+        admin_user,
     ):
         payment = Payment(
             bill_id=test_bill.id,
@@ -164,7 +164,8 @@ class TestPaymentValidation:
         )
         db_session.add(payment)
         db_session.commit()
-        monkeypatch.setattr(config, 'DEFAULT_CURRENCY', 'JPY')
+        admin_user.currency = 'JPY'
+        db_session.commit()
 
         response = client.put(
             f'/api/v2/payments/{payment.id}',

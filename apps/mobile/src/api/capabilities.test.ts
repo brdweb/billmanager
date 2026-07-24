@@ -32,6 +32,7 @@ describe('server capability negotiation', () => {
       serverVersion: '4.4.0',
       minimumMobileVersion: '1.0.0',
       defaultCurrency: 'EUR',
+      supportedCurrencies: ['EUR'],
       defaultLocale: 'de-DE',
       registration: true,
       oauthProviders: ['oidc'],
