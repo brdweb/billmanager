@@ -68,6 +68,8 @@ STORE-SUBMISSION.md
 
 # Local agent instructions / tool state
 AGENTS.md
+.agents/
+.codex/
 .playwright-mcp/
 
 # Root package-lock (monorepo uses per-app locks)
