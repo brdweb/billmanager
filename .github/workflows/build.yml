@@ -111,7 +111,7 @@ jobs:
       - name: Run npm audit
         run: |
           cd apps/web
-          npm audit --audit-level=high
+          npm run audit:ci
 
   test-mobile:
     name: Mobile Contract, Tests & SDK Compatibility
