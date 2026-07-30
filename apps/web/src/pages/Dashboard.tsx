@@ -74,7 +74,7 @@ export function Dashboard({
   }
 
   return (
-    <Stack gap="lg">
+    <Stack gap="md">
       {/* Header */}
       <Group justify="space-between" align="center">
         <Title order={2}>{t('sidebar.navDashboard')}</Title>
@@ -87,7 +87,7 @@ export function Dashboard({
       <StatCards bills={bills} monthlyPaid={monthlyPaid} onStatClick={onStatClick} />
 
       {/* Content Grid */}
-      <Grid>
+      <Grid gap="sm">
         <Grid.Col span={{ base: 12, md: 8 }}>
           {/* Upcoming Bills */}
           <UpcomingBillsList

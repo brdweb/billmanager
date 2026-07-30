@@ -58,9 +58,9 @@ export function StatCards({ bills, monthlyPaid, onStatClick }: StatCardsProps) {
   const monthlyTotal = monthlyPaid + monthlyRemaining;
 
   return (
-    <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
-      <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={() => onStatClick('total')}>
-        <Group justify="space-between">
+    <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
+      <Paper withBorder p="sm" radius="md" style={{ cursor: 'pointer' }} onClick={() => onStatClick('total')}>
+        <Group justify="space-between" wrap="nowrap">
           <div>
             <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
               {t('dashboard.statCards.totalBills')}
@@ -69,14 +69,14 @@ export function StatCards({ bills, monthlyPaid, onStatClick }: StatCardsProps) {
               {totalBills}
             </Text>
           </div>
-          <ThemeIcon color="blue" variant="light" size="lg" radius="md">
+          <ThemeIcon color="blue" variant="light" size="lg" radius="md" style={{ flexShrink: 0 }}>
             <IconReceipt size={20} />
           </ThemeIcon>
         </Group>
       </Paper>
 
-      <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={() => onStatClick('thisWeek')}>
-        <Group justify="space-between">
+      <Paper withBorder p="sm" radius="md" style={{ cursor: 'pointer' }} onClick={() => onStatClick('thisWeek')}>
+        <Group justify="space-between" wrap="nowrap">
           <div>
             <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
               {t('dashboard.statCards.dueThisWeek')}
@@ -85,14 +85,14 @@ export function StatCards({ bills, monthlyPaid, onStatClick }: StatCardsProps) {
               {dueThisWeek}
             </Text>
           </div>
-          <ThemeIcon color="orange" variant="light" size="lg" radius="md">
+          <ThemeIcon color="orange" variant="light" size="lg" radius="md" style={{ flexShrink: 0 }}>
             <IconCalendar size={20} />
           </ThemeIcon>
         </Group>
       </Paper>
 
-      <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={() => onStatClick('overdue')}>
-        <Group justify="space-between">
+      <Paper withBorder p="sm" radius="md" style={{ cursor: 'pointer' }} onClick={() => onStatClick('overdue')}>
+        <Group justify="space-between" wrap="nowrap">
           <div>
             <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
               {t('dashboard.statCards.overdue')}
@@ -101,28 +101,28 @@ export function StatCards({ bills, monthlyPaid, onStatClick }: StatCardsProps) {
               {overdue}
             </Text>
           </div>
-          <ThemeIcon color={overdue > 0 ? 'red' : 'gray'} variant="light" size="lg" radius="md">
+          <ThemeIcon color={overdue > 0 ? 'red' : 'gray'} variant="light" size="lg" radius="md" style={{ flexShrink: 0 }}>
             <IconAlertTriangle size={20} />
           </ThemeIcon>
         </Group>
       </Paper>
 
-      <Paper withBorder p="md" radius="md">
-        <Group justify="space-between" align="flex-start">
-          <Stack gap={2}>
+      <Paper withBorder p="sm" radius="md">
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
             <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
               {t('dashboard.statCards.monthlyTotal')}
             </Text>
             <Text fw={700} size="xl" c="green">
               {formatCurrency(monthlyTotal)}
             </Text>
-            <Group gap="xs">
+            <Group gap={4} wrap="wrap">
               <Text size="xs" c="green.6" fw={500}>{t('dashboard.statCards.paid', { amount: formatCurrency(monthlyPaid) })}</Text>
               <Text size="xs" c="dimmed">|</Text>
               <Text size="xs" c="orange.6" fw={500}>{t('dashboard.statCards.remaining', { amount: formatCurrency(monthlyRemaining) })}</Text>
             </Group>
           </Stack>
-          <ThemeIcon color="green" variant="light" size="lg" radius="md">
+          <ThemeIcon color="green" variant="light" size="lg" radius="md" style={{ flexShrink: 0 }}>
             <IconCoin size={20} />
           </ThemeIcon>
         </Group>

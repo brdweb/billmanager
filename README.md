@@ -10,16 +10,16 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.7.0
+## 🎉 What's New in v4.7.1
 
-**Modernized Application Platform** - BillManager now runs on React Router 8 and Mantine 9, with coordinated stable dependency updates across web, mobile, and backend services.
+**Compact Responsive Layout** - Dashboard and navigation spacing now adapt cleanly to scaled displays and narrower desktop viewports.
 
 ### Highlights
 
-- **Modern Web Foundation** - React Router 8, Mantine 9, React 19.2, Vite 8.2, and the refreshed browser test stack are validated together
-- **Responsive Navigation** - Compact mobile header actions keep bill-group selection, theme, administration, and sign-out controls accessible
-- **Stable Mobile Maintenance** - Expo SDK 57, React Native 0.86, navigation, query, forms, icons, and supporting packages use compatible stable updates
-- **Safe Upgrade** - Backend SDKs are refreshed, PostgreSQL 17 remains supported, and no database migration is required
+- **Denser Navigation** - Sidebar links no longer combine link padding with duplicate external gaps
+- **Responsive Dashboard** - Compact desktop layouts use a narrower sidebar, tighter content spacing, and shorter stat cards
+- **Stable Actions** - Summary icons and bill actions stay aligned instead of wrapping into tall rows
+- **Contained Mobile Tables** - Upcoming bills scroll within their panel without widening the page
 
 ---
 

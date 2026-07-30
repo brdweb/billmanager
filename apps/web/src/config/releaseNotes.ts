@@ -50,6 +50,20 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.1',
+    date: '2026-07-30',
+    title: 'Compact Responsive Layout',
+    sections: [
+      {
+        heading: 'Improvements',
+        items: [
+          'Reduced duplicate sidebar and dashboard spacing on scaled displays and narrower desktop viewports',
+          'Kept summary icons and bill actions aligned while containing wide upcoming-bill tables on mobile screens',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.0',
     date: '2026-07-30',
     title: 'Modernized Application Platform',

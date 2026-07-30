@@ -32,6 +32,7 @@ export function Layout({ children, sidebar, onSettingsClick, onBillingClick }: L
   const { isLoggedIn, isAdmin, databases, currentDb, selectDatabase, logout } = useAuth();
   const [scroll, scrollTo] = useWindowScroll();
   const isMobile = useMediaQuery('(max-width: 768px)');
+  const isCompactDesktop = useMediaQuery('(max-width: 1400px)');
 
   const handleDatabaseChange = (value: string | null) => {
     if (value) {
@@ -41,7 +42,7 @@ export function Layout({ children, sidebar, onSettingsClick, onBillingClick }: L
 
   return (
     <>
-      <AppShell header={{ height: 60 }} padding="md">
+      <AppShell header={{ height: 60 }} padding={isCompactDesktop ? 'sm' : 'md'}>
         <AppShell.Header>
           <Group h="100%" px={isMobile ? 'xs' : 'md'} justify="space-between" wrap="nowrap">
             <Group gap={isMobile ? 'xs' : 'md'} wrap="nowrap">
@@ -155,10 +156,10 @@ export function Layout({ children, sidebar, onSettingsClick, onBillingClick }: L
         </AppShell.Header>
 
         <AppShell.Main>
-          <Group align="flex-start" wrap="nowrap" gap="md">
+          <Group align="flex-start" wrap="nowrap" gap={isCompactDesktop ? 'sm' : 'md'}>
             {/* Sidebar - hidden on mobile, shown via drawer */}
             {!isMobile && (
-              <Box w={285} style={{ flexShrink: 0 }}>
+              <Box w={isCompactDesktop ? 240 : 285} style={{ flexShrink: 0 }}>
                 {sidebar}
               </Box>
             )}
