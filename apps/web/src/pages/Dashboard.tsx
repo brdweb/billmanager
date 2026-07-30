@@ -88,7 +88,7 @@ export function Dashboard({
 
       {/* Content Grid */}
       <Grid gap="sm">
-        <Grid.Col span={{ base: 12, md: 8 }}>
+        <Grid.Col span={{ base: 12, md: 8, lg: 9 }}>
           {/* Upcoming Bills */}
           <UpcomingBillsList
             bills={bills}
@@ -98,7 +98,7 @@ export function Dashboard({
             onViewAll={onViewBills}
           />
         </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 4 }}>
+        <Grid.Col span={{ base: 12, md: 4, lg: 3 }}>
           {/* Quick Actions */}
           <Paper withBorder p="md" radius="md">
             <Title order={5} mb="md">{t('dashboardPage.quickActions')}</Title>

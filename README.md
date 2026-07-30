@@ -10,16 +10,16 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.7.1
+## 🎉 What's New in v4.7.2
 
-**Compact Responsive Layout** - Dashboard and navigation spacing now adapt cleanly to scaled displays and narrower desktop viewports.
+**Aligned Dashboard Actions** - The Quick Actions panel now matches the Monthly Total card width on wide desktop layouts.
 
 ### Highlights
 
-- **Denser Navigation** - Sidebar links no longer combine link padding with duplicate external gaps
-- **Responsive Dashboard** - Compact desktop layouts use a narrower sidebar, tighter content spacing, and shorter stat cards
-- **Stable Actions** - Summary icons and bill actions stay aligned instead of wrapping into tall rows
-- **Contained Mobile Tables** - Upcoming bills scroll within their panel without widening the page
+- **Consistent Columns** - Quick Actions uses the same quarter-width dashboard column as Monthly Total
+- **More Bill Space** - Upcoming Bills gains the remaining desktop width for clearer table content
+- **Responsive Balance** - Tablet layouts retain the roomier one-third action column
+- **No Mobile Regression** - Phone layouts continue stacking panels at full width
 
 ---
 
