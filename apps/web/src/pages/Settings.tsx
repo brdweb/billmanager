@@ -1,7 +1,7 @@
 import { Container, Title, Stack, Divider, Select, Tabs, Box } from '@mantine/core';
 import { IconSettings, IconLanguage, IconUsers, IconFolders, IconCurrencyDollar } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { TwoFactorSettings } from '../components/TwoFactorSettings';
 import { LinkedAccounts } from '../components/LinkedAccounts';
 import { AccountDangerZone } from '../components/AccountDangerZone';

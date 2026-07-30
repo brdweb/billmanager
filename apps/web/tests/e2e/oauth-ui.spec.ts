@@ -119,6 +119,6 @@ test.describe('OAuth UI - Settings Page', () => {
     const settingsTab = page.locator('[role="tab"]:has-text("Settings")');
     await settingsTab.click();
     await expect(page).toHaveURL(/\/settings$/);
-    await expect(page.getByLabel('Language')).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Language' })).toBeVisible();
   });
 });

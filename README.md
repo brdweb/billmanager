@@ -10,15 +10,16 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.6.1
+## 🎉 What's New in v4.7.0
 
-**Currency Preference Reliability** - Personal currency now remains active while changing mobile language, and generated API clients receive the complete login contract.
+**Modernized Application Platform** - BillManager now runs on React Router 8 and Mantine 9, with coordinated stable dependency updates across web, mobile, and backend services.
 
 ### Highlights
 
-- **Stable Mobile Formatting** - Changing language no longer resets formatting or money-input precision to the server default currency
-- **Complete API Contract** - The documented and generated login response now includes the authenticated user's currency
-- **Regression Coverage** - Mobile behavior and OpenAPI generation are protected by focused tests
+- **Modern Web Foundation** - React Router 8, Mantine 9, React 19.2, Vite 8.2, and the refreshed browser test stack are validated together
+- **Responsive Navigation** - Compact mobile header actions keep bill-group selection, theme, administration, and sign-out controls accessible
+- **Stable Mobile Maintenance** - Expo SDK 57, React Native 0.86, navigation, query, forms, icons, and supporting packages use compatible stable updates
+- **Safe Upgrade** - Backend SDKs are refreshed, PostgreSQL 17 remains supported, and no database migration is required
 
 ---
 

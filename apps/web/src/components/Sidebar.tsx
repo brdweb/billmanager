@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Stack, Title, Text, Group, Badge, Divider, NavLink } from '@mantine/core';
 import { IconCalendar, IconHome, IconReceipt, IconChartPie, IconListDetails, IconShare } from '@tabler/icons-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import type { Bill } from '../api/client';
 import type { BillFilter, DateRangeFilter } from '../App';

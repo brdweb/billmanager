@@ -6,9 +6,11 @@
  * 1. Add a new entry at the TOP of the `releaseNotes` array (newest first)
  * 2. Update the version number in these files:
  *    - apps/server/config.py (SERVER_VERSION)
+ *    - apps/server/.env.example (APP_VERSION example)
  *    - apps/server/openapi.yaml
  *    - apps/web/package.json
  *    - apps/web/package-lock.json
+ *    - apps/web/src/config/releaseNotes.de.ts (matching localized entry)
  *    - README.md (What's New section)
  * 3. The `currentVersion` export automatically uses the first entry's version
  *
@@ -47,6 +49,27 @@ export interface ReleaseNote {
 }
 
 export const releaseNotes: ReleaseNote[] = [
+  {
+    version: '4.7.0',
+    date: '2026-07-30',
+    title: 'Modernized Application Platform',
+    sections: [
+      {
+        heading: 'Web Experience',
+        items: [
+          'Upgraded the navigation and interface foundations to React Router 8 and Mantine 9 while preserving routes, settings, dialogs, charts, and browser navigation',
+          'Improved the compact web header so bill group, theme, administration, and sign-out controls remain usable on phone-sized screens',
+        ],
+      },
+      {
+        heading: 'Compatibility and Reliability',
+        items: [
+          'Refreshed React, Vite, Playwright, the DOM test environment, Expo SDK 57 patches, React Native, Stripe, Resend, and compatible supporting libraries',
+          'Validated clean installs, web and mobile tests, Chromium workflows, the production image, and PostgreSQL 17 with no database migration required',
+        ],
+      },
+    ],
+  },
   {
     version: '4.6.1',
     date: '2026-07-24',

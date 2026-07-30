@@ -13,7 +13,7 @@ export default defineConfig({
     timeout: 10000,
   },
   reporter: [
-    ['html', { outputFolder: '/tmp/billmanager-test-results/playwright-report' }],
+    ['html', { outputFolder: '/tmp/billmanager-test-results/playwright-report', open: 'never' }],
     ['json', { outputFile: '/tmp/billmanager-test-results/test-results.json' }],
     ['list']
   ],
