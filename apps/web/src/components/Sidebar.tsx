@@ -87,7 +87,7 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange }: SidebarPr
     <Stack gap="xs">
       {/* Navigation Links */}
       {isLoggedIn && (
-        <>
+        <Stack gap={0}>
           <NavLink
             label={t('sidebar.navDashboard')}
             leftSection={<IconHome size={16} />}
@@ -131,7 +131,7 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange }: SidebarPr
             variant="light"
           />
           <Divider my="xs" />
-        </>
+        </Stack>
       )}
 
       <Title order={6}>

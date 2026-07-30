@@ -2,6 +2,20 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.1',
+    date: '2026-07-30',
+    title: 'Kompaktes responsives Layout',
+    sections: [
+      {
+        heading: 'Verbesserungen',
+        items: [
+          'Doppelte Abstände in Seitenleiste und Dashboard wurden auf skalierten Displays und schmaleren Desktop-Ansichten reduziert',
+          'Übersichtssymbole und Rechnungsaktionen bleiben ausgerichtet, während breite Tabellen auf Mobilgeräten innerhalb ihres Bereichs scrollen',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.0',
     date: '2026-07-30',
     title: 'Modernisierte Anwendungsplattform',

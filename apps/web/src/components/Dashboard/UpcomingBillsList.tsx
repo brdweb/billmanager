@@ -1,5 +1,6 @@
 import { Paper, Title, Text, Group, Button, Table, Badge, ThemeIcon, ActionIcon, Tooltip } from '@mantine/core';
 import { IconCalendar, IconCash, IconEdit, IconUsers } from '@tabler/icons-react';
+import { useMediaQuery } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { Bill } from '../../api/client';
@@ -73,6 +74,7 @@ function getFrequencyText(bill: Bill, t: TFunction): string {
 
 export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onViewAll }: UpcomingBillsListProps) {
   const { t } = useTranslation();
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   // Get today's date at midnight
   const today = new Date();
@@ -109,23 +111,24 @@ export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onView
           {t('dashboard.upcomingBills.empty')}
         </Text>
       ) : (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>{t('common.table.name')}</Table.Th>
-              <Table.Th>{t('common.table.amount')}</Table.Th>
-              <Table.Th>{t('common.table.dueDate')}</Table.Th>
-              <Table.Th>{t('common.table.frequency')}</Table.Th>
-              <Table.Th>{t('common.table.actions')}</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {upcomingBills.map((bill) => (
-              <Table.Tr
-                key={bill.id}
-                style={{ cursor: 'pointer' }}
-                onClick={() => onViewPayments(bill)}
-              >
+        <Table.ScrollContainer minWidth={640}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>{t('common.table.name')}</Table.Th>
+                <Table.Th>{t('common.table.amount')}</Table.Th>
+                <Table.Th>{t('common.table.dueDate')}</Table.Th>
+                <Table.Th>{t('common.table.frequency')}</Table.Th>
+                <Table.Th>{t('common.table.actions')}</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {upcomingBills.map((bill) => (
+                <Table.Tr
+                  key={bill.id}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => onViewPayments(bill)}
+                >
                 <Table.Td>
                   <Group gap="sm">
                     <BillIcon icon={bill.icon} size={24} />
@@ -205,7 +208,7 @@ export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onView
                   </Text>
                 </Table.Td>
                 <Table.Td>
-                  <Group gap="xs" onClick={(e) => e.stopPropagation()}>
+                  <Group gap="xs" wrap={isMobile ? 'wrap' : 'nowrap'} onClick={(e) => e.stopPropagation()}>
                     {!bill.is_shared && (
                       <>
                         <ActionIcon
@@ -238,10 +241,11 @@ export function UpcomingBillsList({ bills, onPay, onEdit, onViewPayments, onView
                     )}
                   </Group>
                 </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
     </Paper>
   );
