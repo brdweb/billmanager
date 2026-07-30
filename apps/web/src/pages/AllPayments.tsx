@@ -23,7 +23,7 @@ import { DatePickerInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
 import { BarChart } from '@mantine/charts';
 import { IconSearch, IconX, IconArrowLeft, IconChartBar, IconChevronDown, IconChevronUp, IconDownload, IconFileTypeCsv, IconFileTypePdf, IconPrinter, IconArrowUpRight, IconArrowDownRight, IconFilter, IconFilterOff } from '@tabler/icons-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { notifications } from '@mantine/notifications';
 import { useTranslation } from 'react-i18next';
 import { getAllPayments, updatePayment, deletePayment } from '../api/client';
@@ -417,7 +417,7 @@ export function AllPayments() {
               {chartOpened ? t('allPaymentsPage.hide') : t('allPaymentsPage.show')}
             </Button>
           </Group>
-          <Collapse in={chartOpened}>
+          <Collapse expanded={chartOpened}>
             <BarChart
               h={200}
               data={monthlyChartData}

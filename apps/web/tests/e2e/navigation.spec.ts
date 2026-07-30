@@ -71,6 +71,7 @@ test.describe('Navigation and Database Selection', () => {
   test('back button functionality', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible();
 
     await page.goto('/all-payments');
     await page.waitForLoadState('domcontentloaded');

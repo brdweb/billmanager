@@ -175,7 +175,7 @@ function SectionShell({
         </ActionIcon>
       </Group>
 
-      <Collapse in={!collapsed}>{section.content}</Collapse>
+      <Collapse expanded={!collapsed}>{section.content}</Collapse>
     </Paper>
   );
 }

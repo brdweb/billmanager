@@ -43,16 +43,20 @@ export function Layout({ children, sidebar, onSettingsClick, onBillingClick }: L
     <>
       <AppShell header={{ height: 60 }} padding="md">
         <AppShell.Header>
-          <Group h="100%" px="md" justify="space-between">
-            <Group>
+          <Group h="100%" px={isMobile ? 'xs' : 'md'} justify="space-between" wrap="nowrap">
+            <Group gap={isMobile ? 'xs' : 'md'} wrap="nowrap">
               {isMobile && (
                 <Burger opened={drawerOpened} onClick={toggleDrawer} size="sm" />
               )}
-              <img src="/logo_icon.svg" alt="BillManager" style={{ width: 36, height: 36 }} />
-              <Title order={3} c="billGreen">BillManager</Title>
+              {!isMobile && (
+                <>
+                  <img src="/logo_icon.svg" alt="BillManager" style={{ width: 36, height: 36 }} />
+                  <Title order={3} c="billGreen">BillManager</Title>
+                </>
+              )}
             </Group>
 
-            <Group>
+            <Group gap={isMobile ? 'xs' : 'md'} wrap="nowrap">
               {isLoggedIn && databases.length > 0 && (
                 <Select
                   placeholder={t('layout.selectBillGroupPlaceholder')}
@@ -66,7 +70,7 @@ export function Layout({ children, sidebar, onSettingsClick, onBillingClick }: L
                   value={currentDb}
                   onChange={handleDatabaseChange}
                   size="sm"
-                  w={180}
+                  w={isMobile ? 112 : 180}
                 />
               )}
 
@@ -79,7 +83,41 @@ export function Layout({ children, sidebar, onSettingsClick, onBillingClick }: L
                 {colorScheme === 'dark' ? <IconSun size={20} /> : <IconMoon size={20} />}
               </ActionIcon>
 
-              {isLoggedIn && (
+              {isLoggedIn && isMobile && (
+                <Group gap={4} wrap="nowrap">
+                  {isAdmin && onBillingClick && (
+                    <ActionIcon
+                      variant="light"
+                      color="billGreen"
+                      size="lg"
+                      onClick={onBillingClick}
+                      aria-label={t('layout.billing')}
+                    >
+                      <IconCreditCard size={18} />
+                    </ActionIcon>
+                  )}
+                  <ActionIcon
+                    variant="light"
+                    color={isAdmin ? 'orange' : 'billGreen'}
+                    size="lg"
+                    onClick={onSettingsClick}
+                    aria-label={isAdmin ? t('layout.admin') : t('layout.settings')}
+                  >
+                    <IconSettings size={18} />
+                  </ActionIcon>
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size="lg"
+                    onClick={logout}
+                    aria-label={t('layout.logout')}
+                  >
+                    <IconLogout size={18} />
+                  </ActionIcon>
+                </Group>
+              )}
+
+              {isLoggedIn && !isMobile && (
                 <Group gap="xs">
                   {isAdmin && onBillingClick && (
                     <Button

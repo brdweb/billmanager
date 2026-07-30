@@ -2,6 +2,27 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.0',
+    date: '2026-07-30',
+    title: 'Modernisierte Anwendungsplattform',
+    sections: [
+      {
+        heading: 'Web-Erlebnis',
+        items: [
+          'Die Navigations- und Oberflächengrundlagen wurden auf React Router 8 und Mantine 9 aktualisiert, während Routen, Einstellungen, Dialoge, Diagramme und Browsernavigation erhalten bleiben',
+          'Die kompakte Web-Kopfzeile wurde verbessert, damit Rechnungsgruppe, Design, Administration und Abmeldung auch auf Smartphone-Bildschirmen bedienbar bleiben',
+        ],
+      },
+      {
+        heading: 'Kompatibilität und Zuverlässigkeit',
+        items: [
+          'React, Vite, Playwright, die DOM-Testumgebung, Expo-SDK-57-Patches, React Native, Stripe, Resend und kompatible Hilfsbibliotheken wurden aktualisiert',
+          'Saubere Installationen, Web- und Mobile-Tests, Chromium-Abläufe, das Produktions-Image und PostgreSQL 17 wurden validiert; eine Datenbankmigration ist nicht erforderlich',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.6.1',
     date: '2026-07-24',
     title: 'Zuverlässige Währungseinstellungen',

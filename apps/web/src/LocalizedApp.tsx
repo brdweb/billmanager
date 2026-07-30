@@ -1,8 +1,8 @@
-import { MantineProvider } from '@mantine/core';
+import { MantineProvider, v8CssVariablesResolver } from '@mantine/core';
 import { DatesProvider } from '@mantine/dates';
 import { Notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useState } from 'react';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
@@ -54,8 +54,12 @@ export function LocalizedApp() {
         weekendDays: [0, 6],
       }}
     >
-      <MantineProvider theme={theme} defaultColorScheme="light">
-        <Notifications position="top-right" />
+      <MantineProvider
+        theme={theme}
+        defaultColorScheme="light"
+        cssVariablesResolver={v8CssVariablesResolver}
+      >
+        <Notifications position="top-right" pauseResetOnHover="notification" />
         <BrowserRouter>
           <ConfigProvider>
             <AuthProvider>

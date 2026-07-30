@@ -1,12 +1,22 @@
 import { Page, expect } from '@playwright/test';
+import { currentVersion } from '../../src/config/releaseNotes';
 
 /**
  * Dismiss any blocking modals (Release Notes, Telemetry) that appear after login.
  */
 async function dismissModals(page: Page) {
-  // Dismiss Release Notes modal if it appears
   const releaseNotesModal = page.locator('[role="dialog"]:has-text("Release Notes")');
-  if (await releaseNotesModal.isVisible({ timeout: 2000 }).catch(() => false)) {
+  const telemetryDialog = page.locator('[role="dialog"]:has-text("Usage Statistics")');
+
+  // Both dialogs are loaded asynchronously after authentication. Wait for
+  // either one instead of using locator.isVisible(), which does not wait.
+  await Promise.any([
+    releaseNotesModal.waitFor({ state: 'visible', timeout: 2000 }),
+    telemetryDialog.waitFor({ state: 'visible', timeout: 2000 }),
+  ]).catch(() => undefined);
+
+  // Dismiss Release Notes modal if it appears
+  if (await releaseNotesModal.isVisible()) {
     const closeButton = releaseNotesModal.locator('button:has-text("Close")');
     if (await closeButton.isVisible().catch(() => false)) {
       await closeButton.click();
@@ -17,8 +27,7 @@ async function dismissModals(page: Page) {
   }
 
   // Dismiss telemetry dialog if it appears
-  const telemetryDialog = page.locator('[role="dialog"]:has-text("Usage Statistics")');
-  if (await telemetryDialog.isVisible().catch(() => false)) {
+  if (await telemetryDialog.isVisible()) {
     const optOutButton = telemetryDialog.locator('button:has-text("Opt Out")');
     if (await optOutButton.isVisible().catch(() => false)) {
       await optOutButton.click();
@@ -32,9 +41,9 @@ async function dismissModals(page: Page) {
  * before the page loads. Call this before navigating to a page.
  */
 export async function suppressModals(page: Page) {
-  await page.addInitScript(() => {
-    localStorage.setItem('billmanager_seen_version', '4.0.2');
-  });
+  await page.addInitScript((version) => {
+    localStorage.setItem('billmanager_seen_version', version);
+  }, currentVersion);
 }
 
 /**
