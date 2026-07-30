@@ -50,6 +50,20 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.2',
+    date: '2026-07-30',
+    title: 'Aligned Dashboard Actions',
+    sections: [
+      {
+        heading: 'Improvements',
+        items: [
+          'Matched the Quick Actions panel width to the Monthly Total card on wide desktop layouts',
+          'Gave the Upcoming Bills table the remaining horizontal space while preserving tablet and mobile stacking behavior',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.1',
     date: '2026-07-30',
     title: 'Compact Responsive Layout',

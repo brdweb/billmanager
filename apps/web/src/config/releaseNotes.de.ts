@@ -2,6 +2,20 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.2',
+    date: '2026-07-30',
+    title: 'Ausgerichtete Dashboard-Aktionen',
+    sections: [
+      {
+        heading: 'Verbesserungen',
+        items: [
+          'Die Breite des Schnellzugriff-Bereichs entspricht auf breiten Desktop-Ansichten nun der Karte für die Monatssumme',
+          'Die Tabelle der anstehenden Rechnungen nutzt den verbleibenden Platz, während das Verhalten auf Tablets und Mobilgeräten erhalten bleibt',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.1',
     date: '2026-07-30',
     title: 'Kompaktes responsives Layout',
