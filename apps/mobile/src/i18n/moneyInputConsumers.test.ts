@@ -16,6 +16,8 @@ describe('mobile money input consumers', () => {
     expect(addBill).toContain('{...moneyInputProps}');
     expect(billDetail).toContain('parseMoneyInput(payAmount)');
     expect(billDetail).toContain('parseMoneyInput(editAmount)');
+    expect(billDetail).not.toContain('amount <= 0');
+    expect(billDetail.match(/amount < 0/g)).toHaveLength(2);
     expect(billDetail.match(/\{\.\.\.moneyInputProps\}/g)).toHaveLength(2);
     expect(addBill).not.toContain('placeholder="0.00"');
     expect(billDetail).not.toContain('placeholder="0.00"');

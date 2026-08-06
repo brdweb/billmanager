@@ -10,16 +10,16 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.7.2
+## 🎉 What's New in v4.7.3
 
-**Aligned Dashboard Actions** - The Quick Actions panel now matches the Monthly Total card width on wide desktop layouts.
+**Zero-Value Payments** - Record a payment of zero when no balance is due while still advancing the bill and preserving payment history.
 
 ### Highlights
 
-- **Consistent Columns** - Quick Actions uses the same quarter-width dashboard column as Monthly Total
-- **More Bill Space** - Upcoming Bills gains the remaining desktop width for clearer table content
-- **Responsive Balance** - Tablet layouts retain the roomier one-third action column
-- **No Mobile Regression** - Phone layouts continue stacking panels at full width
+- **Advance Without a Balance** - Zero-value payments can move recurring bills to their next due date
+- **Accurate Averages** - Zero-value occurrences are included in variable-bill payment averages
+- **Web and Mobile Support** - Create and edit zero-value payments from either client
+- **Input Safety Preserved** - Negative, malformed, and currency-invalid amounts remain rejected
 
 ---
 

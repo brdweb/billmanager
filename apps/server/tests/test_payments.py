@@ -109,6 +109,42 @@ class TestPaymentsCRUD:
 class TestPaymentValidation:
     """Test payment input validation."""
 
+    def test_zero_payment_advances_due_date_and_counts_toward_average(
+        self, client, auth_headers_with_db, test_bill, db_session
+    ):
+        """A zero payment is still a real occurrence for variable bills."""
+        test_bill.is_variable = True
+        test_bill.amount = None
+        db_session.add(
+            Payment(
+                bill_id=test_bill.id,
+                amount=100,
+                payment_date='2024-12-15',
+            )
+        )
+        db_session.commit()
+
+        response = client.post(
+            f'/api/v2/bills/{test_bill.id}/pay',
+            headers=auth_headers_with_db,
+            json={
+                'amount': 0,
+                'payment_date': '2025-01-15',
+                'advance_due': True,
+            },
+        )
+
+        assert response.status_code == 200
+        db_session.refresh(test_bill)
+        assert test_bill.due_date == '2025-02-15'
+        assert Payment.query.filter_by(bill_id=test_bill.id, amount=0).count() == 1
+
+        bill_response = client.get(
+            f'/api/v2/bills/{test_bill.id}', headers=auth_headers_with_db
+        )
+        assert bill_response.status_code == 200
+        assert bill_response.get_json()['data']['avg_amount'] == 50
+
     def test_payment_defaults_to_bill_amount(self, client, auth_headers_with_db, test_bill):
         """Test that payments default to bill amount when not specified."""
         response = client.post(f'/api/v2/bills/{test_bill.id}/pay',
@@ -174,6 +210,27 @@ class TestPaymentValidation:
         )
 
         assert response.status_code == 400
+
+    def test_payment_update_allows_zero(
+        self, client, auth_headers_with_db, test_bill, db_session
+    ):
+        payment = Payment(
+            bill_id=test_bill.id,
+            amount=100,
+            payment_date='2026-08-15',
+        )
+        db_session.add(payment)
+        db_session.commit()
+
+        response = client.put(
+            f'/api/v2/payments/{payment.id}',
+            headers=auth_headers_with_db,
+            json={'amount': 0},
+        )
+
+        assert response.status_code == 200
+        db_session.refresh(payment)
+        assert payment.amount == 0
 
 
 class TestPaymentAuthorization:
