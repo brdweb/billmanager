@@ -81,7 +81,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
     if (!bill) return;
 
     const amount = parseMoneyInput(payAmount);
-    if (amount === null || amount <= 0) {
+    if (amount === null || amount < 0) {
       Alert.alert(t('mobileParity.payments.checkDetails'), t('mobileParity.billDetail.invalidAmount'));
       return;
     }
@@ -204,7 +204,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
     if (!editPayment) return;
 
     const amount = parseMoneyInput(editAmount);
-    if (amount === null || amount <= 0) {
+    if (amount === null || amount < 0) {
       Alert.alert(t('mobileParity.payments.checkDetails'), t('mobileParity.billDetail.invalidAmount'));
       return;
     }

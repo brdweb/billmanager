@@ -14,7 +14,7 @@ info:
 
     Access tokens expire after 15 minutes. Refresh tokens expire after 7 days.
 
-  version: 4.7.2
+  version: 4.7.3
   license:
     name: O'Saasy License
     url: https://osaasy.dev/
@@ -3910,6 +3910,7 @@ components:
           properties:
             amount:
               type: number
+              minimum: 0
               description: Payment amount (defaults to bill amount)
             payment_date:
               type: string
@@ -3930,6 +3931,7 @@ components:
           properties:
             amount:
               type: number
+              minimum: 0
             payment_date:
               type: string
               format: date

@@ -2,6 +2,21 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.3',
+    date: '2026-08-06',
+    title: 'Zahlungen mit Nullbetrag',
+    sections: [
+      {
+        heading: 'Fehlerbehebungen',
+        items: [
+          'Zahlungen mit Nullbetrag können wiederkehrende Rechnungen weiterstellen, wenn kein Betrag fällig ist',
+          'Zahlungen mit Nullbetrag werden in Durchschnittswerten variabler Rechnungen berücksichtigt; negative und ungültige Beträge bleiben gesperrt',
+          'Die mobile App verwendet nun die neuesten veröffentlichten Patch-Abhängigkeiten für Expo SDK 57',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.2',
     date: '2026-07-30',
     title: 'Ausgerichtete Dashboard-Aktionen',

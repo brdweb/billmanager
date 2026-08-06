@@ -50,6 +50,21 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.3',
+    date: '2026-08-06',
+    title: 'Zero-Value Payments',
+    sections: [
+      {
+        heading: 'Fixes',
+        items: [
+          'Allowed zero-value payments to advance recurring bills when no balance is due',
+          'Included zero-value payment occurrences in variable-bill averages while continuing to reject negative and invalid amounts',
+          'Aligned the mobile app with the latest published Expo SDK 57 patch dependencies',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.2',
     date: '2026-07-30',
     title: 'Aligned Dashboard Actions',

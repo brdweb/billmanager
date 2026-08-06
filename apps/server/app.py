@@ -3129,7 +3129,9 @@ def jwt_pay_bill(bill_id):
         return conflict
 
     payment_amount = data.get("amount", bill.amount)
-    is_valid, error = validate_amount(payment_amount, currency=_current_user_currency())
+    is_valid, error = validate_amount(
+        payment_amount, allow_zero=True, currency=_current_user_currency()
+    )
     if not is_valid:
         return jsonify({"success": False, "error": error}), 400
 
@@ -3414,7 +3416,9 @@ def jwt_update_payment(payment_id):
         return conflict
 
     if "amount" in data:
-        is_valid, error = validate_amount(data["amount"], currency=_current_user_currency())
+        is_valid, error = validate_amount(
+            data["amount"], allow_zero=True, currency=_current_user_currency()
+        )
         if not is_valid:
             return jsonify({"success": False, "error": error}), 400
         payment.amount = data["amount"]
