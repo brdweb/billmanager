@@ -171,7 +171,7 @@ jobs:
       - name: Run mobile npm audit
         run: |
           cd apps/mobile
-          npm audit --audit-level=high
+          npm run audit
 
   security-scan:
     name: Secrets Scan
