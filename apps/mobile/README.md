@@ -16,7 +16,7 @@ The rewrite is under active development. The current code milestone is `1.0.0-al
 
 Prerequisites:
 
-- Node.js 24.18.0
+- Node.js 24.19.0
 - npm
 - an installed BillManager development client or a local Android/iOS native toolchain
 - an Expo account for EAS builds

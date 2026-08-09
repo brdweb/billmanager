@@ -1,4 +1,12 @@
+const imageSize = require('image-size');
 const { getDefaultConfig } = require('expo/metro-config');
+
+// Metro reads repository assets with image-size while bundling. The upstream
+// ICNS, HEIF, and JPEG XL parsers currently have unpatched infinite-loop
+// advisories. BillManager does not use these formats, so disable their handlers
+// before Metro can inspect asset contents. Remove this only after image-size has
+// published and Metro has adopted a patched release.
+imageSize.disableTypes(['heif', 'icns', 'jxl', 'jxl-stream']);
 
 const config = getDefaultConfig(__dirname);
 

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+  "high": true,
+  "allowlist": [
+    {
+      "GHSA-w3rx-r6r6-pgpr": {
+        "active": true,
+        "notes": "Metro build-time ICNS parsing is disabled in metro.config.js; image-size has no patched release.",
+        "expiry": "2026-09-09"
+      }
+    },
+    {
+      "GHSA-5p2g-fcmc-qvqq": {
+        "active": true,
+        "notes": "Metro build-time HEIF and JPEG XL parsing is disabled in metro.config.js; image-size has no patched release.",
+        "expiry": "2026-09-09"
+      }
+    }
+  ]
+}

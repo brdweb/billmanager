@@ -4,7 +4,7 @@ BillManager Mobile requires an Expo development build. Expo Go cannot load the S
 
 ## Prerequisites
 
-- Node.js 24.18.0 and npm
+- Node.js 24.19.0 and npm
 - an Expo account with access to the existing `brdweb/billmanager-mobile` EAS project
 - EAS CLI 16.28.0 or newer, or `npx eas-cli`
 - Android Studio, Android SDK, an emulator or Android device, and a compatible JDK for local Android builds

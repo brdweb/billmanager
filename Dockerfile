@@ -1,5 +1,5 @@
 # Stage 1: Build the React frontend
-FROM node:24.18.0-slim AS frontend-builder
+FROM node:24.19.0-slim AS frontend-builder
 
 WORKDIR /app/apps/web
 
