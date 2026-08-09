@@ -4,7 +4,7 @@
   "version": "4.7.3",
   "type": "module",
   "engines": {
-    "node": ">=24.18.0 <25"
+    "node": ">=24.19.0 <25"
   },
   "overrides": {
     "dompurify": "^3.4.11",
