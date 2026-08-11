@@ -2,6 +2,20 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.4',
+    date: '2026-08-11',
+    title: 'Zuverlässige mobile Anmeldung',
+    sections: [
+      {
+        heading: 'Fehlerbehebungen',
+        items: [
+          'Google, Apple, Microsoft und konfigurierte SSO-Anbieter werden bei einer Neuinstallation vor dem Anmeldebildschirm geladen',
+          'Die für Passkeys und geteilte Anmeldedaten erforderliche Android-App-Verknüpfung wurde veröffentlicht',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.3',
     date: '2026-08-06',
     title: 'Zahlungen mit Nullbetrag',

@@ -18,6 +18,7 @@ import type { ServerCapabilities } from '../../../domain/serverProfile';
 import { typography } from '../../../design/tokens';
 import { useAdaptiveTheme } from '../../../design/useAdaptiveTheme';
 import type { AuthFlowResult, AuthSessionScope } from '../types';
+import { formatOAuthProviderNames } from '../oauthProviderNames';
 import {
   emailSchema,
   loginSchema,
@@ -94,6 +95,7 @@ export function LoginFlowScreen({
 }: LoginFlowScreenProps) {
   const { t } = useTranslation();
   const capabilities = activeCapabilities(client, capabilitiesOverride);
+  const oauthProviderNames = formatOAuthProviderNames(capabilities?.oauthProviders ?? []);
   const [notice, setNotice] = useState<string | null>(null);
   const {
     control,
@@ -183,7 +185,11 @@ export function LoginFlowScreen({
         <ActionButton label={t('mobileAuth.login.forgotPassword')} variant="plain" onPress={onForgotPassword} />
       ) : null}
       {onOAuth && (capabilities?.oauthProviders.length ?? 0) > 0 ? (
-        <ActionButton label={t('mobileAuth.login.connectedAccount')} variant="secondary" onPress={onOAuth} />
+        <ActionButton
+          label={t('mobileAuth.login.connectedAccount', { providers: oauthProviderNames })}
+          variant="secondary"
+          onPress={onOAuth}
+        />
       ) : null}
       {onChangeServer ? (
         <ActionButton

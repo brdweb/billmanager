@@ -23,6 +23,7 @@ import { defaultCloudProfile, type PersistedServerProfile } from '../domain/serv
 import { requiresMobileUpgrade } from '../domain/versionCompatibility';
 import { configureFormatting } from '../i18n/format';
 import { hydrateLanguage } from '../i18n';
+import { shouldDeferInitialReady } from './initialProfileReadiness';
 import {
   ProfileOperationGuard,
   ProfileOperationSupersededError,
@@ -257,11 +258,12 @@ export function ServerProfileProvider({ children }: { children: React.ReactNode 
       await api.initialize();
       if (cancelled || !mountedRef.current) return;
       const initial = api.getActiveProfile();
+      const deferReadyUntilVerified = shouldDeferInitialReady(initial);
       const token = operationGuard.begin('initialize', initial.id);
       api.beginProfileActivation();
       await applyProfileSnapshot(initial, token);
       if (cancelled || !mountedRef.current || !operationGuard.isLatest(token)) return;
-      setLoading(false);
+      if (!deferReadyUntilVerified) setLoading(false);
 
       try {
         setVerifying(true);
@@ -272,6 +274,7 @@ export function ServerProfileProvider({ children }: { children: React.ReactNode 
       } finally {
         if (mountedRef.current && operationGuard.isLatest(token)) {
           setVerifying(false);
+          setLoading(false);
         }
       }
     })();

@@ -50,6 +50,20 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.4',
+    date: '2026-08-11',
+    title: 'Mobile Sign-In Reliability',
+    sections: [
+      {
+        heading: 'Fixes',
+        items: [
+          'Made Google, Apple, Microsoft, and configured SSO providers visible before the fresh-install login screen appears',
+          'Published the Android app association required for passkeys and shared credentials in Credential Manager and password managers',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.3',
     date: '2026-08-06',
     title: 'Zero-Value Payments',

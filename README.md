@@ -10,16 +10,15 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.7.3
+## 🎉 What's New in v4.7.4
 
-**Zero-Value Payments** - Record a payment of zero when no balance is due while still advancing the bill and preserving payment history.
+**Mobile Sign-In Reliability** - Provider sign-in choices now appear reliably on a fresh install, and Android passkeys have the required app-to-domain trust association.
 
 ### Highlights
 
-- **Advance Without a Balance** - Zero-value payments can move recurring bills to their next due date
-- **Accurate Averages** - Zero-value occurrences are included in variable-bill payment averages
-- **Web and Mobile Support** - Create and edit zero-value payments from either client
-- **Input Safety Preserved** - Negative, malformed, and currency-invalid amounts remain rejected
+- **Visible Provider Sign-In** - Google, Apple, Microsoft, and configured SSO choices load before the first login screen appears
+- **Android Passkey Trust** - Credential Manager and password managers can verify the signed BillManager Android application
+- **Existing Safety Preserved** - The association is restricted to the exact Android package and release signing certificate
 
 ---
 

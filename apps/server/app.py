@@ -9532,6 +9532,15 @@ def index():
     return send_from_directory(get_client_dir(), "index.html")
 
 
+@spa_bp.route("/.well-known/assetlinks.json", methods=["GET"])
+def android_asset_links():
+    """Publish the signed Android app association for links and passkeys."""
+    asset_links_dir = os.path.join(
+        os.path.dirname(__file__), "..", "web", "public", ".well-known"
+    )
+    return send_from_directory(asset_links_dir, "assetlinks.json")
+
+
 @spa_bp.route("/auth/callback", methods=["POST"])
 def oauth_callback_form_post_bridge():
     """Bridge IdP form_post callbacks to the SPA GET callback route."""
