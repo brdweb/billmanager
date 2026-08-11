@@ -117,6 +117,54 @@ Run Android locally:
 npm run android
 ```
 
+### Direct signed Android phone-test APK on Windows
+
+Use `scripts/build-local-android.ps1` for a standalone release APK that can be
+installed directly on a physical Android phone. This is not Expo Go, does not
+require Metro, and uses the same upload certificate as the existing EAS Android
+builds so it can replace an installed preview APK without clearing application
+data.
+
+The script deliberately builds only committed source. It creates a short-lived
+Windows/NTFS snapshot under `C:\bm`, generates the Android project there, uses
+Android Studio's bundled JDK and Android SDK toolchain, signs the release with
+the existing EAS keystore, verifies the certificate against
+`apps/web/public/.well-known/assetlinks.json`, disables Expo Updates so the
+phone test always runs the embedded committed JavaScript, and removes the
+snapshot. Commit the intended mobile changes before running it; uncommitted
+changes are not part of the APK.
+
+One-time signing setup is stored outside the repository and must remain readable
+only by the Windows user running the build:
+
+- `%LOCALAPPDATA%\BillManager\android-signing\credentials.json`
+- `%LOCALAPPDATA%\BillManager\android-signing\keystore.jks`
+
+Download the existing Android keystore through `npx eas-cli credentials
+--platform android`; do not generate a replacement key and never copy either
+credential file into the repository. The script also expects the preview
+profile's pinned Windows Node.js version and the Android 36 SDK, Build Tools,
+NDK, and CMake versions that it checks at startup.
+
+From Windows PowerShell in `apps/mobile`, run:
+
+```powershell
+.\scripts\build-local-android.ps1
+```
+
+The result is written under `output/play-store-assets/` at the repository root.
+It is an ARM64 phone-test APK, not the multi-architecture Android App Bundle
+submitted to Google Play. Before accepting the candidate, install it as an
+update rather than uninstalling the current app, then test password login,
+Google/Apple/Microsoft SSO, and both passkey registration and login through the
+device's credential manager (including Bitwarden).
+
+After Play App Signing is enabled, the Play-distributed application normally
+uses the Play app-signing certificate rather than the EAS upload certificate.
+Add the Play Console App Integrity SHA-256 fingerprint to both Digital Asset
+Links and the server's trusted Android WebAuthn origins before testing passkeys
+from a Play-installed build.
+
 Run iOS locally on the Mac:
 
 ```bash
