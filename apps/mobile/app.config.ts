@@ -158,6 +158,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         'expo-build-properties',
         {
           android: {
+            // Google Play requires API 36 for phone app submissions beginning
+            // August 31, 2026. Keep these explicit so an SDK/tooling change
+            // cannot silently lower the generated native target.
+            compileSdkVersion: 36,
+            targetSdkVersion: 36,
+            buildToolsVersion: '36.0.0',
             usesCleartextTraffic: developmentBuild,
           },
         },

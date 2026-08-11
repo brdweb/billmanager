@@ -18,10 +18,14 @@ function loadConfig(development) {
 }
 
 function cleartextSetting(config) {
+  return buildProperties(config)?.usesCleartextTraffic;
+}
+
+function buildProperties(config) {
   const plugin = config.plugins.find((entry) => (
     Array.isArray(entry) && entry[0] === 'expo-build-properties'
   ));
-  return plugin?.[1]?.android?.usesCleartextTraffic;
+  return plugin?.[1]?.android;
 }
 
 function assertPolicy(config, expected, label) {
@@ -44,6 +48,20 @@ const development = loadConfig(true);
 assertPolicy(production, false, 'Preview/release');
 assertPolicy(development, true, 'Development');
 
+const requiredAndroidBuild = {
+  compileSdkVersion: 36,
+  targetSdkVersion: 36,
+  buildToolsVersion: '36.0.0',
+};
+for (const [label, config] of Object.entries({ production, development })) {
+  const actual = buildProperties(config);
+  for (const [property, expected] of Object.entries(requiredAndroidBuild)) {
+    if (actual?.[property] !== expected) {
+      throw new Error(`${label} Android ${property} is ${String(actual?.[property])}; expected ${expected}.`);
+    }
+  }
+}
+
 const mobilePackage = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const releaseVersion = mobilePackage.version;
 const nativeVersion = releaseVersion.split('-', 1)[0] || releaseVersion;
@@ -62,15 +80,34 @@ for (const [label, config] of Object.entries({ production, development })) {
 }
 
 const eas = JSON.parse(readFileSync(new URL('../eas.json', import.meta.url), 'utf8'));
-for (const profile of ['development', 'development:device']) {
+if (eas.cli?.appVersionSource !== 'remote') {
+  throw new Error('Production store builds must use remote version codes for reliable auto-incrementing.');
+}
+const developmentProfiles = ['development', 'development:device'];
+const releaseProfiles = ['preview', 'preview:ios', 'production'];
+for (const profile of developmentProfiles) {
   if (eas.build?.[profile]?.env?.BILLMANAGER_DEVELOPMENT_BUILD !== 'true') {
     throw new Error(`${profile} must opt into the development-only cleartext policy.`);
   }
 }
-for (const profile of ['preview', 'preview:ios', 'production']) {
+for (const profile of releaseProfiles) {
   if (eas.build?.[profile]?.env?.BILLMANAGER_DEVELOPMENT_BUILD !== 'false') {
     throw new Error(`${profile} must enforce HTTPS-only transport policy.`);
   }
 }
+for (const profile of [...developmentProfiles, ...releaseProfiles]) {
+  if (eas.build?.[profile]?.node !== '24.19.0') {
+    throw new Error(`${profile} must use the supported Node.js 24.19.0 build runtime.`);
+  }
+}
+if (eas.build?.production?.android?.buildType !== 'app-bundle') {
+  throw new Error('The Android production profile must create a Google Play app bundle.');
+}
+if (
+  eas.submit?.production?.android?.track !== 'internal' ||
+  eas.submit?.production?.android?.releaseStatus !== 'draft'
+) {
+  throw new Error('Android submissions must default to a draft internal-test release.');
+}
 
-console.log('Validated HTTPS-only preview/release profiles and development-only cleartext policy.');
+console.log('Validated API 36 Android app-bundle builds, safe draft submission, and transport policy.');

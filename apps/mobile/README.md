@@ -37,6 +37,14 @@ npm run check
 
 This checks translation codegen and generated OpenAPI drift, runs ESLint, TypeScript, and unit tests, validates Maestro flow definitions and native build-profile transport policy, checks Expo package compatibility, and runs Expo Doctor. Device execution remains a separate release-candidate gate documented in the Maestro guide.
 
+Android production builds explicitly compile and target API 36 and produce an
+Android App Bundle for Google Play. The submission profile defaults to a draft
+internal-test release so uploading a candidate cannot publish it publicly by
+accident. EAS owns and auto-increments production store build numbers remotely;
+the local Android version code remains the preview/sideload baseline. Final
+bundles must also be checked for 16 KB page alignment before promotion in Play
+Console.
+
 ## Source-of-truth rules
 
 - `package.json` owns the semantic mobile release version, including its Alpha-1 prerelease marker.
