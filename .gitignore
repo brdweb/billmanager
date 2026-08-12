@@ -70,7 +70,11 @@ STORE-SUBMISSION.md
 AGENTS.md
 .agents/
 .codex/
+.codex-remote-attachments/
 .playwright-mcp/
+
+# Local generated artifacts and store-upload staging
+/output/
 
 # Root package-lock (monorepo uses per-app locks)
 /package-lock.json
