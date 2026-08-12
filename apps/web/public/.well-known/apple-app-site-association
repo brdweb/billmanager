@@ -1,0 +1,22 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "CLG4C84DNR.com.brdweb.billmanager"
+        ],
+        "components": [
+          {
+            "/": "/auth/callback*",
+            "comment": "Return hosted OAuth callbacks to the BillManager iOS app."
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "CLG4C84DNR.com.brdweb.billmanager"
+    ]
+  }
+}

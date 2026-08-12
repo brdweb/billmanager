@@ -9776,6 +9776,19 @@ def android_asset_links():
     return send_from_directory(asset_links_dir, "assetlinks.json")
 
 
+@spa_bp.route("/.well-known/apple-app-site-association", methods=["GET"])
+def apple_app_site_association():
+    """Publish the signed iOS association for universal links and passkeys."""
+    association_dir = os.path.join(
+        os.path.dirname(__file__), "..", "web", "public", ".well-known"
+    )
+    return send_from_directory(
+        association_dir,
+        "apple-app-site-association",
+        mimetype="application/json",
+    )
+
+
 @spa_bp.route("/auth/callback", methods=["POST"])
 def oauth_callback_form_post_bridge():
     """Bridge IdP form_post callbacks to the SPA GET callback route."""
