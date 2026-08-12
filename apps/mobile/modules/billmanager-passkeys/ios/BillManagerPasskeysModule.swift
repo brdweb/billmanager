@@ -2,10 +2,10 @@ import AuthenticationServices
 import ExpoModulesCore
 import UIKit
 
-public final class BillManagerPasskeysModule: Module, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+public final class BillManagerPasskeysModule: Module {
   private var activeController: ASAuthorizationController?
+  private var activeDelegate: PasskeyAuthorizationDelegate?
   private var activePromise: Promise?
-  private var presentationWindow: ASPresentationAnchor?
 
   public func definition() -> ModuleDefinition {
     Name("BillManagerPasskeys")
@@ -45,7 +45,8 @@ public final class BillManagerPasskeysModule: Module, ASAuthorizationControllerD
         if let attestation = options["attestation"] as? String {
           request.attestationPreference = attestationPreference(attestation)
         }
-        if let excluded = options["excludeCredentials"] as? [[String: Any]] {
+        if #available(iOS 17.4, *),
+           let excluded = options["excludeCredentials"] as? [[String: Any]] {
           request.excludedCredentials = try excluded.compactMap { descriptor in
             guard let credentialID = descriptor["id"] as? String else {
               return nil
@@ -105,23 +106,25 @@ public final class BillManagerPasskeysModule: Module, ASAuthorizationControllerD
       throw PasskeyPresentationException()
     }
 
+    let delegate = PasskeyAuthorizationDelegate(
+      presentationWindow: window,
+      onAuthorization: { [weak self] authorization in
+        self?.handleAuthorization(authorization)
+      },
+      onError: { [weak self] error in
+        self?.handleAuthorizationError(error)
+      }
+    )
     let controller = ASAuthorizationController(authorizationRequests: [request])
-    controller.delegate = self
-    controller.presentationContextProvider = self
+    controller.delegate = delegate
+    controller.presentationContextProvider = delegate
     activeController = controller
+    activeDelegate = delegate
     activePromise = promise
-    presentationWindow = window
     controller.performRequests()
   }
 
-  public func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-    presentationWindow ?? ASPresentationAnchor()
-  }
-
-  public func authorizationController(
-    controller: ASAuthorizationController,
-    didCompleteWithAuthorization authorization: ASAuthorization
-  ) {
+  private func handleAuthorization(_ authorization: ASAuthorization) {
     do {
       let response: [String: Any]
       if let registration = authorization.credential as? ASAuthorizationPlatformPublicKeyCredentialRegistration {
@@ -142,6 +145,12 @@ public final class BillManagerPasskeysModule: Module, ASAuthorizationControllerD
         ]
       } else if let assertion = authorization.credential as? ASAuthorizationPlatformPublicKeyCredentialAssertion {
         let credentialID = encodeBase64URL(assertion.credentialID)
+        let userHandle: Any
+        if assertion.userID.isEmpty {
+          userHandle = NSNull()
+        } else {
+          userHandle = encodeBase64URL(assertion.userID)
+        }
         response = [
           "id": credentialID,
           "rawId": credentialID,
@@ -150,7 +159,7 @@ public final class BillManagerPasskeysModule: Module, ASAuthorizationControllerD
             "clientDataJSON": encodeBase64URL(assertion.rawClientDataJSON),
             "authenticatorData": encodeBase64URL(assertion.rawAuthenticatorData),
             "signature": encodeBase64URL(assertion.signature),
-            "userHandle": assertion.userID.isEmpty ? NSNull() : encodeBase64URL(assertion.userID),
+            "userHandle": userHandle,
           ],
           "clientExtensionResults": [:],
         ]
@@ -169,10 +178,7 @@ public final class BillManagerPasskeysModule: Module, ASAuthorizationControllerD
     clearActiveRequest()
   }
 
-  public func authorizationController(
-    controller: ASAuthorizationController,
-    didCompleteWithError error: Error
-  ) {
+  private func handleAuthorizationError(_ error: Error) {
     if let authorizationError = error as? ASAuthorizationError,
        authorizationError.code == .canceled {
       activePromise?.reject(PasskeyCancelledException())
@@ -184,8 +190,44 @@ public final class BillManagerPasskeysModule: Module, ASAuthorizationControllerD
 
   private func clearActiveRequest() {
     activeController = nil
+    activeDelegate = nil
     activePromise = nil
-    presentationWindow = nil
+  }
+}
+
+private final class PasskeyAuthorizationDelegate: NSObject,
+  ASAuthorizationControllerDelegate,
+  ASAuthorizationControllerPresentationContextProviding {
+  private let presentationWindow: ASPresentationAnchor
+  private let onAuthorization: (ASAuthorization) -> Void
+  private let onError: (Error) -> Void
+
+  init(
+    presentationWindow: ASPresentationAnchor,
+    onAuthorization: @escaping (ASAuthorization) -> Void,
+    onError: @escaping (Error) -> Void
+  ) {
+    self.presentationWindow = presentationWindow
+    self.onAuthorization = onAuthorization
+    self.onError = onError
+  }
+
+  func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+    presentationWindow
+  }
+
+  func authorizationController(
+    controller: ASAuthorizationController,
+    didCompleteWithAuthorization authorization: ASAuthorization
+  ) {
+    onAuthorization(authorization)
+  }
+
+  func authorizationController(
+    controller: ASAuthorizationController,
+    didCompleteWithError error: Error
+  ) {
+    onError(error)
   }
 }
 
