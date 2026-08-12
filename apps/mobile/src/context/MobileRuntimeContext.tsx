@@ -39,12 +39,16 @@ import {
   type ForegroundNativeSurfaceLease,
   updateForegroundNativeSurfaces,
 } from '../services/foregroundNativeSurfaces';
-import { fetchForegroundSyncSnapshot } from '../services/foregroundSync';
+import {
+  fetchForegroundSyncSnapshot,
+  persistForegroundSyncSnapshot,
+} from '../services/foregroundSync';
 import { activateNotificationScope } from '../services/notificationScope';
 import { OutboxProcessor, type OutboxProcessSummary } from '../services/outboxProcessor';
 import type { Bill, DatabaseInfo, Payment } from '../types';
 import { useAuth } from './AuthContext';
 import { runtimeScopeIsAligned } from './authOperationGuard';
+import { runtimeError } from './mobileRuntimeError';
 import { useServerProfiles } from './ServerProfileContext';
 
 const cacheRepository = new MobileCacheRepository();
@@ -112,10 +116,6 @@ function queryKeys(profileId: string, databaseId: string) {
 function todayIso(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
-
-function runtimeError(reason: unknown): string {
-  return reason instanceof Error ? reason.message : 'BillManager could not synchronize.';
 }
 
 export function MobileRuntimeProvider({ children }: { children: React.ReactNode }) {
@@ -296,28 +296,16 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
         syncScope.databaseId,
       );
       const snapshot = await fetchForegroundSyncSnapshot(api, syncScope);
-
-      const unresolved = await syncRepository.hasUnresolvedMutations(
-        syncScope.serverProfileId,
-        syncScope.databaseId,
-      );
-      if (!unresolved) await cacheRepository.markScopeClean(syncScope);
-      await Promise.all([
-        cacheRepository.replaceBills(syncScope, snapshot.bills),
-        cacheRepository.replacePayments(syncScope, snapshot.payments),
-      ]);
-
-      await cacheRepository.replaceGroups(syncScope.serverProfileId, snapshot.groups);
       await syncRepository.pruneCompleted(
         new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
       );
       const synchronizedAt = new Date().toISOString();
-      await syncRepository.setSyncState(syncScope.serverProfileId, syncScope.databaseId, {
-        cursor: null,
-        lastSyncedAt: synchronizedAt,
-        status: 'idle',
-        lastError: null,
-      });
+      await persistForegroundSyncSnapshot(
+        cacheRepository,
+        syncScope,
+        snapshot,
+        synchronizedAt,
+      );
       if (isApiScopeCurrent()) {
         await updateNativeSurfaces(snapshot.bills, syncScope, syncLease);
       }

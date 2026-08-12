@@ -50,7 +50,7 @@ Switching profiles closes the current session before activating the other isolat
 
 ## Offline reads and writes
 
-Current durable offline reads cover bills, payments, Home, Calendar, and locally derived analytics. Sharing and settlement changes intentionally require a current server response; durable offline read snapshots for sharing and settlements are still a release gap recorded in [implementation-status.md](implementation-status.md).
+Current durable offline reads cover bills, payments, Home, Calendar, locally derived analytics, sharing, and settlements. Sharing and settlement data is stored in profile/database-scoped snapshots after a successful online read. Sharing and settlement changes intentionally require a current server response.
 
 The offline outbox supports:
 
@@ -63,7 +63,7 @@ Mutations are sequential within one server profile/database and may run independ
 
 Each mutation carries a UUID `client_mutation_id`. Updates and deletes carry the object's `base_updated_at`. The server deduplicates retries for the authenticated user/database/mutation tuple and returns HTTP 409 for a stale base.
 
-Conflicts are never silently overwritten. The conflict queue offers:
+Routine transfers and retries are automatic and do not require a decision. When the same object changed locally and on the server, the conflict is never silently overwritten. The **Sync & offline data** screen offers:
 
 - **Use server version**: discard the pending local change and restore the returned server object;
 - **Keep my changes**: rebase and retry the local mutation against the server update timestamp.
@@ -72,7 +72,7 @@ Security, OAuth, sharing changes, settlements, administration, and SaaS billing 
 
 ## Synchronization timing
 
-An explicit synchronization is requested at session start, app foreground, pull-to-refresh, reconnect, profile/database switch, and after mutations. The platform background task provides an opportunistic refresh.
+BillManager requests synchronization automatically at session start, when the app returns to the foreground, after reconnecting, after a profile/database switch, and after mutations. Pull-to-refresh and **Retry now** on the **Sync & offline data** screen provide manual retries. The platform background task provides an opportunistic refresh.
 
 Background work is not a precise scheduler. iOS and Android may delay or skip it because of battery state, usage history, system policy, or force-quit behavior. Product and support copy must not promise immediate cross-device updates.
 

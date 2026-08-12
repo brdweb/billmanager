@@ -15,26 +15,26 @@ tags:
     text: ^Settings$
 - scrollUntilVisible:
     element:
-      text: Offline storage
+      text: 'Sync & offline data'
     direction: DOWN
     timeout: 20000
     speed: 40
     visibilityPercentage: 80
 - tapOn:
-    text: Offline storage
+    text: 'Sync & offline data'
 - extendedWaitUntil:
     visible:
-      text: Offline & conflicts
+      text: 'Sync & offline data'
     timeout: 10000
 - assertVisible:
-    text: Sync now
+    text: Retry now
 - assertVisible:
-    text: No decisions needed
+    text: No conflicts need your input
 - scrollUntilVisible:
     element:
-      text: BillManager retries pending changes in order when the connection returns.
+      text: BillManager syncs changes automatically when a connection is available. You only need to choose when an offline change conflicts with newer server data or changed access.
     direction: DOWN
     timeout: 10000
     visibilityPercentage: 80
 - assertVisible:
-    text: BillManager retries pending changes in order when the connection returns.
+    text: BillManager syncs changes automatically when a connection is available. You only need to choose when an offline change conflicts with newer server data or changed access.

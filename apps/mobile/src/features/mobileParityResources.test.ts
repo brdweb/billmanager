@@ -49,4 +49,21 @@ describe('mobile parity translations', () => {
     expect(interpolationShape(mobileParityResources.de))
       .toEqual(interpolationShape(mobileParityResources.en));
   });
+
+  it('explains that synchronization is automatic and only conflicts need input', () => {
+    expect(mobileParityResources.en.conflicts).toMatchObject({
+      screenTitle: 'Sync & offline data',
+      connected: 'Connected · sync is automatic',
+      syncNow: 'Retry now',
+      noDecisions: 'No conflicts need your input',
+    });
+    expect(mobileParityResources.en.conflicts.retryQueued).toContain('syncs changes automatically');
+    expect(mobileParityResources.en.conflicts.retryQueued).toContain('only need to choose');
+
+    expect(mobileParityResources.de.conflicts).toMatchObject({
+      screenTitle: 'Synchronisierung & Offline-Daten',
+      syncNow: 'Jetzt erneut versuchen',
+    });
+    expect(mobileParityResources.de.conflicts.retryQueued).toContain('automatisch');
+  });
 });

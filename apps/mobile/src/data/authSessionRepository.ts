@@ -1,5 +1,6 @@
 import type { AuthenticatedSessionSnapshot } from '../services/authSession';
 import { getMobileDatabase } from './database';
+import { withSerializedMobileWrite } from './databaseWriteQueue';
 
 interface AuthSessionRow {
   server_profile_id?: string;
@@ -42,37 +43,43 @@ export class SQLiteAuthSessionStore implements AuthSessionStore {
 
   async save(profileId: string, snapshot: AuthenticatedSessionSnapshot): Promise<void> {
     const database = await this.databaseProvider();
-    await database.runAsync(
-      `INSERT INTO auth_sessions (
-         server_profile_id, user_json, databases_json, current_database, updated_at
-       ) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(server_profile_id) DO UPDATE SET
-         user_json = excluded.user_json,
-         databases_json = excluded.databases_json,
-         current_database = excluded.current_database,
-         updated_at = excluded.updated_at`,
-      profileId,
-      JSON.stringify(snapshot.user),
-      JSON.stringify(snapshot.databases),
-      snapshot.currentDatabase,
-      snapshot.updatedAt,
-    );
+    await withSerializedMobileWrite(database, async () => {
+      await database.runAsync(
+        `INSERT INTO auth_sessions (
+           server_profile_id, user_json, databases_json, current_database, updated_at
+         ) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(server_profile_id) DO UPDATE SET
+           user_json = excluded.user_json,
+           databases_json = excluded.databases_json,
+           current_database = excluded.current_database,
+           updated_at = excluded.updated_at`,
+        profileId,
+        JSON.stringify(snapshot.user),
+        JSON.stringify(snapshot.databases),
+        snapshot.currentDatabase,
+        snapshot.updatedAt,
+      );
+    });
   }
 
   async setCurrentDatabase(profileId: string, databaseId: string | null): Promise<void> {
     const database = await this.databaseProvider();
-    await database.runAsync(
-      `UPDATE auth_sessions SET current_database = ?, updated_at = ?
-       WHERE server_profile_id = ?`,
-      databaseId,
-      new Date().toISOString(),
-      profileId,
-    );
+    await withSerializedMobileWrite(database, async () => {
+      await database.runAsync(
+        `UPDATE auth_sessions SET current_database = ?, updated_at = ?
+         WHERE server_profile_id = ?`,
+        databaseId,
+        new Date().toISOString(),
+        profileId,
+      );
+    });
   }
 
   async clear(profileId: string): Promise<void> {
     const database = await this.databaseProvider();
-    await database.runAsync('DELETE FROM auth_sessions WHERE server_profile_id = ?', profileId);
+    await withSerializedMobileWrite(database, async () => {
+      await database.runAsync('DELETE FROM auth_sessions WHERE server_profile_id = ?', profileId);
+    });
   }
 
   async listCurrentScopes(): Promise<StoredSessionScope[]> {

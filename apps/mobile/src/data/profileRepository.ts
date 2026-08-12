@@ -5,6 +5,10 @@ import {
   ServerProfileStore,
 } from '../domain/serverProfile';
 import { getMobileDatabase } from './database';
+import {
+  withSerializedMobileTransaction,
+  withSerializedMobileWrite,
+} from './databaseWriteQueue';
 
 interface ProfileRow {
   id: string;
@@ -75,7 +79,7 @@ export class SQLiteServerProfileStore implements ServerProfileStore {
   async upsert(profile: PersistedServerProfile): Promise<void> {
     const database = await this.databaseProvider();
     const now = new Date().toISOString();
-    await database.withTransactionAsync(async () => {
+    await withSerializedMobileTransaction(database, async () => {
       if (profile.isActive) {
         await database.runAsync('UPDATE server_profiles SET is_active = 0 WHERE is_active = 1');
       }
@@ -109,7 +113,7 @@ export class SQLiteServerProfileStore implements ServerProfileStore {
 
   async setActive(profileId: string): Promise<void> {
     const database = await this.databaseProvider();
-    await database.withTransactionAsync(async () => {
+    await withSerializedMobileTransaction(database, async () => {
       await database.runAsync('UPDATE server_profiles SET is_active = 0 WHERE is_active = 1');
       const result = await database.runAsync(
         'UPDATE server_profiles SET is_active = 1, updated_at = ? WHERE id = ?',
@@ -124,11 +128,14 @@ export class SQLiteServerProfileStore implements ServerProfileStore {
 
   async setSelectedDatabase(profileId: string, databaseId: string | null): Promise<void> {
     const database = await this.databaseProvider();
-    const result = await database.runAsync(
-      'UPDATE server_profiles SET selected_database = ?, updated_at = ? WHERE id = ?',
-      databaseId,
-      new Date().toISOString(),
-      profileId,
+    const result = await withSerializedMobileWrite(
+      database,
+      () => database.runAsync(
+        'UPDATE server_profiles SET selected_database = ?, updated_at = ? WHERE id = ?',
+        databaseId,
+        new Date().toISOString(),
+        profileId,
+      ),
     );
     if (result.changes !== 1) {
       throw new Error(`Unknown server profile: ${profileId}`);
@@ -138,7 +145,7 @@ export class SQLiteServerProfileStore implements ServerProfileStore {
   async migrateProfileId(profileId: string, nextProfileId: string): Promise<void> {
     if (profileId === nextProfileId) return;
     const database = await this.databaseProvider();
-    await database.withTransactionAsync(async () => {
+    await withSerializedMobileTransaction(database, async () => {
       const collision = await database.getFirstAsync<{ base_url: string }>(
         'SELECT base_url FROM server_profiles WHERE id = ? LIMIT 1',
         nextProfileId,

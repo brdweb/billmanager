@@ -22,13 +22,9 @@ export interface HeadlessBackgroundSyncDependencies {
     | 'listMutationScopes'
     | 'getSyncState'
     | 'setSyncState'
-    | 'hasUnresolvedMutations'
     | 'pruneCompleted'
   >;
-  cacheRepository: Pick<
-    MobileCacheRepository,
-    'replaceBills' | 'replacePayments' | 'markScopeClean'
-  >;
+  cacheRepository: Pick<MobileCacheRepository, 'commitSyncSnapshot'>;
   scheduleReminders: typeof scheduleLocalBillReminders;
   now: () => Date;
 }
@@ -81,7 +77,7 @@ export async function runHeadlessBackgroundSync(
     scopesFailed: 0,
   };
 
-  await Promise.all(scopes.map(async (scope) => {
+  for (const scope of scopes) {
     const existing = await dependencies.syncRepository.getSyncState(
       scope.serverProfileId,
       scope.databaseId,
@@ -103,23 +99,13 @@ export async function runHeadlessBackgroundSync(
       ]);
       const bills = requireEnvelopeData(billEnvelope, 'bills');
       const payments = requireEnvelopeData(paymentEnvelope, 'payments');
-      const unresolved = await dependencies.syncRepository.hasUnresolvedMutations(
-        scope.serverProfileId,
-        scope.databaseId,
-      );
-      if (!unresolved) await dependencies.cacheRepository.markScopeClean(scope);
-      await Promise.all([
-        dependencies.cacheRepository.replaceBills(scope, bills),
-        dependencies.cacheRepository.replacePayments(scope, payments),
-      ]);
-      await dependencies.scheduleReminders(bills, { scope }).catch(() => 0);
       const synchronizedAt = dependencies.now().toISOString();
-      await dependencies.syncRepository.setSyncState(scope.serverProfileId, scope.databaseId, {
-        cursor: null,
-        lastSyncedAt: synchronizedAt,
-        status: 'idle',
-        lastError: null,
-      });
+      await dependencies.cacheRepository.commitSyncSnapshot(
+        scope,
+        { bills, payments },
+        synchronizedAt,
+      );
+      await dependencies.scheduleReminders(bills, { scope }).catch(() => 0);
       result.scopesSucceeded += 1;
     } catch (reason) {
       result.scopesFailed += 1;
@@ -131,7 +117,7 @@ export async function runHeadlessBackgroundSync(
         lastError: message,
       });
     }
-  }));
+  }
 
   await dependencies.syncRepository.pruneCompleted(
     new Date(dependencies.now().getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),

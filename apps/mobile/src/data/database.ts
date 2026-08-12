@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import * as SQLite from 'expo-sqlite';
 import * as Crypto from 'expo-crypto';
+import { withSerializedMobileTransaction } from './databaseWriteQueue';
 
 const DATABASE_NAME = 'billmanager-mobile.db';
 const DATABASE_KEY_STORAGE_KEY = 'billmanager_database_key_v1';
@@ -189,19 +190,19 @@ export async function migrateMobileDatabase(database: SQLite.SQLiteDatabase): Pr
     );
   }
   if (currentVersion < 1) {
-    await database.withTransactionAsync(async () => {
+    await withSerializedMobileTransaction(database, async () => {
       await database.execAsync(schemaV1);
       await database.execAsync('PRAGMA user_version = 1');
     });
   }
   if (currentVersion < 2) {
-    await database.withTransactionAsync(async () => {
+    await withSerializedMobileTransaction(database, async () => {
       await database.execAsync(schemaV2);
       await database.execAsync('PRAGMA user_version = 2');
     });
   }
   if (currentVersion < 3) {
-    await database.withTransactionAsync(async () => {
+    await withSerializedMobileTransaction(database, async () => {
       await database.execAsync(schemaV3);
       await database.execAsync('PRAGMA user_version = 3');
     });
@@ -216,6 +217,7 @@ async function openMobileDatabase(): Promise<SQLite.SQLiteDatabase> {
   // is harmlessly rejected on builds where SQLCipher was not compiled in, so do
   // not silently continue if it fails.
   await database.execAsync(`PRAGMA key = '${escapePragmaValue(key)}'`);
+  await database.execAsync('PRAGMA busy_timeout = 5000');
   await database.execAsync('PRAGMA foreign_keys = ON');
   await database.execAsync('PRAGMA journal_mode = WAL');
   await migrateMobileDatabase(database);

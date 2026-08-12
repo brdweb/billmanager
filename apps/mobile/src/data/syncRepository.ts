@@ -9,6 +9,10 @@ import {
   syncObjectKind,
 } from '../domain/sync';
 import { getMobileDatabase } from './database';
+import {
+  withSerializedMobileTransaction,
+  withSerializedMobileWrite,
+} from './databaseWriteQueue';
 
 interface OutboxRow {
   id: string;
@@ -63,28 +67,30 @@ export class SQLiteSyncRepository implements OutboxStore {
 
   async enqueue(mutation: OutboxMutation): Promise<void> {
     const database = await this.databaseProvider();
-    await database.runAsync(
-      `INSERT INTO outbox (
-         id, server_profile_id, database_id, entity, entity_id, operation,
-         payload_json, base_updated_at, created_at, attempts, next_attempt_at,
-         depends_on, status, last_error
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO NOTHING`,
-      mutation.id,
-      mutation.serverProfileId,
-      mutation.databaseId,
-      mutation.entity,
-      mutation.entityId,
-      mutation.operation,
-      JSON.stringify(mutation.payload),
-      mutation.baseUpdatedAt,
-      mutation.createdAt,
-      mutation.attempts,
-      mutation.nextAttemptAt,
-      mutation.dependsOn,
-      mutation.status,
-      mutation.lastError,
-    );
+    await withSerializedMobileWrite(database, async () => {
+      await database.runAsync(
+        `INSERT INTO outbox (
+           id, server_profile_id, database_id, entity, entity_id, operation,
+           payload_json, base_updated_at, created_at, attempts, next_attempt_at,
+           depends_on, status, last_error
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO NOTHING`,
+        mutation.id,
+        mutation.serverProfileId,
+        mutation.databaseId,
+        mutation.entity,
+        mutation.entityId,
+        mutation.operation,
+        JSON.stringify(mutation.payload),
+        mutation.baseUpdatedAt,
+        mutation.createdAt,
+        mutation.attempts,
+        mutation.nextAttemptAt,
+        mutation.dependsOn,
+        mutation.status,
+        mutation.lastError,
+      );
+    });
   }
 
   async getReady(
@@ -98,28 +104,30 @@ export class SQLiteSyncRepository implements OutboxStore {
     // run, so any processing row at this point belongs to an interrupted run.
     // Retrying with the same mutation id is safe because the server contract is
     // idempotent for client_mutation_id.
-    await database.runAsync(
-      `UPDATE outbox
-       SET status = 'retry', next_attempt_at = NULL,
-           last_error = 'Recovered an interrupted synchronization attempt.'
-       WHERE server_profile_id = ? AND database_id = ? AND status = 'processing'`,
-      serverProfileId,
-      databaseId,
-    );
-    const rows = await database.getAllAsync<OutboxRow>(
-      `SELECT candidate.* FROM outbox candidate
-       LEFT JOIN outbox dependency ON dependency.id = candidate.depends_on
-       WHERE candidate.server_profile_id = ?
-         AND candidate.database_id = ?
-         AND candidate.status IN ('pending', 'retry')
-         AND (candidate.next_attempt_at IS NULL OR candidate.next_attempt_at <= ?)
-         AND (candidate.depends_on IS NULL OR dependency.status = 'completed')
-       ORDER BY candidate.created_at, candidate.id`,
-      serverProfileId,
-      databaseId,
-      now,
-    );
-    return rows.map(mutationFromRow);
+    return withSerializedMobileWrite(database, async () => {
+      await database.runAsync(
+        `UPDATE outbox
+         SET status = 'retry', next_attempt_at = NULL,
+             last_error = 'Recovered an interrupted synchronization attempt.'
+         WHERE server_profile_id = ? AND database_id = ? AND status = 'processing'`,
+        serverProfileId,
+        databaseId,
+      );
+      const rows = await database.getAllAsync<OutboxRow>(
+        `SELECT candidate.* FROM outbox candidate
+         LEFT JOIN outbox dependency ON dependency.id = candidate.depends_on
+         WHERE candidate.server_profile_id = ?
+           AND candidate.database_id = ?
+           AND candidate.status IN ('pending', 'retry')
+           AND (candidate.next_attempt_at IS NULL OR candidate.next_attempt_at <= ?)
+           AND (candidate.depends_on IS NULL OR dependency.status = 'completed')
+         ORDER BY candidate.created_at, candidate.id`,
+        serverProfileId,
+        databaseId,
+        now,
+      );
+      return rows.map(mutationFromRow);
+    });
   }
 
   async applyResult(
@@ -149,7 +157,7 @@ export class SQLiteSyncRepository implements OutboxStore {
         ? "entity = 'payment'"
         : "entity IN ('bill', 'bill_archive', 'bill_restore', 'reminder_settings')";
 
-      await database.withTransactionAsync(async () => {
+      await withSerializedMobileTransaction(database, async () => {
         const cachedRow = await database.getFirstAsync<{ payload_json: string }>(
           `SELECT payload_json FROM ${cacheTable}
            WHERE server_profile_id = ? AND database_id = ? AND entity_id = ?`,
@@ -202,7 +210,7 @@ export class SQLiteSyncRepository implements OutboxStore {
     if (!Number.isInteger(serverId) || serverId <= 0) return;
 
     const temporaryId = mutation.entityId;
-    await database.withTransactionAsync(async () => {
+    await withSerializedMobileTransaction(database, async () => {
       if (mutation.entity === 'payment') {
         const paymentUpdatedAt = typeof serverRecord.updated_at === 'string'
           ? serverRecord.updated_at
@@ -468,7 +476,7 @@ export class SQLiteSyncRepository implements OutboxStore {
 
   async markConflict(conflict: SyncConflict): Promise<void> {
     const database = await this.databaseProvider();
-    await database.withTransactionAsync(async () => {
+    await withSerializedMobileTransaction(database, async () => {
       let local = conflict.local;
       if (conflict.reason === 'deleted' && conflict.entityId) {
         const cacheTable = conflict.entity === 'payment' ? 'payments' : 'bills';
@@ -553,7 +561,7 @@ export class SQLiteSyncRepository implements OutboxStore {
     const database = await this.databaseProvider();
     const conflict = await this.getConflict(mutationId);
     if (!conflict) return null;
-    await database.withTransactionAsync(async () => {
+    await withSerializedMobileTransaction(database, async () => {
       if (strategy === 'use_server') {
         await database.runAsync(
           `UPDATE outbox SET status = 'completed', last_error = NULL WHERE id = ?`,
@@ -679,10 +687,12 @@ export class SQLiteSyncRepository implements OutboxStore {
 
   async pruneCompleted(before: string): Promise<void> {
     const database = await this.databaseProvider();
-    await database.runAsync(
-      `DELETE FROM outbox WHERE status = 'completed' AND created_at < ?`,
-      before,
-    );
+    await withSerializedMobileWrite(database, async () => {
+      await database.runAsync(
+        `DELETE FROM outbox WHERE status = 'completed' AND created_at < ?`,
+        before,
+      );
+    });
   }
 
   async getSyncState(serverProfileId: string, databaseId: string): Promise<SyncState | null> {
@@ -713,22 +723,24 @@ export class SQLiteSyncRepository implements OutboxStore {
     state: SyncState,
   ): Promise<void> {
     const database = await this.databaseProvider();
-    await database.runAsync(
-      `INSERT INTO sync_state (
-         server_profile_id, database_id, cursor, last_synced_at, status, last_error
-       ) VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(server_profile_id, database_id) DO UPDATE SET
-         cursor = excluded.cursor,
-         last_synced_at = excluded.last_synced_at,
-         status = excluded.status,
-         last_error = excluded.last_error`,
-      serverProfileId,
-      databaseId,
-      state.cursor,
-      state.lastSyncedAt,
-      state.status,
-      state.lastError,
-    );
+    await withSerializedMobileWrite(database, async () => {
+      await database.runAsync(
+        `INSERT INTO sync_state (
+           server_profile_id, database_id, cursor, last_synced_at, status, last_error
+         ) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(server_profile_id, database_id) DO UPDATE SET
+           cursor = excluded.cursor,
+           last_synced_at = excluded.last_synced_at,
+           status = excluded.status,
+           last_error = excluded.last_error`,
+        serverProfileId,
+        databaseId,
+        state.cursor,
+        state.lastSyncedAt,
+        state.status,
+        state.lastError,
+      );
+    });
   }
 
   private async updateStatus(
@@ -739,18 +751,20 @@ export class SQLiteSyncRepository implements OutboxStore {
     error: string | null,
   ): Promise<void> {
     const database = await this.databaseProvider();
-    await database.runAsync(
-      `UPDATE outbox SET
-         status = ?,
-         attempts = COALESCE(?, attempts),
-         next_attempt_at = ?,
-         last_error = ?
-       WHERE id = ?`,
-      status,
-      attempts,
-      nextAttemptAt,
-      error,
-      id,
-    );
+    await withSerializedMobileWrite(database, async () => {
+      await database.runAsync(
+        `UPDATE outbox SET
+           status = ?,
+           attempts = COALESCE(?, attempts),
+           next_attempt_at = ?,
+           last_error = ?
+         WHERE id = ?`,
+        status,
+        attempts,
+        nextAttemptAt,
+        error,
+        id,
+      );
+    });
   }
 }

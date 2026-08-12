@@ -121,7 +121,7 @@ function validateCommands(relativePath, header, commands) {
     }
   } else if (relativePath.endsWith('/design-preview-offline-conflicts.yaml')) {
     if (!header.tags.includes('preview')) fail(`${relativePath} must include the preview tag`);
-    for (const marker of ['Offline storage', 'Offline & conflicts', 'No decisions needed']) {
+    for (const marker of ['Sync & offline data', 'Retry now', 'No conflicts need your input', 'syncs changes automatically']) {
       if (!serialized.includes(marker)) fail(`${relativePath} is missing offline/conflict coverage marker ${marker}`);
     }
   }

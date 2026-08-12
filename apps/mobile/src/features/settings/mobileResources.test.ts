@@ -19,4 +19,9 @@ describe('mobile Settings translations', () => {
     expect(resourceShape(mobileSettingsResources.de))
       .toEqual(resourceShape(mobileSettingsResources.en));
   });
+
+  it('presents synchronization as a destination rather than an offline-storage toggle', () => {
+    expect(mobileSettingsResources.en.home.offlineStorage).toBe('Sync & offline data');
+    expect(mobileSettingsResources.de.home.offlineStorage).toBe('Synchronisierung & Offline-Daten');
+  });
 });

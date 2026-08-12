@@ -1,5 +1,5 @@
 import type { BillManagerApi } from '../api/client';
-import type { CacheScope } from '../data/cacheRepository';
+import type { CacheScope, MobileCacheRepository } from '../data/cacheRepository';
 import type { ApiResponse, Bill, DatabaseInfo, Payment } from '../types';
 
 export interface ForegroundSyncSnapshot {
@@ -38,4 +38,14 @@ export async function fetchForegroundSyncSnapshot(
     payments: requireData(paymentEnvelope, 'payments'),
     groups: requireData(meEnvelope, 'bill groups').databases,
   };
+}
+
+/** Commits the complete foreground snapshot and idle state atomically. */
+export async function persistForegroundSyncSnapshot(
+  cacheRepository: Pick<MobileCacheRepository, 'commitSyncSnapshot'>,
+  scope: CacheScope,
+  snapshot: ForegroundSyncSnapshot,
+  synchronizedAt: string,
+): Promise<void> {
+  await cacheRepository.commitSyncSnapshot(scope, snapshot, synchronizedAt);
 }
