@@ -14,7 +14,7 @@ info:
 
     Access tokens expire after 15 minutes. Refresh tokens expire after 7 days.
 
-  version: 4.7.4
+  version: 4.7.5
   license:
     name: O'Saasy License
     url: https://osaasy.dev/
@@ -1674,6 +1674,68 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '429': {$ref: '#/components/responses/RateLimited'}
+
+  /auth/oauth/google/native/start:
+    post:
+      tags: [Authentication]
+      summary: Start native Google sign-in
+      description: >-
+        Creates a nonce-bound Google Credential Manager transaction. Account
+        linking requires the current access token in the Authorization header.
+      operationId: startGoogleNativeOAuth
+      x-capability: oauth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GoogleNativeOAuthStartInput'}
+      responses:
+        '200':
+          description: Google client ID, nonce, and signed transaction state
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GoogleNativeOAuthStartResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '502': {$ref: '#/components/responses/ServerError'}
+
+  /auth/oauth/google/native/callback:
+    post:
+      tags: [Authentication]
+      summary: Complete native Google sign-in
+      description: >-
+        Verifies the Google ID token against the nonce-bound transaction and
+        returns a login session, linked-account result, or 2FA challenge.
+      operationId: completeGoogleNativeOAuth
+      x-capability: oauth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GoogleNativeOAuthCallbackInput'}
+      responses:
+        '200':
+          description: Login session or linked-account result
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/LoginResponse'
+                  - $ref: '#/components/schemas/OAuthLinkResponse'
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          description: Additional authentication is required
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TwoFactorRequiredResponse'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/ServerError'}
+        '502': {$ref: '#/components/responses/ServerError'}
 
   /auth/oauth/accounts:
     get:
@@ -3476,6 +3538,71 @@ components:
         code: {type: string}
         state: {type: string}
         redirect_uri: {type: string, format: uri}
+
+    GoogleNativeOAuthStartInput:
+      type: object
+      properties:
+        flow:
+          type: string
+          enum: [login, link]
+          default: login
+
+    GoogleNativeOAuthStartResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean, enum: [true]}
+        data:
+          type: object
+          required: [client_id, nonce, state]
+          properties:
+            client_id:
+              type: string
+              description: Google web client ID used as Credential Manager's server client ID
+            nonce:
+              type: string
+              description: Nonce that must be passed to Credential Manager
+            state:
+              type: string
+              description: Signed, single-use native authorization transaction
+
+    GoogleNativeOAuthCallbackInput:
+      type: object
+      required: [id_token, state]
+      properties:
+        id_token:
+          type: string
+          description: Google ID token returned by Android Credential Manager
+        state:
+          type: string
+          description: Signed state returned by the native start operation
+        device_info:
+          type: string
+          description: Optional device identifier for token management
+
+    OAuthLinkResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean, enum: [true]}
+        data:
+          type: object
+          required: [linked]
+          properties:
+            linked: {type: boolean, enum: [true]}
+
+    TwoFactorRequiredResponse:
+      type: object
+      required: [success, twofa_required, twofa_session_token, twofa_methods]
+      properties:
+        success: {type: boolean, enum: [false]}
+        twofa_required: {type: boolean, enum: [true]}
+        twofa_session_token: {type: string}
+        twofa_methods:
+          type: array
+          items:
+            type: string
+            enum: [email_otp, passkey, recovery]
 
     EmailOtpSetupConfirmInput:
       type: object

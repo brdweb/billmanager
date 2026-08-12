@@ -10,15 +10,15 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.7.4
+## 🎉 What's New in v4.7.5
 
-**Mobile Sign-In Reliability** - Provider sign-in choices now appear reliably on a fresh install, and Android passkeys have the required app-to-domain trust association.
+**Android Sign-In Completion** - Google now uses Android's native account flow, while successful Microsoft and passkey sessions leave authentication cleanly.
 
 ### Highlights
 
-- **Visible Provider Sign-In** - Google, Apple, Microsoft, and configured SSO choices load before the first login screen appears
-- **Android Passkey Trust** - Credential Manager and password managers can verify the signed BillManager Android application
-- **Existing Safety Preserved** - The association is restricted to the exact Android package and release signing certificate
+- **Native Google Sign-In** - Android uses Credential Manager instead of a browser OAuth redirect
+- **Completed Microsoft Sessions** - Successful Microsoft and passkey sign-ins no longer return to the authentication flow
+- **Direct Phone-Test Build 8** - The signed local APK can update the previous Android test build without clearing app data
 
 ---
 

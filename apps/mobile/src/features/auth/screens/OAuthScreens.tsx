@@ -1,15 +1,27 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
+import { Platform } from 'react-native';
 
 import { api as defaultApi, BillManagerApi } from '../../../api/client';
 import type { ServerCapabilities } from '../../../domain/serverProfile';
-import type { AuthFlowResult, OAuthProvider } from '../types';
+import type { OAuthProvider } from '../types';
 import {
   expoOAuthBrowserAdapter,
   resolveOAuthRedirectUri,
   type OAuthBrowserAdapter,
 } from '../oauthBrowser';
+import {
+  nativeGoogleSignInAdapter,
+  type NativeGoogleSignInAdapter,
+} from '../nativeGoogleAdapter';
+import {
+  runNativeGoogleAuthorization,
+  runSelectedOAuthAuthorization,
+} from '../nativeGoogleFlow';
+import {
+  deliverOAuthResult,
+  type OAuthResultCallbacks,
+} from '../oauthResultDelivery';
 import {
   ActionButton,
   AuthScaffold,
@@ -18,40 +30,12 @@ import {
   StatusNotice,
 } from '../components/AuthSurface';
 
-interface OAuthResultCallbacks {
-  onAuthenticated?: (result: Extract<AuthFlowResult, { status: 'authenticated' }>) => void;
-  onTwoFactorRequired?: (
-    result: Extract<AuthFlowResult, { status: 'two_factor_required' }>,
-  ) => void;
-  onLinked?: () => void;
-}
-
-function deliverResult(
-  result: AuthFlowResult,
-  flow: 'login' | 'link',
-  callbacks: OAuthResultCallbacks,
-  t: TFunction,
-): string | null {
-  if (result.status === 'authenticated') {
-    if (flow === 'link') callbacks.onLinked?.();
-    else callbacks.onAuthenticated?.(result);
-    return null;
-  }
-  if (result.status === 'two_factor_required') {
-    callbacks.onTwoFactorRequired?.(result);
-    return null;
-  }
-  if (result.status === 'password_change_required') {
-    return t('mobileAuth.oauth.passwordChangeRequired');
-  }
-  if (result.status === 'email_verification_required') return result.message;
-  return result.message;
-}
-
 export interface OAuthProvidersScreenProps extends OAuthResultCallbacks {
   client?: BillManagerApi;
   capabilities?: ServerCapabilities | null;
   browser?: OAuthBrowserAdapter;
+  nativeGoogle?: NativeGoogleSignInAdapter;
+  platform?: string;
   flow?: 'login' | 'link';
   onCancel?: () => void;
 }
@@ -60,6 +44,8 @@ export function OAuthProvidersScreen({
   client = defaultApi,
   capabilities: override,
   browser = expoOAuthBrowserAdapter,
+  nativeGoogle = nativeGoogleSignInAdapter,
+  platform = Platform.OS,
   flow = 'login',
   onCancel,
   ...callbacks
@@ -147,8 +133,33 @@ export function OAuthProvidersScreen({
       authScope,
     );
     setActiveProvider(null);
-    const resultMessage = deliverResult(result, flow, callbacks, t);
+    const resultMessage = deliverOAuthResult(result, flow, callbacks, t);
     if (resultMessage) setNotice(resultMessage);
+  };
+
+  const authorizeNativeGoogle = async (provider: OAuthProvider) => {
+    const authScope = client.captureAuthSessionScope();
+    setActiveProvider(provider.id);
+    setNotice(null);
+    try {
+      const outcome = await runNativeGoogleAuthorization(
+        client,
+        nativeGoogle,
+        flow,
+        authScope,
+      );
+      if (outcome.status === 'cancelled') return;
+      if (outcome.status !== 'completed') {
+        setNotice(t('mobileAuth.oauth.connectFailed', { provider: provider.display_name }));
+        return;
+      }
+      const resultMessage = deliverOAuthResult(outcome.result, flow, callbacks, t);
+      if (resultMessage) setNotice(resultMessage);
+    } catch {
+      setNotice(t('mobileAuth.oauth.connectFailed', { provider: provider.display_name }));
+    } finally {
+      setActiveProvider(null);
+    }
   };
 
   return (
@@ -170,7 +181,13 @@ export function OAuthProvidersScreen({
           variant="secondary"
           loading={activeProvider === provider.id}
           disabled={activeProvider !== null && activeProvider !== provider.id}
-          onPress={() => void authorize(provider)}
+          onPress={() => void runSelectedOAuthAuthorization(
+            provider.id,
+            client.getBaseUrl(),
+            platform,
+            () => authorizeNativeGoogle(provider),
+            () => authorize(provider),
+          )}
         />
       ))}
       {!loading && providers.length === 0 ? (
@@ -228,7 +245,7 @@ export function OAuthCallbackScreen({
         redirectUri: redirectUri ?? transaction?.redirectUri,
       });
       if (!active) return;
-      const resultMessage = deliverResult(result, flow ?? transaction?.flow ?? 'login', {
+      const resultMessage = deliverOAuthResult(result, flow ?? transaction?.flow ?? 'login', {
         onAuthenticated,
         onTwoFactorRequired,
         onLinked,

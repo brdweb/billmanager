@@ -16,10 +16,14 @@ can run without a live PostgreSQL instance:
 import importlib
 import os
 from contextlib import contextmanager
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 from unittest.mock import MagicMock, patch
 
 import pytest
+import time
+from sqlalchemy import create_engine, inspect
+from sqlalchemy.orm import Session
 
 # ---------------------------------------------------------------------------
 # Self-contained fixtures (override conftest's PostgreSQL-dependent versions)
@@ -28,8 +32,11 @@ import pytest
 config = importlib.import_module("config")
 app_module = importlib.import_module("app")
 models_module = importlib.import_module("models")
+db_migrations_module = importlib.import_module("db_migrations")
 OAUTH_PROVIDERS = app_module.OAUTH_PROVIDERS
 OAuthAccount = models_module.OAuthAccount
+OAuthStateUse = models_module.OAuthStateUse
+TwoFAConfig = models_module.TwoFAConfig
 User = models_module.User
 db_obj = models_module.db
 
@@ -142,8 +149,17 @@ def _mock_oauth_dependencies(
     token_overrides=None,
     userinfo_payload=None,
 ):
+    claims = dict(claims)
+    claims.setdefault("exp", int(time.time()) + 300)
+    claims.setdefault("iat", int(time.time()))
+    if provider == "google" and claims.get("iss") == "https://issuer.example/google":
+        claims["iss"] = "https://accounts.google.com"
     metadata = {
-        "issuer": f"https://issuer.example/{provider}",
+        "issuer": (
+            "https://accounts.google.com"
+            if provider == "google"
+            else f"https://issuer.example/{provider}"
+        ),
         "token_endpoint": f"https://issuer.example/{provider}/token",
         "jwks_uri": f"https://issuer.example/{provider}/jwks",
         "userinfo_endpoint": f"https://issuer.example/{provider}/userinfo",
@@ -157,6 +173,7 @@ def _mock_oauth_dependencies(
         "id_token_nonce": "nonce-123",
         "flow": "login",
         "link_user_id": None,
+        "channel": "browser",
     }
     if state_overrides:
         state_payload.update(state_overrides)
@@ -200,6 +217,472 @@ def _oauth_account(provider, provider_user_id):
     return OAuthAccount.query.filter_by(
         provider=provider, provider_user_id=provider_user_id
     ).first()
+
+
+def _native_state(flow="login", link_user_id=None):
+    nonce = "native-nonce-123"
+    state = app_module._generate_oauth_state(
+        "google",
+        None,
+        nonce,
+        flow=flow,
+        link_user_id=link_user_id,
+        channel="native_google",
+    )
+    return state, nonce
+
+
+@contextmanager
+def _mock_native_google_token(client_id, claims):
+    metadata = {
+        "issuer": "https://accounts.google.com",
+        "jwks_uri": "https://www.googleapis.com/oauth2/v3/certs",
+    }
+    with (
+        patch("app.get_enabled_oauth_providers", return_value=["google"]),
+        patch("app._get_oidc_metadata", return_value=metadata),
+        patch("app._get_jwks", return_value={"keys": [{"kid": "1"}]}),
+        patch("authlib.jose.JsonWebKey.import_key_set", return_value=MagicMock()),
+        patch("authlib.jose.jwt.decode", return_value=FakeClaims(claims)),
+    ):
+        yield
+
+
+class TestNativeGoogleOAuth:
+    def test_start_login_returns_public_client_binding(self, client, db_session, monkeypatch):
+        client_id = _set_provider_config(monkeypatch, "google")
+        response = client.post(
+            "/api/v2/auth/oauth/google/native/start", json={"flow": "login"}
+        )
+
+        assert response.status_code == 200
+        payload = response.get_json()["data"]
+        assert payload["client_id"] == client_id
+        assert payload["nonce"]
+        state = app_module.jwt.decode(
+            payload["state"], app_module.JWT_SECRET_KEY, algorithms=["HS256"]
+        )
+        assert state["provider"] == "google"
+        assert state["flow"] == "login"
+        assert state["channel"] == "native_google"
+        assert state["id_token_nonce"] == payload["nonce"]
+        assert "client_secret" not in payload
+
+    def test_start_rejects_invalid_flow(self, client, db_session, monkeypatch):
+        _set_provider_config(monkeypatch, "google")
+        response = client.post(
+            "/api/v2/auth/oauth/google/native/start", json={"flow": "elevate"}
+        )
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "Invalid OAuth flow"
+
+    def test_start_link_requires_authentication(self, client, db_session, monkeypatch):
+        _set_provider_config(monkeypatch, "google")
+        response = client.post(
+            "/api/v2/auth/oauth/google/native/start", json={"flow": "link"}
+        )
+        assert response.status_code == 401
+
+    def test_login_verifies_token_and_issues_session(
+        self, client, db_session, admin_user, monkeypatch
+    ):
+        client_id = _set_provider_config(monkeypatch, "google")
+        sub = "native-google-user"
+        _link_account(db_session, admin_user, "google", sub)
+        state, nonce = _native_state()
+        claims = {
+            "iss": "https://accounts.google.com",
+            "aud": client_id,
+            "exp": int(time.time()) + 300,
+            "iat": int(time.time()),
+            "nonce": nonce,
+            "sub": sub,
+            "email": "admin@test.com",
+            "email_verified": True,
+        }
+        with _mock_native_google_token(client_id, claims):
+            response = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json={"id_token": "provider-id-token", "state": state},
+            )
+
+        assert response.status_code == 200
+        payload = response.get_json()["data"]
+        assert payload["access_token"]
+        assert payload["refresh_token"]
+        assert payload["user"]["id"] == admin_user.id
+
+    @pytest.mark.parametrize(
+        ("claim", "value", "error"),
+        [
+            ("iss", "https://evil.example", "ID token issuer mismatch"),
+            ("aud", "wrong-client", "ID token audience mismatch"),
+            ("nonce", "wrong-nonce", "ID token nonce mismatch"),
+        ],
+    )
+    def test_callback_rejects_identity_binding_mismatches(
+        self, client, db_session, admin_user, monkeypatch, claim, value, error
+    ):
+        client_id = _set_provider_config(monkeypatch, "google")
+        sub = f"native-{claim}-user"
+        _link_account(db_session, admin_user, "google", sub)
+        state, nonce = _native_state()
+        claims = {
+            "iss": "https://accounts.google.com",
+            "aud": client_id,
+            "exp": int(time.time()) + 300,
+            "iat": int(time.time()),
+            "nonce": nonce,
+            "sub": sub,
+            "email": "admin@test.com",
+            "email_verified": True,
+            claim: value,
+        }
+        with _mock_native_google_token(client_id, claims):
+            response = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json={"id_token": "provider-id-token", "state": state},
+            )
+        assert response.status_code == 401
+        assert response.get_json()["error"] == error
+
+    def test_callback_rejects_browser_state(self, client, db_session, monkeypatch):
+        _set_provider_config(monkeypatch, "google")
+        state = app_module._generate_oauth_state(
+            "google", "verifier", "nonce", channel="browser"
+        )
+        response = client.post(
+            "/api/v2/auth/oauth/google/native/callback",
+            json={"id_token": "provider-id-token", "state": state},
+        )
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "State channel mismatch"
+
+    def test_browser_callback_rejects_native_state(
+        self, client, db_session, monkeypatch
+    ):
+        _set_provider_config(monkeypatch, "google")
+        state, _ = _native_state()
+        with patch("app.get_enabled_oauth_providers", return_value=["google"]):
+            response = client.post(
+                "/api/v2/auth/oauth/google/callback",
+                json={"code": "authorization-code", "state": state},
+            )
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "State channel mismatch"
+
+    def test_callback_returns_bad_gateway_when_jwks_are_unavailable(
+        self, client, db_session, monkeypatch
+    ):
+        _set_provider_config(monkeypatch, "google")
+        state, _ = _native_state()
+        with (
+            patch("app.get_enabled_oauth_providers", return_value=["google"]),
+            patch(
+                "app._get_oidc_metadata",
+                return_value={"issuer": "https://accounts.google.com"},
+            ),
+            patch("app._get_jwks", return_value=None),
+        ):
+            response = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json={"id_token": "provider-id-token", "state": state},
+            )
+        assert response.status_code == 502
+        assert response.get_json()["error"] == "Failed to fetch provider signing keys"
+
+    def test_callback_rejects_invalid_signature(
+        self, client, db_session, monkeypatch
+    ):
+        _set_provider_config(monkeypatch, "google")
+        state, _ = _native_state()
+        with (
+            patch("app.get_enabled_oauth_providers", return_value=["google"]),
+            patch(
+                "app._get_oidc_metadata",
+                return_value={"issuer": "https://accounts.google.com"},
+            ),
+            patch("app._get_jwks", return_value={"keys": [{"kid": "1"}]}),
+            patch("authlib.jose.JsonWebKey.import_key_set", return_value=MagicMock()),
+            patch("authlib.jose.jwt.decode", side_effect=ValueError("invalid token")),
+        ):
+            response = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json={"id_token": "provider-id-token", "state": state},
+            )
+        assert response.status_code == 401
+        assert response.get_json()["error"] == "Failed to verify ID token"
+
+    def test_callback_requires_authorized_party_for_multiple_audiences(
+        self, client, db_session, admin_user, monkeypatch
+    ):
+        client_id = _set_provider_config(monkeypatch, "google")
+        sub = "native-multiple-audiences"
+        _link_account(db_session, admin_user, "google", sub)
+        state, nonce = _native_state()
+        claims = {
+            "iss": "https://accounts.google.com",
+            "aud": [client_id, "another-client"],
+            "azp": "another-client",
+            "exp": int(time.time()) + 300,
+            "iat": int(time.time()),
+            "nonce": nonce,
+            "sub": sub,
+        }
+        with _mock_native_google_token(client_id, claims):
+            response = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json={"id_token": "provider-id-token", "state": state},
+            )
+        assert response.status_code == 401
+        assert response.get_json()["error"] == "ID token audience mismatch"
+
+    def test_callback_replay_is_rejected(
+        self, client, db_session, admin_user, monkeypatch
+    ):
+        client_id = _set_provider_config(monkeypatch, "google")
+        sub = "native-replay-user"
+        _link_account(db_session, admin_user, "google", sub)
+        state, nonce = _native_state()
+        claims = {
+            "iss": "https://accounts.google.com",
+            "aud": client_id,
+            "exp": int(time.time()) + 300,
+            "iat": int(time.time()),
+            "nonce": nonce,
+            "sub": sub,
+            "email": "admin@test.com",
+            "email_verified": True,
+        }
+        with _mock_native_google_token(client_id, claims):
+            first = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json={"id_token": "provider-id-token", "state": state},
+            )
+            second = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json={"id_token": "provider-id-token", "state": state},
+            )
+
+        assert first.status_code == 200
+        assert second.status_code == 400
+        assert second.get_json()["error"] == "Invalid or expired state"
+        assert OAuthStateUse.query.count() == 1
+
+    def test_link_reauthenticates_same_user_and_issues_no_tokens(
+        self, client, db_session, admin_user, monkeypatch
+    ):
+        client_id = _set_provider_config(monkeypatch, "google")
+        access_token = app_module.create_access_token(admin_user.id, admin_user.role)
+        headers = {"Authorization": f"Bearer {access_token}"}
+        start = client.post(
+            "/api/v2/auth/oauth/google/native/start",
+            json={"flow": "link"},
+            headers=headers,
+        )
+        start_data = start.get_json()["data"]
+        claims = {
+            "iss": "accounts.google.com",
+            "aud": client_id,
+            "exp": int(time.time()) + 300,
+            "iat": int(time.time()),
+            "nonce": start_data["nonce"],
+            "sub": "native-link-user",
+            "email": "linked@gmail.com",
+            "email_verified": True,
+        }
+        with _mock_native_google_token(client_id, claims):
+            response = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json={"id_token": "provider-id-token", "state": start_data["state"]},
+                headers=headers,
+            )
+
+        assert response.status_code == 200
+        assert response.get_json() == {"success": True, "data": {"linked": True}}
+        assert _oauth_account("google", "native-link-user").user_id == admin_user.id
+
+    def test_missing_link_bearer_does_not_consume_state_and_retry_succeeds(
+        self, client, db_session, admin_user, monkeypatch
+    ):
+        client_id = _set_provider_config(monkeypatch, "google")
+        access_token = app_module.create_access_token(admin_user.id, admin_user.role)
+        headers = {"Authorization": f"Bearer {access_token}"}
+        start = client.post(
+            "/api/v2/auth/oauth/google/native/start",
+            json={"flow": "link"},
+            headers=headers,
+        )
+        start_data = start.get_json()["data"]
+        callback_body = {
+            "id_token": "provider-id-token",
+            "state": start_data["state"],
+        }
+        claims = {
+            "iss": "https://accounts.google.com",
+            "aud": client_id,
+            "exp": int(time.time()) + 300,
+            "iat": int(time.time()),
+            "nonce": start_data["nonce"],
+            "sub": "native-link-retry-user",
+            "email": "linked.retry@gmail.com",
+            "email_verified": True,
+        }
+
+        with _mock_native_google_token(client_id, claims):
+            missing_bearer = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json=callback_body,
+            )
+            assert OAuthStateUse.query.count() == 0
+
+            invalid_bearer = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json=callback_body,
+                headers={"Authorization": "Bearer invalid-token"},
+            )
+            assert OAuthStateUse.query.count() == 0
+
+            retried = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json=callback_body,
+                headers=headers,
+            )
+
+        assert missing_bearer.status_code == 401
+        assert invalid_bearer.status_code == 401
+        assert retried.status_code == 200
+        assert retried.get_json() == {"success": True, "data": {"linked": True}}
+        assert OAuthStateUse.query.count() == 1
+        assert (
+            _oauth_account("google", "native-link-retry-user").user_id
+            == admin_user.id
+        )
+
+    def test_new_identity_rejects_non_authoritative_third_party_email(
+        self, client, db_session, monkeypatch
+    ):
+        client_id = _set_provider_config(monkeypatch, "google")
+        state, nonce = _native_state()
+        claims = {
+            "iss": "https://accounts.google.com",
+            "aud": client_id,
+            "exp": int(time.time()) + 300,
+            "iat": int(time.time()),
+            "nonce": nonce,
+            "sub": "native-third-party-email",
+            "email": "person@example.com",
+            "email_verified": True,
+        }
+        with _mock_native_google_token(client_id, claims):
+            response = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json={"id_token": "provider-id-token", "state": state},
+            )
+        assert response.status_code == 401
+        assert response.get_json()["error"] == (
+            "Google email cannot be used to create or link this account"
+        )
+        assert _oauth_account("google", "native-third-party-email") is None
+
+    def test_new_workspace_identity_accepts_verified_hosted_domain_email(
+        self, client, db_session, monkeypatch
+    ):
+        # SaaS deliberately disables OAuth auto-registration by default; this
+        # test isolates Google email authority from that deployment policy.
+        monkeypatch.setattr(app_module, "OAUTH_AUTO_REGISTER", True)
+        client_id = _set_provider_config(monkeypatch, "google")
+        state, nonce = _native_state()
+        claims = {
+            "iss": "https://accounts.google.com",
+            "aud": client_id,
+            "exp": int(time.time()) + 300,
+            "iat": int(time.time()),
+            "nonce": nonce,
+            "sub": "native-workspace-email",
+            "email": "person@example.com",
+            "email_verified": True,
+            "hd": "example.com",
+        }
+        with _mock_native_google_token(client_id, claims):
+            response = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json={"id_token": "provider-id-token", "state": state},
+            )
+        assert response.status_code == 200
+        assert _oauth_account("google", "native-workspace-email") is not None
+
+    def test_link_callback_rejects_different_authenticated_user(
+        self, client, db_session, admin_user, monkeypatch
+    ):
+        _set_provider_config(monkeypatch, "google")
+        other = User(username="other", role="user", email="other@example.com")
+        other.set_password("password-123")
+        db_session.add(other)
+        db_session.commit()
+        state, _ = _native_state(flow="link", link_user_id=admin_user.id)
+        other_token = app_module.create_access_token(other.id, other.role)
+        response = client.post(
+            "/api/v2/auth/oauth/google/native/callback",
+            json={"id_token": "provider-id-token", "state": state},
+            headers={"Authorization": f"Bearer {other_token}"},
+        )
+        assert response.status_code == 401
+        assert response.get_json()["error"] == "Link session user mismatch"
+
+    def test_existing_user_twofa_uses_normal_challenge(
+        self, client, db_session, admin_user, monkeypatch
+    ):
+        client_id = _set_provider_config(monkeypatch, "google")
+        sub = "native-twofa-user"
+        _link_account(db_session, admin_user, "google", sub)
+        db_session.add(
+            TwoFAConfig(
+                user_id=admin_user.id,
+                passkey_enabled=True,
+                email_otp_enabled=False,
+            )
+        )
+        db_session.commit()
+        state, nonce = _native_state()
+        claims = {
+            "iss": "https://accounts.google.com",
+            "aud": client_id,
+            "exp": int(time.time()) + 300,
+            "iat": int(time.time()),
+            "nonce": nonce,
+            "sub": sub,
+            "email": "admin@test.com",
+            "email_verified": True,
+        }
+        with _mock_native_google_token(client_id, claims):
+            response = client.post(
+                "/api/v2/auth/oauth/google/native/callback",
+                json={"id_token": "provider-id-token", "state": state},
+            )
+        assert response.status_code == 403
+        payload = response.get_json()
+        assert payload["twofa_required"] is True
+        assert payload["twofa_methods"] == ["passkey", "recovery"]
+        assert payload["twofa_session_token"]
+
+
+def test_oauth_state_replay_migration_supports_sqlite():
+    engine = create_engine("sqlite://")
+    migration_db = SimpleNamespace(engine=engine, session=Session(engine))
+    try:
+        db_migrations_module.migrate_20260812_01_create_oauth_state_uses(
+            migration_db
+        )
+        table_names = inspect(engine).get_table_names()
+        indexes = inspect(engine).get_indexes("oauth_state_uses")
+        assert "oauth_state_uses" in table_names
+        assert any(
+            index["name"] == "idx_oauth_state_uses_expires_at" for index in indexes
+        )
+    finally:
+        migration_db.session.close()
+        engine.dispose()
 
 
 class TestNativeRedirectUris:

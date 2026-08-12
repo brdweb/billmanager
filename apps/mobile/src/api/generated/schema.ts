@@ -737,6 +737,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/oauth/google/native/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start native Google sign-in
+         * @description Creates a nonce-bound Google Credential Manager transaction. Account linking requires the current access token in the Authorization header.
+         */
+        post: operations["startGoogleNativeOAuth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oauth/google/native/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete native Google sign-in
+         * @description Verifies the Google ID token against the nonce-bound transaction and returns a login session, linked-account result, or 2FA challenge.
+         */
+        post: operations["completeGoogleNativeOAuth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/oauth/accounts": {
         parameters: {
             query?: never;
@@ -1948,6 +1988,49 @@ export interface components {
             state: string;
             /** Format: uri */
             redirect_uri?: string;
+        };
+        GoogleNativeOAuthStartInput: {
+            /**
+             * @default login
+             * @enum {string}
+             */
+            flow: "login" | "link";
+        };
+        GoogleNativeOAuthStartResponse: {
+            /** @enum {boolean} */
+            success: true;
+            data: {
+                /** @description Google web client ID used as Credential Manager's server client ID */
+                client_id: string;
+                /** @description Nonce that must be passed to Credential Manager */
+                nonce: string;
+                /** @description Signed, single-use native authorization transaction */
+                state: string;
+            };
+        };
+        GoogleNativeOAuthCallbackInput: {
+            /** @description Google ID token returned by Android Credential Manager */
+            id_token: string;
+            /** @description Signed state returned by the native start operation */
+            state: string;
+            /** @description Optional device identifier for token management */
+            device_info?: string;
+        };
+        OAuthLinkResponse: {
+            /** @enum {boolean} */
+            success: true;
+            data: {
+                /** @enum {boolean} */
+                linked: true;
+            };
+        };
+        TwoFactorRequiredResponse: {
+            /** @enum {boolean} */
+            success: false;
+            /** @enum {boolean} */
+            twofa_required: true;
+            twofa_session_token: string;
+            twofa_methods: ("email_otp" | "passkey" | "recovery")[];
         };
         EmailOtpSetupConfirmInput: {
             code: string;
@@ -4278,6 +4361,73 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    startGoogleNativeOAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleNativeOAuthStartInput"];
+            };
+        };
+        responses: {
+            /** @description Google client ID, nonce, and signed transaction state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleNativeOAuthStartResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
+            502: components["responses"]["ServerError"];
+        };
+    };
+    completeGoogleNativeOAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleNativeOAuthCallbackInput"];
+            };
+        };
+        responses: {
+            /** @description Login session or linked-account result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"] | components["schemas"]["OAuthLinkResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Additional authentication is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TwoFactorRequiredResponse"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["ServerError"];
+            502: components["responses"]["ServerError"];
         };
     };
     listLinkedOAuthAccounts: {

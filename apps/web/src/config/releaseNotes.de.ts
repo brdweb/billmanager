@@ -2,6 +2,20 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.5',
+    date: '2026-08-12',
+    title: 'Abgeschlossene Android-Anmeldung',
+    sections: [
+      {
+        heading: 'Fehlerbehebungen',
+        items: [
+          'Google-Anmeldungen unter Android verwenden jetzt den nativen Credential Manager statt einer OAuth-Weiterleitung im Browser',
+          'Erfolgreiche Microsoft- und Passkey-Anmeldungen kehren nicht mehr zum Anmeldevorgang zurück',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.4',
     date: '2026-08-11',
     title: 'Zuverlässige mobile Anmeldung',

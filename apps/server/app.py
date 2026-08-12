@@ -44,6 +44,7 @@ from models import (
     CategoryBudget,
     ShareAuditLog,
     OAuthAccount,
+    OAuthStateUse,
     TwoFAConfig,
     TwoFAChallenge,
     WebAuthnCredential,
@@ -2258,7 +2259,11 @@ def jwt_delete_account():
             {"success": False, "error": "Only account owners can delete the account"}
         ), 403
 
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(force=True, silent=True)
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "error": "Invalid request body"}), 400
     password = data.get("password", "")
     confirm = data.get("confirm", False)
 
@@ -5566,12 +5571,6 @@ _OIDC_CACHE_TTL = 3600  # 1 hour
 _jwks_cache = {}
 _JWKS_CACHE_TTL = 3600  # 1 hour
 
-# Used OAuth state nonces to prevent replay (nonce -> expiry_timestamp)
-_used_oauth_nonces = {}
-_NONCE_CLEANUP_INTERVAL = 300  # Clean up expired nonces every 5 minutes
-_nonce_last_cleanup = 0
-
-
 def _get_oidc_metadata(provider_key):
     """Fetch and cache OIDC discovery metadata for a provider."""
     import time
@@ -5620,20 +5619,6 @@ def _get_jwks(provider_key):
         return None
 
 
-def _cleanup_used_nonces():
-    """Remove expired nonces from the used set."""
-    import time
-
-    global _nonce_last_cleanup
-    now = time.time()
-    if now - _nonce_last_cleanup < _NONCE_CLEANUP_INTERVAL:
-        return
-    _nonce_last_cleanup = now
-    expired = [n for n, exp in _used_oauth_nonces.items() if exp < now]
-    for n in expired:
-        del _used_oauth_nonces[n]
-
-
 def _generate_oauth_state(
     provider,
     code_verifier,
@@ -5641,6 +5626,7 @@ def _generate_oauth_state(
     flow="login",
     link_user_id=None,
     redirect_uri=None,
+    channel="browser",
 ):
     """Generate encrypted state parameter as signed JWT.
 
@@ -5658,6 +5644,7 @@ def _generate_oauth_state(
         + datetime.timedelta(minutes=5),
         "iat": datetime.datetime.now(datetime.timezone.utc),
         "type": "oauth_state",
+        "channel": channel,
     }
     if link_user_id is not None:
         state_payload["link_user_id"] = link_user_id
@@ -5684,34 +5671,54 @@ def _resolve_oauth_redirect_uri(requested_uri=None):
     return redirect_uri, None
 
 
-def _verify_oauth_state(state_token):
-    """Verify and decode the OAuth state parameter.
-
-    Also checks that the state_nonce has not been used before (replay prevention).
-    """
-    import time
-
-    _cleanup_used_nonces()
-
+def _decode_oauth_state(state_token):
+    """Verify and decode a signed OAuth state without consuming it."""
     try:
         payload = jwt.decode(state_token, JWT_SECRET_KEY, algorithms=["HS256"])
         if payload.get("type") != "oauth_state":
             return None
-
-        # Check state_nonce for replay (CRITICAL-5)
         state_nonce = payload.get("state_nonce")
-        if not state_nonce:
+        if not isinstance(state_nonce, str) or not state_nonce:
             return None
-        if state_nonce in _used_oauth_nonces:
-            logger.warning(f"Replayed OAuth state nonce detected: {state_nonce[:8]}...")
-            return None
-
-        # Mark nonce as used (expires after 10 minutes to allow cleanup)
-        _used_oauth_nonces[state_nonce] = time.time() + 600
-
         return payload
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
+
+
+def _consume_oauth_state(payload):
+    """Atomically mark a verified OAuth state as used in the replay ledger."""
+    state_nonce = payload.get("state_nonce") if isinstance(payload, dict) else None
+    if not isinstance(state_nonce, str) or not state_nonce:
+        return False
+
+    # Store only a one-way digest. The unique constraint makes consumption
+    # atomic across threads, processes, and application replicas.
+    nonce_hash = hashlib.sha256(state_nonce.encode()).hexdigest()
+    now = _naive_utcnow()
+    db.session.query(OAuthStateUse).filter(OAuthStateUse.expires_at < now).delete(
+        synchronize_session=False
+    )
+    db.session.add(
+        OAuthStateUse(
+            nonce_hash=nonce_hash,
+            expires_at=now + datetime.timedelta(minutes=10),
+        )
+    )
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        logger.warning("Replayed OAuth state detected")
+        return False
+    return True
+
+
+def _verify_oauth_state(state_token):
+    """Verify, decode, and atomically consume an OAuth state parameter."""
+    payload = _decode_oauth_state(state_token)
+    if not payload or not _consume_oauth_state(payload):
+        return None
+    return payload
 
 
 def _generate_apple_client_secret():
@@ -5766,6 +5773,106 @@ def _resolve_token_auth_method(provider, cfg, metadata):
         return "none"
 
     return "client_secret_post" if cfg.get("client_secret") else "none"
+
+
+def _verify_oidc_id_token(provider, id_token, state_payload, cfg, metadata):
+    """Verify an OIDC ID token and bind it to the initiating OAuth request.
+
+    Signature and temporal validation are delegated to Authlib using the
+    provider's discovered JWKS. Issuer, audience, and nonce are then checked
+    explicitly because they are application-specific trust decisions.
+    """
+    try:
+        from authlib.jose import JsonWebKey, jwt as authlib_jwt
+
+        jwks_data = _get_jwks(provider)
+        if not jwks_data:
+            return None, (
+                jsonify(
+                    {"success": False, "error": "Failed to fetch provider signing keys"}
+                ),
+                502,
+            )
+
+        jwk_set = JsonWebKey.import_key_set(jwks_data)
+        claims = authlib_jwt.decode(id_token, jwk_set)
+        claims.validate()  # Validates exp, iat, and nbf.
+    except Exception as exc:
+        # Do not log provider tokens or exception strings that may contain them.
+        logger.warning(
+            "ID token cryptographic verification failed for %s (%s)",
+            provider,
+            type(exc).__name__,
+        )
+        return None, (
+            jsonify({"success": False, "error": "Failed to verify ID token"}),
+            401,
+        )
+
+    if not isinstance(claims.get("exp"), (int, float)) or not isinstance(
+        claims.get("iat"), (int, float)
+    ):
+        return None, (
+            jsonify({"success": False, "error": "ID token missing time claims"}),
+            401,
+        )
+    if not isinstance(claims.get("sub"), str) or not claims.get("sub").strip():
+        return None, (
+            jsonify({"success": False, "error": "ID token subject is missing"}),
+            401,
+        )
+
+    expected_issuer = metadata.get("issuer")
+    # Microsoft "common" discovery returns a literal {tenantid} placeholder;
+    # real tokens contain the actual tenant GUID in the issuer claim.
+    if expected_issuer and "{tenantid}" in expected_issuer:
+        token_tid = claims.get("tid", "")
+        expected_issuer = expected_issuer.replace("{tenantid}", token_tid)
+
+    token_issuer = claims.get("iss")
+    if provider == "google":
+        issuer_valid = token_issuer in (
+            "accounts.google.com",
+            "https://accounts.google.com",
+        )
+    else:
+        issuer_valid = token_issuer == expected_issuer
+    if not issuer_valid:
+        return None, (
+            jsonify({"success": False, "error": "ID token issuer mismatch"}),
+            401,
+        )
+
+    expected_audience = cfg.get("client_id")
+    token_audience = claims.get("aud")
+    if isinstance(token_audience, list):
+        audience_valid = expected_audience in token_audience
+        # OIDC requires azp to identify the intended party for multi-audience
+        # tokens. Enforce it so membership alone cannot broaden acceptance.
+        if audience_valid and len(token_audience) > 1:
+            audience_valid = claims.get("azp") == expected_audience
+    else:
+        audience_valid = token_audience == expected_audience
+    if not audience_valid:
+        return None, (
+            jsonify({"success": False, "error": "ID token audience mismatch"}),
+            401,
+        )
+
+    expected_nonce = state_payload.get("id_token_nonce")
+    token_nonce = claims.get("nonce")
+    if (
+        not isinstance(expected_nonce, str)
+        or not expected_nonce
+        or not isinstance(token_nonce, str)
+        or not secrets.compare_digest(token_nonce, expected_nonce)
+    ):
+        return None, (
+            jsonify({"success": False, "error": "ID token nonce mismatch"}),
+            401,
+        )
+
+    return claims, None
 
 
 def _resolve_oauth_user(provider, provider_user_id, email, profile_data=None):
@@ -5872,6 +5979,202 @@ def _resolve_oauth_user(provider, provider_user_id, email, profile_data=None):
     return new_user, True, None
 
 
+def _complete_oauth_identity(
+    provider,
+    claims,
+    state_payload,
+    request_data,
+    *,
+    issue_link_session=True,
+):
+    """Resolve/link a verified provider identity and issue the normal session."""
+    provider_user_id = claims.get("sub")
+    if not isinstance(provider_user_id, str) or not provider_user_id.strip():
+        return jsonify({"success": False, "error": "No subject in ID token"}), 502
+
+    flow = state_payload.get("flow", "login")
+    if flow not in ("login", "link"):
+        return jsonify({"success": False, "error": "Invalid OAuth flow"}), 400
+
+    existing_identity = OAuthAccount.query.filter_by(
+        provider=provider, provider_user_id=provider_user_id
+    ).first()
+    trusted_email_providers = ["microsoft", "apple"]
+    skip_email_check = provider in trusted_email_providers
+    if not skip_email_check and provider == "oidc":
+        from config import OAUTH_OIDC_SKIP_EMAIL_VERIFICATION
+
+        skip_email_check = OAUTH_OIDC_SKIP_EMAIL_VERIFICATION
+
+    if not skip_email_check and claims.get("email") is not None:
+        email_verified_claim = claims.get("email_verified")
+        is_email_verified = False
+        if isinstance(email_verified_claim, bool):
+            is_email_verified = email_verified_claim
+        elif isinstance(email_verified_claim, int):
+            is_email_verified = email_verified_claim == 1
+        elif isinstance(email_verified_claim, str):
+            is_email_verified = email_verified_claim.strip().lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+        if not is_email_verified:
+            return jsonify(
+                {"success": False, "error": "Provider email is not verified"}
+            ), 401
+
+    if provider == "google" and not existing_identity:
+        candidate_email = claims.get("email")
+        email_is_valid = isinstance(candidate_email, str) and validate_email(
+            candidate_email
+        )[0]
+        google_controls_email = bool(
+            email_is_valid
+            and (
+                candidate_email.strip().lower().endswith("@gmail.com")
+                or (
+                    isinstance(claims.get("hd"), str)
+                    and bool(claims.get("hd").strip())
+                )
+            )
+        )
+        if claims.get("email_verified") is not True or not google_controls_email:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Google email cannot be used to create or link this account",
+                }
+            ), 401
+
+    email = claims.get("email")
+
+    # Microsoft personal accounts may not have email; fall back to
+    # preferred_username when it is syntactically an email address.
+    if not email and provider == "microsoft":
+        fallback = claims.get("preferred_username", "")
+        if fallback and "@" in fallback and "." in fallback.split("@")[-1]:
+            email = fallback
+
+    email = email.strip().lower() if email else None
+    profile_data = {
+        "name": claims.get("name"),
+        "given_name": claims.get("given_name"),
+        "family_name": claims.get("family_name"),
+        "picture": claims.get("picture"),
+    }
+
+    if flow == "link":
+        link_user_id = state_payload.get("link_user_id")
+        link_user = db.session.get(User, link_user_id) if link_user_id else None
+        if not link_user:
+            return jsonify({"success": False, "error": "Invalid link session"}), 400
+
+        existing_provider_link = OAuthAccount.query.filter_by(
+            provider=provider, provider_user_id=provider_user_id
+        ).first()
+        if existing_provider_link and existing_provider_link.user_id != link_user.id:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "This social account is already linked to another user",
+                }
+            ), 409
+
+        account_for_user_provider = OAuthAccount.query.filter_by(
+            user_id=link_user.id, provider=provider
+        ).first()
+        if account_for_user_provider:
+            account_for_user_provider.provider_user_id = provider_user_id
+            account_for_user_provider.provider_email = email
+            account_for_user_provider.profile_data = (
+                json.dumps(profile_data) if profile_data else None
+            )
+        else:
+            db.session.add(
+                OAuthAccount(
+                    user_id=link_user.id,
+                    provider=provider,
+                    provider_user_id=provider_user_id,
+                    provider_email=email,
+                    profile_data=json.dumps(profile_data) if profile_data else None,
+                )
+            )
+        db.session.commit()
+        user = link_user
+        is_new_user = False
+        if not issue_link_session:
+            return jsonify({"success": True, "data": {"linked": True}})
+    else:
+        user, is_new_user, error = _resolve_oauth_user(
+            provider, provider_user_id, email, profile_data
+        )
+        if error:
+            return jsonify({"success": False, "error": error}), 409
+        if not user:
+            return jsonify({"success": False, "error": "Failed to resolve user"}), 500
+
+    if flow != "link" and user.twofa_config and user.twofa_config.is_enabled:
+        session_token = secrets.token_urlsafe(32)
+        session_hash = hashlib.sha256(session_token.encode()).hexdigest()
+
+        challenge = TwoFAChallenge(
+            user_id=user.id,
+            token_hash=session_hash,
+            challenge_type="pending",
+            expires_at=_naive_utcnow() + datetime.timedelta(minutes=10),
+        )
+        db.session.add(challenge)
+        db.session.commit()
+
+        methods = []
+        if user.twofa_config.email_otp_enabled:
+            methods.append("email_otp")
+        if user.twofa_config.passkey_enabled:
+            methods.append("passkey")
+        methods.append("recovery")
+
+        return jsonify(
+            {
+                "success": False,
+                "twofa_required": True,
+                "twofa_session_token": session_token,
+                "twofa_methods": methods,
+            }
+        ), 403
+
+    if flow != "link" and _record_login_if_due(user):
+        db.session.commit()
+
+    access_token = create_access_token(user.id, user.role)
+    refresh_token = create_refresh_token(user.id, request_data.get("device_info"))
+    databases = [
+        {"id": database.id, "name": database.name, "display_name": database.display_name}
+        for database in user.accessible_databases
+    ]
+
+    response = jsonify(
+        {
+            "success": True,
+            "data": {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "expires_in": int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds()),
+                "token_type": "Bearer",  # nosec B105
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "role": user.role,
+                    "is_new_user": is_new_user,
+                    "currency": user.currency,
+                },
+                "databases": databases,
+            },
+        }
+    )
+    return _set_refresh_cookie(response, refresh_token)
+
+
 @api_v2_bp.route("/auth/oauth/providers", methods=["GET"])
 def oauth_list_providers():
     """List enabled OAuth/OIDC providers with display names and icons."""
@@ -5889,6 +6192,29 @@ def oauth_list_providers():
     return jsonify({"success": True, "data": providers})
 
 
+def _oauth_link_user_from_bearer():
+    """Resolve the authenticated user for an OAuth account-link operation."""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None, (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "Authentication required for account linking",
+                }
+            ),
+            401,
+        )
+    token = auth_header.removeprefix("Bearer ").strip()
+    payload = verify_access_token(token) if token else None
+    if not payload:
+        return None, (
+            jsonify({"success": False, "error": "Invalid or expired token"}),
+            401,
+        )
+    return payload["user_id"], None
+
+
 @api_v2_bp.route("/auth/oauth/<provider>/authorize", methods=["GET"])
 @limiter.limit("20 per minute")
 def oauth_authorize(provider):
@@ -5899,21 +6225,13 @@ def oauth_authorize(provider):
         ), 400
 
     flow = request.args.get("flow", "login")
+    if flow not in ("login", "link"):
+        return jsonify({"success": False, "error": "Invalid OAuth flow"}), 400
     link_user_id = None
     if flow == "link":
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Authentication required for account linking",
-                }
-            ), 401
-        token = auth_header.split(" ")[1]
-        payload = verify_access_token(token)
-        if not payload:
-            return jsonify({"success": False, "error": "Invalid or expired token"}), 401
-        link_user_id = payload["user_id"]
+        link_user_id, link_error = _oauth_link_user_from_bearer()
+        if link_error:
+            return link_error
 
     redirect_uri, redirect_error = _resolve_oauth_redirect_uri(
         request.args.get("redirect_uri")
@@ -5989,6 +6307,128 @@ def oauth_authorize(provider):
     )
 
 
+@api_v2_bp.route("/auth/oauth/google/native/start", methods=["POST"])
+@limiter.limit("20 per minute")
+def oauth_google_native_start():
+    """Begin Android Credential Manager Sign in with Google."""
+    if "google" not in get_enabled_oauth_providers():
+        return jsonify(
+            {"success": False, "error": 'Provider "google" is not enabled'}
+        ), 400
+
+    data = request.get_json(force=True, silent=True)
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "error": "Invalid request body"}), 400
+    flow = data.get("flow", "login")
+    if flow not in ("login", "link"):
+        return jsonify({"success": False, "error": "Invalid OAuth flow"}), 400
+
+    link_user_id = None
+    if flow == "link":
+        link_user_id, link_error = _oauth_link_user_from_bearer()
+        if link_error:
+            return link_error
+
+    cfg = get_oauth_provider_config("google")
+    if not cfg or not cfg.get("client_id"):
+        return jsonify(
+            {"success": False, "error": "Provider configuration unavailable"}
+        ), 502
+
+    id_token_nonce = secrets.token_urlsafe(32)
+    state = _generate_oauth_state(
+        "google",
+        None,
+        id_token_nonce,
+        flow=flow,
+        link_user_id=link_user_id,
+        channel="native_google",
+    )
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "client_id": cfg["client_id"],
+                "nonce": id_token_nonce,
+                "state": state,
+            },
+        }
+    )
+
+
+@api_v2_bp.route("/auth/oauth/google/native/callback", methods=["POST"])
+@limiter.limit("20 per minute")
+def oauth_google_native_callback():
+    """Verify a Google ID token returned by Android Credential Manager."""
+    if "google" not in get_enabled_oauth_providers():
+        return jsonify(
+            {"success": False, "error": 'Provider "google" is not enabled'}
+        ), 400
+
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "error": "Invalid request body"}), 400
+    id_token = data.get("id_token")
+    state = data.get("state")
+    if (
+        not isinstance(id_token, str)
+        or not id_token
+        or not isinstance(state, str)
+        or not state
+    ):
+        return jsonify({"success": False, "error": "Missing ID token or state"}), 400
+
+    state_payload = _decode_oauth_state(state)
+    if not state_payload:
+        return jsonify({"success": False, "error": "Invalid or expired state"}), 400
+    if state_payload.get("provider") != "google":
+        return jsonify({"success": False, "error": "State provider mismatch"}), 400
+    if state_payload.get("channel") != "native_google":
+        return jsonify({"success": False, "error": "State channel mismatch"}), 400
+
+    flow = state_payload.get("flow")
+    if flow not in ("login", "link"):
+        return jsonify({"success": False, "error": "Invalid OAuth flow"}), 400
+    if flow == "link":
+        authenticated_user_id, link_error = _oauth_link_user_from_bearer()
+        if link_error:
+            return link_error
+        if authenticated_user_id != state_payload.get("link_user_id"):
+            return jsonify({"success": False, "error": "Link session user mismatch"}), 401
+
+    cfg = get_oauth_provider_config("google")
+    if not cfg:
+        return jsonify(
+            {"success": False, "error": "Provider configuration unavailable"}
+        ), 502
+    metadata = _get_oidc_metadata("google")
+    if not metadata:
+        return jsonify(
+            {"success": False, "error": "Failed to fetch provider configuration"}
+        ), 502
+
+    # Consume only after structural and link-user authentication checks. This
+    # lets an HTTP client refresh an expired bearer and retry without turning a
+    # valid link state into a replay, while retaining atomic one-time use.
+    if not _consume_oauth_state(state_payload):
+        return jsonify({"success": False, "error": "Invalid or expired state"}), 400
+
+    claims, verification_error = _verify_oidc_id_token(
+        "google", id_token, state_payload, cfg, metadata
+    )
+    if verification_error:
+        return verification_error
+    return _complete_oauth_identity(
+        "google",
+        claims,
+        state_payload,
+        data,
+        issue_link_session=False,
+    )
+
+
 @api_v2_bp.route("/auth/oauth/<provider>/callback", methods=["POST"])
 @limiter.limit("20 per minute")
 def oauth_callback(provider):
@@ -6016,6 +6456,8 @@ def oauth_callback(provider):
 
     if state_payload.get("provider") != provider:
         return jsonify({"success": False, "error": "State provider mismatch"}), 400
+    if state_payload.get("channel") != "browser":
+        return jsonify({"success": False, "error": "State channel mismatch"}), 400
 
     redirect_uri, redirect_error = _resolve_oauth_redirect_uri(
         state_payload.get("redirect_uri")
@@ -6105,53 +6547,11 @@ def oauth_callback(provider):
             {"success": False, "error": "No ID token in provider response"}
         ), 502
 
-    # Decode and validate ID token with JWKS signature verification (CRITICAL-1)
-    try:
-        from authlib.jose import JsonWebKey, jwt as authlib_jwt
-
-        # Fetch JWKS for signature verification
-        jwks_data = _get_jwks(provider)
-        if not jwks_data:
-            return jsonify(
-                {"success": False, "error": "Failed to fetch provider signing keys"}
-            ), 502
-
-        jwk_set = JsonWebKey.import_key_set(jwks_data)
-
-        # Decode and verify signature using provider's public keys
-        claims = authlib_jwt.decode(id_token, jwk_set)
-        claims.validate()  # Validates exp, iat, nbf
-
-        # Validate issuer
-        expected_issuer = metadata.get("issuer")
-        # Microsoft "common" discovery returns literal {tenantid} placeholder;
-        # real tokens contain the actual tenant GUID in the issuer claim
-        if expected_issuer and "{tenantid}" in expected_issuer:
-            token_tid = claims.get("tid", "")
-            expected_issuer = expected_issuer.replace("{tenantid}", token_tid)
-        if claims.get("iss") != expected_issuer:
-            return jsonify({"success": False, "error": "ID token issuer mismatch"}), 401
-
-        # Validate audience
-        aud = claims.get("aud")
-        if isinstance(aud, list):
-            if cfg["client_id"] not in aud:
-                return jsonify(
-                    {"success": False, "error": "ID token audience mismatch"}
-                ), 401
-        elif aud != cfg["client_id"]:
-            return jsonify(
-                {"success": False, "error": "ID token audience mismatch"}
-            ), 401
-
-        # Validate nonce matches what we sent in the authorize request (HIGH-2)
-        expected_nonce = state_payload.get("id_token_nonce")
-        if expected_nonce and claims.get("nonce") != expected_nonce:
-            return jsonify({"success": False, "error": "ID token nonce mismatch"}), 401
-
-    except Exception as e:
-        logger.error(f"ID token verification failed for {provider}: {e}")
-        return jsonify({"success": False, "error": "Failed to verify ID token"}), 502
+    claims, verification_error = _verify_oidc_id_token(
+        provider, id_token, state_payload, cfg, metadata
+    )
+    if verification_error:
+        return verification_error
 
     # For generic OIDC: use configurable claim names
     if provider == "oidc":
@@ -6201,172 +6601,7 @@ def oauth_callback(provider):
                     type(e).__name__,
                 )
 
-    # Check email verification status
-    # Trusted providers only return verified emails — skip check
-    TRUSTED_EMAIL_PROVIDERS = ["microsoft", "apple"]
-    skip_email_check = provider in TRUSTED_EMAIL_PROVIDERS
-    if not skip_email_check and provider == "oidc":
-        from config import OAUTH_OIDC_SKIP_EMAIL_VERIFICATION
-
-        skip_email_check = OAUTH_OIDC_SKIP_EMAIL_VERIFICATION
-
-    if not skip_email_check and claims.get("email") is not None:
-        email_verified_claim = claims.get("email_verified")
-        is_email_verified = False
-        if isinstance(email_verified_claim, bool):
-            is_email_verified = email_verified_claim
-        elif isinstance(email_verified_claim, int):
-            is_email_verified = email_verified_claim == 1
-        elif isinstance(email_verified_claim, str):
-            is_email_verified = email_verified_claim.strip().lower() in (
-                "true",
-                "1",
-                "yes",
-            )
-        if not is_email_verified:
-            return jsonify(
-                {"success": False, "error": "Provider email is not verified"}
-            ), 401
-
-    # Extract user info from claims
-    provider_user_id = claims.get("sub")
-    email = claims.get("email")
-
-    # Microsoft personal accounts may not have email; fall back to preferred_username
-    if not email and provider == "microsoft":
-        fallback = claims.get("preferred_username", "")
-        # Only use as email if it looks like a valid email address
-        # (preferred_username can be a phone number for personal accounts)
-        if fallback and "@" in fallback and "." in fallback.split("@")[-1]:
-            email = fallback
-
-    # Normalize email
-    email = email.strip().lower() if email else None
-
-    profile_data = {
-        "name": claims.get("name"),
-        "given_name": claims.get("given_name"),
-        "family_name": claims.get("family_name"),
-        "picture": claims.get("picture"),
-    }
-
-    if not provider_user_id:
-        return jsonify({"success": False, "error": "No subject in ID token"}), 502
-
-    # Link flow: bind provider to an existing authenticated account
-    flow = state_payload.get("flow", "login")
-    if flow == "link":
-        link_user_id = state_payload.get("link_user_id")
-        link_user = db.session.get(User, link_user_id) if link_user_id else None
-        if not link_user:
-            return jsonify({"success": False, "error": "Invalid link session"}), 400
-
-        existing_provider_link = OAuthAccount.query.filter_by(
-            provider=provider, provider_user_id=provider_user_id
-        ).first()
-        if existing_provider_link and existing_provider_link.user_id != link_user.id:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "This social account is already linked to another user",
-                }
-            ), 409
-
-        account_for_user_provider = OAuthAccount.query.filter_by(
-            user_id=link_user.id, provider=provider
-        ).first()
-        if account_for_user_provider:
-            account_for_user_provider.provider_user_id = provider_user_id
-            account_for_user_provider.provider_email = email
-            account_for_user_provider.profile_data = (
-                json.dumps(profile_data) if profile_data else None
-            )
-        else:
-            db.session.add(
-                OAuthAccount(
-                    user_id=link_user.id,
-                    provider=provider,
-                    provider_user_id=provider_user_id,
-                    provider_email=email,
-                    profile_data=json.dumps(profile_data) if profile_data else None,
-                )
-            )
-        db.session.commit()
-        user = link_user
-        is_new_user = False
-    else:
-        # Resolve or create user
-        user, is_new_user, error = _resolve_oauth_user(
-            provider, provider_user_id, email, profile_data
-        )
-        if error:
-            return jsonify({"success": False, "error": error}), 409
-
-        if not user:
-            return jsonify({"success": False, "error": "Failed to resolve user"}), 500
-
-    # Check if 2FA is enabled for this user
-    if flow != "link" and user.twofa_config and user.twofa_config.is_enabled:
-        # Create 2FA challenge session
-        session_token = secrets.token_urlsafe(32)
-        session_hash = hashlib.sha256(session_token.encode()).hexdigest()
-
-        challenge = TwoFAChallenge(
-            user_id=user.id,
-            token_hash=session_hash,
-            challenge_type="pending",
-            expires_at=_naive_utcnow() + datetime.timedelta(minutes=10),
-        )
-        db.session.add(challenge)
-        db.session.commit()
-
-        methods = []
-        if user.twofa_config.email_otp_enabled:
-            methods.append("email_otp")
-        if user.twofa_config.passkey_enabled:
-            methods.append("passkey")
-        methods.append("recovery")
-
-        return jsonify(
-            {
-                "success": False,
-                "twofa_required": True,
-                "twofa_session_token": session_token,
-                "twofa_methods": methods,
-            }
-        ), 403
-
-    # Issue JWT tokens
-    if flow != "link" and _record_login_if_due(user):
-        db.session.commit()
-
-    access_token = create_access_token(user.id, user.role)
-    refresh_token = create_refresh_token(user.id, data.get("device_info"))
-    databases = [
-        {"id": d.id, "name": d.name, "display_name": d.display_name}
-        for d in user.accessible_databases
-    ]
-
-    response = jsonify(
-        {
-            "success": True,
-            "data": {
-                "access_token": access_token,
-                "refresh_token": refresh_token,
-                "expires_in": int(JWT_ACCESS_TOKEN_EXPIRES.total_seconds()),
-                "token_type": "Bearer",  # nosec B105
-                "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "role": user.role,
-                    "is_new_user": is_new_user,
-                    "currency": user.currency,
-                },
-                "databases": databases,
-            },
-        }
-    )
-    return _set_refresh_cookie(response, refresh_token)
+    return _complete_oauth_identity(provider, claims, state_payload, data)
 
 
 @api_v2_bp.route("/auth/oauth/accounts", methods=["GET"])

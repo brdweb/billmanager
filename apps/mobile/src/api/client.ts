@@ -25,6 +25,8 @@ import type {
   AuthSessionScope,
   AuthFlowResult,
   MessageResult,
+  NativeGoogleAuthorization,
+  NativeGoogleCallbackParameters,
   OAuthAccount,
   OAuthAuthorization,
   OAuthCallbackParameters,
@@ -90,6 +92,7 @@ interface AuthenticationRequestBinding {
 const profileSessionGenerations = new Map<string, number>();
 const profileSessionMutationTails = new Map<string, Promise<void>>();
 const oauthCallbackFlights = new Map<string, Promise<AuthFlowResult>>();
+const nativeGoogleCallbackFlights = new Map<string, Promise<AuthFlowResult>>();
 
 function sessionGeneration(profileId: string): number {
   return profileSessionGenerations.get(profileId) ?? 0;
@@ -99,6 +102,14 @@ function invalidateSessionGeneration(profileId: string): number {
   const next = sessionGeneration(profileId) + 1;
   profileSessionGenerations.set(profileId, next);
   return next;
+}
+
+function isOAuthLinkResult(value: unknown): value is { linked: true } {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && (value as { linked?: unknown }).linked === true,
+  );
 }
 
 async function serializeProfileSessionMutation<T>(
@@ -986,6 +997,110 @@ export class BillManagerApi {
       return response.data;
     } catch (error) {
       return this.handleError(error);
+    }
+  }
+
+  async startNativeGoogleAuthorization(
+    flow: 'login' | 'link' = 'login',
+    requestedScope?: AuthSessionScope,
+  ): Promise<ApiResponse<NativeGoogleAuthorization>> {
+    try {
+      const binding = await this.authenticationBinding(requestedScope);
+      const response = await this.client.post<ApiResponse<NativeGoogleAuthorization>>(
+        '/auth/oauth/google/native/start',
+        { flow },
+        this.authenticationRequestConfig(binding),
+      );
+      if (response.data.success && response.data.data?.state) {
+        await this.oauthScopeStore.save(response.data.data.state, {
+          scope: binding.scope,
+          provider: 'google',
+          flow,
+        });
+      }
+      return response.data;
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  async discardOAuthTransaction(state: string): Promise<void> {
+    await this.oauthScopeStore.discard(state).catch(() => undefined);
+  }
+
+  async completeNativeGoogleAuthorization(
+    input: NativeGoogleCallbackParameters,
+    requestedScope?: AuthSessionScope,
+  ): Promise<AuthFlowResult> {
+    const activeFlight = nativeGoogleCallbackFlights.get(input.state);
+    if (activeFlight) return activeFlight;
+    const flight = this.completeNativeGoogleAuthorizationOnce(input, requestedScope);
+    nativeGoogleCallbackFlights.set(input.state, flight);
+    try {
+      return await flight;
+    } finally {
+      if (nativeGoogleCallbackFlights.get(input.state) === flight) {
+        nativeGoogleCallbackFlights.delete(input.state);
+      }
+    }
+  }
+
+  private async completeNativeGoogleAuthorizationOnce(
+    input: NativeGoogleCallbackParameters,
+    requestedScope?: AuthSessionScope,
+  ): Promise<AuthFlowResult> {
+    const transaction = await this.oauthScopeStore.consume(input.state).catch(() => null);
+    const persistedScope = transaction?.scope ?? null;
+    if (transaction && transaction.provider !== 'google') {
+      return {
+        status: 'error',
+        message: 'The authorization response belongs to a different provider.',
+      };
+    }
+    if (
+      persistedScope
+      && requestedScope
+      && (
+        persistedScope.serverProfileId !== requestedScope.serverProfileId
+        || persistedScope.databaseId !== requestedScope.databaseId
+      )
+    ) {
+      return {
+        status: 'error',
+        message: 'The authorization session belongs to a different server.',
+      };
+    }
+    const fallbackScope = persistedScope ?? requestedScope;
+    if (!fallbackScope) {
+      return {
+        status: 'error',
+        message: 'The authorization session expired. Start sign-in again.',
+      };
+    }
+    try {
+      const binding = await this.authenticationBinding(fallbackScope);
+      const response = await this.client.post<ApiResponse<LoginResponse | { linked: true }>>(
+        '/auth/oauth/google/native/callback',
+        {
+          id_token: input.idToken,
+          state: input.state,
+          ...(input.deviceInfo ? { device_info: input.deviceInfo } : {}),
+        },
+        this.authenticationRequestConfig(binding),
+      );
+      if (!response.data.success || !response.data.data) {
+        return this.authFlowFromPayload(response.data, binding.scope);
+      }
+      if (isOAuthLinkResult(response.data.data)) {
+        return { status: 'linked', scope: binding.scope };
+      }
+      const scope = await this.persistSession(response.data.data, binding);
+      return { status: 'authenticated', session: response.data.data, scope };
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        return this.authFlowFromPayload(error.response?.data, fallbackScope);
+      }
+      return { status: 'error', message: 'Authorization could not be completed' };
     }
   }
 

@@ -56,6 +56,12 @@ export interface OAuthAuthorization {
   redirect_uri?: string;
 }
 
+export interface NativeGoogleAuthorization {
+  client_id: string;
+  nonce: string;
+  state: string;
+}
+
 export interface OAuthAccount {
   id: number;
   provider: string;
@@ -84,6 +90,7 @@ export interface OAuthTransaction {
 
 export type AuthFlowResult =
   | { status: 'authenticated'; session: LoginResponse; scope: AuthSessionScope }
+  | { status: 'linked'; scope: AuthSessionScope }
   | {
       status: 'two_factor_required';
       sessionToken: string;
@@ -99,6 +106,12 @@ export interface OAuthCallbackParameters {
   code: string;
   state: string;
   redirectUri?: string;
+}
+
+export interface NativeGoogleCallbackParameters {
+  idToken: string;
+  state: string;
+  deviceInfo?: string;
 }
 
 export type OAuthBrowserResult =

@@ -838,6 +838,19 @@ class OAuthAccount(db.Model):
     )
 
 
+class OAuthStateUse(db.Model):
+    """Database-backed ledger that makes signed OAuth state single-use."""
+    __tablename__ = 'oauth_state_uses'
+    id = db.Column(db.Integer, primary_key=True)
+    nonce_hash = db.Column(db.String(64), nullable=False, unique=True)
+    expires_at = db.Column(db.DateTime, nullable=False, index=True)
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
 class TwoFAConfig(db.Model):
     """Per-user 2FA configuration."""
     __tablename__ = 'twofa_config'

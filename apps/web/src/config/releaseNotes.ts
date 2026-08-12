@@ -50,6 +50,20 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.5',
+    date: '2026-08-12',
+    title: 'Android Sign-In Completion',
+    sections: [
+      {
+        heading: 'Fixes',
+        items: [
+          'Added native Google sign-in on Android through Credential Manager instead of a browser OAuth redirect',
+          'Stopped successful Microsoft and passkey sign-ins from returning to the authentication flow',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.4',
     date: '2026-08-11',
     title: 'Mobile Sign-In Reliability',

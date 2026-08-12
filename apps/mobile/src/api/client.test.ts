@@ -104,6 +104,9 @@ function createApi() {
       oauthTransactions.delete(state);
       return transaction;
     }),
+    discard: vi.fn(async (state: string) => {
+      oauthTransactions.delete(state);
+    }),
   };
   return {
     api: new BillManagerApi({
@@ -1070,6 +1073,145 @@ describe('BillManagerApi security behavior', () => {
         email_verification_required: true,
       }),
     });
+  });
+
+  it('starts native Google sign-in and persists its server-bound transaction', async () => {
+    testMocks.mockClient.post.mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: {
+          client_id: 'google-web-client-id',
+          nonce: 'server-generated-nonce',
+          state: 'native-google-state',
+        },
+      },
+    });
+    const { api, oauthScopeStore } = createApi();
+
+    await expect(api.startNativeGoogleAuthorization('login')).resolves.toEqual({
+      success: true,
+      data: {
+        client_id: 'google-web-client-id',
+        nonce: 'server-generated-nonce',
+        state: 'native-google-state',
+      },
+    });
+    expect(testMocks.mockClient.post).toHaveBeenCalledWith(
+      '/auth/oauth/google/native/start',
+      { flow: 'login' },
+      expect.any(Object),
+    );
+    expect(oauthScopeStore.save).toHaveBeenCalledWith('native-google-state', {
+      scope: { serverProfileId: 'billmanager-cloud', databaseId: null },
+      provider: 'google',
+      flow: 'login',
+    });
+  });
+
+  it('safely discards a cancelled native OAuth transaction', async () => {
+    const { api, oauthScopeStore } = createApi();
+
+    await expect(api.discardOAuthTransaction('cancelled-native-state')).resolves.toBeUndefined();
+    expect(oauthScopeStore.discard).toHaveBeenCalledWith('cancelled-native-state');
+
+    oauthScopeStore.discard.mockRejectedValueOnce(new Error('secure storage unavailable'));
+    await expect(api.discardOAuthTransaction('unreadable-native-state')).resolves.toBeUndefined();
+  });
+
+  it('completes native Google login and persists the scoped session', async () => {
+    testMocks.mockClient.post.mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: {
+          access_token: 'native-google-access',
+          refresh_token: 'native-google-refresh',
+          user: { id: 1, username: 'alice', role: 'user' },
+          databases: [{ id: 1, name: 'personal', display_name: 'Personal' }],
+        },
+      },
+    });
+    const { api, tokenStore, oauthScopeStore } = createApi();
+    await oauthScopeStore.save('native-google-state', {
+      scope: { serverProfileId: 'billmanager-cloud', databaseId: null },
+      provider: 'google',
+      flow: 'login',
+    });
+
+    const result = await api.completeNativeGoogleAuthorization({
+      idToken: 'signed-google-id-token',
+      state: 'native-google-state',
+      deviceInfo: 'Pixel test phone',
+    });
+
+    expect(testMocks.mockClient.post).toHaveBeenCalledWith(
+      '/auth/oauth/google/native/callback',
+      {
+        id_token: 'signed-google-id-token',
+        state: 'native-google-state',
+        device_info: 'Pixel test phone',
+      },
+      expect.any(Object),
+    );
+    expect(result).toMatchObject({
+      status: 'authenticated',
+      scope: { serverProfileId: 'billmanager-cloud', databaseId: 'personal' },
+    });
+    expect(tokenStore.save).toHaveBeenCalledWith('billmanager-cloud', {
+      accessToken: 'native-google-access',
+      refreshToken: 'native-google-refresh',
+    });
+  });
+
+  it('completes native Google account linking without replacing the active session', async () => {
+    testMocks.mockClient.post.mockResolvedValueOnce({
+      data: { success: true, data: { linked: true } },
+    });
+    const { api, tokenStore, oauthScopeStore } = createApi();
+    await oauthScopeStore.save('native-google-link-state', {
+      scope: { serverProfileId: 'billmanager-cloud', databaseId: 'personal' },
+      provider: 'google',
+      flow: 'link',
+    });
+
+    await expect(api.completeNativeGoogleAuthorization({
+      idToken: 'signed-google-id-token',
+      state: 'native-google-link-state',
+    })).resolves.toEqual({
+      status: 'linked',
+      scope: { serverProfileId: 'billmanager-cloud', databaseId: 'personal' },
+    });
+    expect(tokenStore.save).not.toHaveBeenCalled();
+  });
+
+  it('maps native Google login two-factor challenges without persisting tokens', async () => {
+    testMocks.mockClient.post.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: {
+        data: {
+          success: false,
+          twofa_required: true,
+          twofa_session_token: 'native-google-twofa-session',
+          twofa_methods: ['passkey', 'recovery'],
+        },
+      },
+    });
+    const { api, tokenStore, oauthScopeStore } = createApi();
+    await oauthScopeStore.save('native-google-state', {
+      scope: { serverProfileId: 'billmanager-cloud', databaseId: null },
+      provider: 'google',
+      flow: 'login',
+    });
+
+    await expect(api.completeNativeGoogleAuthorization({
+      idToken: 'signed-google-id-token',
+      state: 'native-google-state',
+    })).resolves.toEqual({
+      status: 'two_factor_required',
+      sessionToken: 'native-google-twofa-session',
+      methods: ['passkey', 'recovery'],
+      scope: { serverProfileId: 'billmanager-cloud', databaseId: null },
+    });
+    expect(tokenStore.save).not.toHaveBeenCalled();
   });
 
   it('recovers the authorization-start scope for a cold OAuth callback after A to B switch', async () => {

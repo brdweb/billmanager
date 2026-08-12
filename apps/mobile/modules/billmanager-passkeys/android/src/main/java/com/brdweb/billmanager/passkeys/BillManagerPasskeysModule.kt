@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.credentials.CreatePublicKeyCredentialRequest
 import androidx.credentials.CreatePublicKeyCredentialResponse
 import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential
@@ -16,6 +17,8 @@ import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 
 class BillManagerPasskeysModule : Module() {
   override fun definition() = ModuleDefinition {
@@ -74,6 +77,57 @@ class BillManagerPasskeysModule : Module() {
         throw PasskeyOperationException(error.localizedMessage ?: "Passkey authentication failed.", error)
       }
     }
+
+    AsyncFunction("signInWithGoogle") Coroutine { serverClientId: String, nonce: String ->
+      if (serverClientId.isBlank() || nonce.isBlank()) {
+        throw InvalidGoogleSignInRequestException(
+          "Google sign-in requires a server client ID and a nonce.",
+        )
+      }
+
+      val activity = appContext.throwingActivity
+      val manager = CredentialManager.create(activity)
+      val googleOption = GetSignInWithGoogleOption.Builder(serverClientId)
+        .setNonce(nonce)
+        .build()
+      val request = GetCredentialRequest.Builder()
+        .addCredentialOption(googleOption)
+        .build()
+
+      val credential = try {
+        manager.getCredential(activity, request).credential
+      } catch (error: GetCredentialCancellationException) {
+        throw GoogleSignInCancelledException("Google sign-in was cancelled.", error)
+      } catch (error: NoCredentialException) {
+        throw GoogleSignInUnavailableException(
+          "No eligible Google account is available on this device.",
+          error,
+        )
+      } catch (error: GetCredentialException) {
+        throw GoogleSignInOperationException(
+          error.localizedMessage ?: "Google sign-in failed.",
+          error,
+        )
+      }
+
+      if (
+        credential !is CustomCredential
+        || credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+      ) {
+        throw InvalidGoogleSignInResponseException(
+          "Credential Manager returned an unexpected Google credential type.",
+        )
+      }
+
+      try {
+        return@Coroutine GoogleIdTokenCredential.createFrom(credential.data).idToken
+      } catch (error: Exception) {
+        throw InvalidGoogleSignInResponseException(
+          "Credential Manager returned an invalid Google ID token.",
+          error,
+        )
+      }
+    }
   }
 }
 
@@ -86,4 +140,18 @@ private class PasskeyCancelledException(message: String, cause: Throwable? = nul
 private class InvalidPasskeyResponseException(message: String) : CodedException(message)
 
 private class PasskeyOperationException(message: String, cause: Throwable? = null) :
+  CodedException(message, cause)
+
+private class InvalidGoogleSignInRequestException(message: String) : CodedException(message)
+
+private class GoogleSignInUnavailableException(message: String, cause: Throwable? = null) :
+  CodedException(message, cause)
+
+private class GoogleSignInCancelledException(message: String, cause: Throwable? = null) :
+  CodedException(message, cause)
+
+private class InvalidGoogleSignInResponseException(message: String, cause: Throwable? = null) :
+  CodedException(message, cause)
+
+private class GoogleSignInOperationException(message: String, cause: Throwable? = null) :
   CodedException(message, cause)

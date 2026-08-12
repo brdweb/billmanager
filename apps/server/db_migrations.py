@@ -1025,6 +1025,33 @@ def migrate_20260724_01_add_user_currency(db):
     logger.info("Backfilled users.currency with %s", legacy_currency)
 
 
+def migrate_20260812_01_create_oauth_state_uses(db):
+    """Create a durable, multi-worker OAuth state replay ledger."""
+    inspector = inspect(db.engine)
+    if 'oauth_state_uses' in inspector.get_table_names():
+        logger.info("oauth_state_uses table already exists")
+        return
+
+    id_type = 'INTEGER PRIMARY KEY AUTOINCREMENT'
+    if db.engine.dialect.name == 'postgresql':
+        id_type = 'SERIAL PRIMARY KEY'
+
+    db.session.execute(text(f'''
+        CREATE TABLE oauth_state_uses (
+            id {id_type},
+            nonce_hash VARCHAR(64) UNIQUE NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    '''))
+    db.session.execute(text('''
+        CREATE INDEX idx_oauth_state_uses_expires_at
+        ON oauth_state_uses(expires_at)
+    '''))
+    db.session.commit()
+    logger.info("Created oauth_state_uses replay ledger")
+
+
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -1058,6 +1085,7 @@ MIGRATIONS = [
     ('20260715_04', 'Add coarse user last-login tracking', migrate_20260715_04_add_user_last_login_at),
     ('20260716_01', 'Normalize destructive foreign-key cascades', migrate_20260716_01_normalize_delete_cascades),
     ('20260724_01', 'Add persisted per-user currency preference', migrate_20260724_01_add_user_currency),
+    ('20260812_01', 'Create durable OAuth state replay ledger', migrate_20260812_01_create_oauth_state_uses),
 ]
 
 

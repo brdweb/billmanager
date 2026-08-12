@@ -19,4 +19,7 @@ dependencies {
   // aligned so Android 9-13 can use the Google Play services provider.
   implementation "androidx.credentials:credentials:1.6.0"
   implementation "androidx.credentials:credentials-play-services-auth:1.6.0"
+  // Google Identity's Credential Manager integration for the explicit
+  // "Sign in with Google" button.
+  implementation "com.google.android.libraries.identity.googleid:googleid:1.2.0"
 }

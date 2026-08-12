@@ -15,6 +15,7 @@ export interface OAuthScopeStore {
   save(state: string, transaction: OAuthTransaction): Promise<void>;
   load(state: string): Promise<OAuthTransaction | null>;
   consume(state: string): Promise<OAuthTransaction | null>;
+  discard(state: string): Promise<void>;
 }
 
 async function storageKey(state: string): Promise<string> {
@@ -76,6 +77,10 @@ export class SecureOAuthScopeStore implements OAuthScopeStore {
     if (!transaction) return null;
     await this.storage.deleteItemAsync(await storageKey(state));
     return transaction;
+  }
+
+  async discard(state: string): Promise<void> {
+    await this.storage.deleteItemAsync(await storageKey(state));
   }
 }
 

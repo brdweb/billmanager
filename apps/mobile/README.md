@@ -2,7 +2,7 @@
 
 BillManager Mobile is the React Native client for iOS and Android. It uses Expo development builds, Continuous Native Generation (CNG), and local Expo modules. Expo Go is not a supported runtime because the application depends on SQLCipher, passkeys, widgets, local notification actions, and other native capabilities.
 
-The rewrite is under active development. The current code milestone is `1.0.0-alpha.1` (**Alpha-1**) for internal iOS and Android testing. It contains the new native-adaptive application and offline foundation, but it has not passed the complete device, store, and parity gates required for a public release.
+The rewrite is under active development. The current code milestone is `1.0.1-alpha.1` (**Alpha-1**) for internal iOS and Android testing. It contains the new native-adaptive application and offline foundation, but it has not passed the complete device, store, and parity gates required for a public release. The `1.0.1` native version also establishes a new Expo runtime boundary for the Android Google Credential Manager integration.
 
 ## Documentation
 

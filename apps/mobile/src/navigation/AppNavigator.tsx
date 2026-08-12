@@ -79,12 +79,13 @@ export default function AppNavigator() {
     <>
       <NavigationContainer linking={linking} theme={navigationTheme}>
         <Stack.Navigator
-          key={showAuthenticatedApplication ? 'authenticated' : 'anonymous'}
-          initialRouteName={showAuthenticatedApplication ? 'Main' : 'Auth'}
           screenOptions={{ headerShown: false }}
         >
-          {showAuthenticatedApplication ? <Stack.Screen name="Main" component={MainTabs} /> : null}
-          <Stack.Screen name="Auth" component={AuthFlowNavigator} />
+          {showAuthenticatedApplication ? (
+            <Stack.Screen name="Main" component={MainTabs} />
+          ) : (
+            <Stack.Screen name="Auth" component={AuthFlowNavigator} />
+          )}
         </Stack.Navigator>
       </NavigationContainer>
 
