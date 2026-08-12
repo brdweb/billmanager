@@ -17,6 +17,20 @@ function loadConfig(development) {
   return JSON.parse(output);
 }
 
+function loadIntrospectedProductionConfig() {
+  const output = execFileSync(npx, ['expo', 'config', '--type', 'introspect', '--json'], {
+    cwd: new URL('..', import.meta.url),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      EAS_BUILD_PROFILE: 'production',
+      BILLMANAGER_DEVELOPMENT_BUILD: 'false',
+      NO_COLOR: '1',
+    },
+  });
+  return JSON.parse(output);
+}
+
 function cleartextSetting(config) {
   return buildProperties(config)?.usesCleartextTraffic;
 }
@@ -45,8 +59,14 @@ function assertPolicy(config, expected, label) {
 
 const production = loadConfig(false);
 const development = loadConfig(true);
+const introspectedProduction = loadIntrospectedProductionConfig();
 assertPolicy(production, false, 'Preview/release');
 assertPolicy(development, true, 'Development');
+
+const iosEntitlements = introspectedProduction._internal?.modResults?.ios?.entitlements;
+if (!iosEntitlements || Object.hasOwn(iosEntitlements, 'aps-environment')) {
+  throw new Error('Production iOS builds must not declare the unused remote-push entitlement.');
+}
 
 const requiredAndroidBuild = {
   compileSdkVersion: 36,

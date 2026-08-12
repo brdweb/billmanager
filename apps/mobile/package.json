@@ -33,7 +33,7 @@
     "ios": "cross-env BILLMANAGER_DEVELOPMENT_BUILD=true expo run:ios",
     "web": "expo start --web",
     "audit": "audit-ci --config ./audit-ci.jsonc",
-    "lint": "eslint --max-warnings=0 App.tsx app.config.ts src widgets modules",
+    "lint": "eslint --max-warnings=0 App.tsx app.config.ts src widgets modules plugins",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
