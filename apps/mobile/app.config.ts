@@ -61,6 +61,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         'com.apple.security.application-groups': [`group.${IOS_BUNDLE_ID}`],
       },
       infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
         BillManagerPasskeyRPDomains: IOS_PASSKEY_DOMAINS,
         NSAppTransportSecurity: developmentBuild
           ? {
