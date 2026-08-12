@@ -53,6 +53,7 @@ export interface OAuthProvider {
 export interface OAuthAuthorization {
   auth_url: string;
   state: string;
+  redirect_uri?: string;
 }
 
 export interface OAuthAccount {
@@ -72,6 +73,13 @@ export interface OAuthSession extends LoginResponse {
 export interface AuthSessionScope {
   serverProfileId: string;
   databaseId: string | null;
+}
+
+export interface OAuthTransaction {
+  scope: AuthSessionScope;
+  provider: string;
+  flow: 'login' | 'link';
+  redirectUri?: string;
 }
 
 export type AuthFlowResult =

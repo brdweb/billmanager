@@ -1,9 +1,11 @@
 import { LinkingOptions } from '@react-navigation/native';
 
+import { shouldHandleOAuthUrlWithNavigation } from '../features/auth/oauthBrowser';
 import { RootStackParamList } from './types';
 
 export const linking: LinkingOptions<RootStackParamList> = {
   prefixes: ['billmanager://', 'https://app.billmanager.app'],
+  filter: shouldHandleOAuthUrlWithNavigation,
   config: {
     screens: {
       Auth: {

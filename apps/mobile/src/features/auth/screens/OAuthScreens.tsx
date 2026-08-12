@@ -7,6 +7,7 @@ import type { ServerCapabilities } from '../../../domain/serverProfile';
 import type { AuthFlowResult, OAuthProvider } from '../types';
 import {
   expoOAuthBrowserAdapter,
+  resolveOAuthRedirectUri,
   type OAuthBrowserAdapter,
 } from '../oauthBrowser';
 import {
@@ -101,15 +102,24 @@ export function OAuthProvidersScreen({
     const authScope = client.captureAuthSessionScope();
     setActiveProvider(provider.id);
     setNotice(null);
-    const redirectUri = browser.createRedirectUri();
+    const requestedRedirectUri = browser.createRedirectUri(provider.id, client.getBaseUrl());
     const authorization = await client.getOAuthAuthorization(
       provider.id,
       flow,
-      redirectUri,
+      requestedRedirectUri,
       authScope,
     );
     if (!authorization.success || !authorization.data) {
       setNotice(authorization.error ?? t('mobileAuth.oauth.connectFailed', { provider: provider.display_name }));
+      setActiveProvider(null);
+      return;
+    }
+    const redirectUri = resolveOAuthRedirectUri(
+      requestedRedirectUri,
+      authorization.data.redirect_uri,
+    );
+    if (!redirectUri) {
+      setNotice(t('mobileAuth.oauth.connectFailed', { provider: provider.display_name }));
       setActiveProvider(null);
       return;
     }
@@ -172,7 +182,7 @@ export function OAuthProvidersScreen({
 
 export interface OAuthCallbackScreenProps extends OAuthResultCallbacks {
   client?: BillManagerApi;
-  provider: string;
+  provider?: string;
   code: string;
   state: string;
   redirectUri?: string;
@@ -186,7 +196,7 @@ export function OAuthCallbackScreen({
   code,
   state,
   redirectUri,
-  flow = 'login',
+  flow,
   onRetry,
   onAuthenticated,
   onTwoFactorRequired,
@@ -198,21 +208,33 @@ export function OAuthCallbackScreen({
 
   useEffect(() => {
     if (started.current) return;
-    if (!provider || !code || !state) {
+    if (!code || !state) {
       setError(t('mobileAuth.oauth.callbackMissing'));
       return;
     }
     started.current = true;
     let active = true;
-    void client.completeOAuthCallback({ provider, code, state, redirectUri }).then((result) => {
+    void (async () => {
+      const transaction = await client.getPendingOAuthTransaction(state);
+      const resolvedProvider = provider ?? transaction?.provider;
+      if (!resolvedProvider) {
+        if (active) setError(t('mobileAuth.oauth.callbackMissing'));
+        return;
+      }
+      const result = await client.completeOAuthCallback({
+        provider: resolvedProvider,
+        code,
+        state,
+        redirectUri: redirectUri ?? transaction?.redirectUri,
+      });
       if (!active) return;
-      const resultMessage = deliverResult(result, flow, {
+      const resultMessage = deliverResult(result, flow ?? transaction?.flow ?? 'login', {
         onAuthenticated,
         onTwoFactorRequired,
         onLinked,
       }, t);
       if (resultMessage) setError(resultMessage);
-    });
+    })();
     return () => {
       active = false;
     };

@@ -29,6 +29,7 @@ import type {
   OAuthAuthorization,
   OAuthCallbackParameters,
   OAuthProvider,
+  OAuthTransaction,
   RegistrationResult,
   ShareInviteAcceptance,
   ShareInviteInfo,
@@ -88,6 +89,7 @@ interface AuthenticationRequestBinding {
 // scope so logout/account deletion invalidates token work from either instance.
 const profileSessionGenerations = new Map<string, number>();
 const profileSessionMutationTails = new Map<string, Promise<void>>();
+const oauthCallbackFlights = new Map<string, Promise<AuthFlowResult>>();
 
 function sessionGeneration(profileId: string): number {
   return profileSessionGenerations.get(profileId) ?? 0;
@@ -974,7 +976,12 @@ export class BillManagerApi {
         },
       );
       if (response.data.success && response.data.data?.state) {
-        await this.oauthScopeStore.save(response.data.data.state, binding.scope);
+        await this.oauthScopeStore.save(response.data.data.state, {
+          scope: binding.scope,
+          provider,
+          flow,
+          redirectUri: response.data.data.redirect_uri ?? redirectUri,
+        });
       }
       return response.data;
     } catch (error) {
@@ -986,7 +993,45 @@ export class BillManagerApi {
     input: OAuthCallbackParameters,
     requestedScope?: AuthSessionScope,
   ): Promise<AuthFlowResult> {
-    const persistedScope = await this.oauthScopeStore.consume(input.state).catch(() => null);
+    const activeFlight = oauthCallbackFlights.get(input.state);
+    if (activeFlight) return activeFlight;
+    const flight = this.completeOAuthCallbackOnce(input, requestedScope);
+    oauthCallbackFlights.set(input.state, flight);
+    try {
+      return await flight;
+    } finally {
+      if (oauthCallbackFlights.get(input.state) === flight) {
+        oauthCallbackFlights.delete(input.state);
+      }
+    }
+  }
+
+  async getPendingOAuthTransaction(state: string): Promise<OAuthTransaction | null> {
+    return this.oauthScopeStore.load(state).catch(() => null);
+  }
+
+  private async completeOAuthCallbackOnce(
+    input: OAuthCallbackParameters,
+    requestedScope?: AuthSessionScope,
+  ): Promise<AuthFlowResult> {
+    const transaction = await this.oauthScopeStore.consume(input.state).catch(() => null);
+    const persistedScope = transaction?.scope ?? null;
+    if (transaction && transaction.provider !== input.provider) {
+      return {
+        status: 'error',
+        message: 'The authorization response belongs to a different provider.',
+      };
+    }
+    if (
+      transaction?.redirectUri
+      && input.redirectUri
+      && transaction.redirectUri !== input.redirectUri
+    ) {
+      return {
+        status: 'error',
+        message: 'The authorization response used an unexpected redirect.',
+      };
+    }
     if (
       persistedScope
       && requestedScope
@@ -1009,12 +1054,13 @@ export class BillManagerApi {
     }
     try {
       const binding = await this.authenticationBinding(fallbackScope);
+      const redirectUri = transaction?.redirectUri ?? input.redirectUri;
       const response = await this.client.post<ApiResponse<LoginResponse>>(
         `/auth/oauth/${encodeURIComponent(input.provider)}/callback`,
         {
           code: input.code,
           state: input.state,
-          ...(input.redirectUri ? { redirect_uri: input.redirectUri } : {}),
+          ...(redirectUri ? { redirect_uri: redirectUri } : {}),
         },
         this.authenticationRequestConfig(binding),
       );

@@ -80,15 +80,29 @@ function createApi() {
     getSyncState: vi.fn().mockResolvedValue(null),
     setSyncState: vi.fn().mockResolvedValue(undefined),
   };
-  const oauthScopes = new Map<string, { serverProfileId: string; databaseId: string | null }>();
+  const oauthTransactions = new Map<string, {
+    scope: { serverProfileId: string; databaseId: string | null };
+    provider: string;
+    flow: 'login' | 'link';
+    redirectUri?: string;
+  }>();
   const oauthScopeStore = {
-    save: vi.fn(async (state: string, scope: { serverProfileId: string; databaseId: string | null }) => {
-      oauthScopes.set(state, { ...scope });
+    save: vi.fn(async (state: string, transaction: {
+      scope: { serverProfileId: string; databaseId: string | null };
+      provider: string;
+      flow: 'login' | 'link';
+      redirectUri?: string;
+    }) => {
+      oauthTransactions.set(state, {
+        ...transaction,
+        scope: { ...transaction.scope },
+      });
     }),
+    load: vi.fn(async (state: string) => oauthTransactions.get(state) ?? null),
     consume: vi.fn(async (state: string) => {
-      const scope = oauthScopes.get(state) ?? null;
-      oauthScopes.delete(state);
-      return scope;
+      const transaction = oauthTransactions.get(state) ?? null;
+      oauthTransactions.delete(state);
+      return transaction;
     }),
   };
   return {
@@ -1080,8 +1094,13 @@ describe('BillManagerApi security behavior', () => {
 
     await expect(api.getOAuthAuthorization('oidc')).resolves.toMatchObject({ success: true });
     expect(oauthScopeStore.save).toHaveBeenCalledWith('oauth-state-a', {
-      serverProfileId: 'billmanager-cloud',
-      databaseId: null,
+      scope: {
+        serverProfileId: 'billmanager-cloud',
+        databaseId: null,
+      },
+      provider: 'oidc',
+      flow: 'login',
+      redirectUri: undefined,
     });
 
     tokenStore.load.mockResolvedValueOnce({ accessToken: 'access-b', refreshToken: 'refresh-b' });
@@ -1134,8 +1153,12 @@ describe('BillManagerApi security behavior', () => {
   it('rejects an OAuth callback when an explicit scope disagrees with its stored state binding', async () => {
     const { api, oauthScopeStore } = createApi();
     await oauthScopeStore.save('oauth-state-a', {
-      serverProfileId: 'billmanager-cloud',
-      databaseId: 'personal',
+      scope: {
+        serverProfileId: 'billmanager-cloud',
+        databaseId: 'personal',
+      },
+      provider: 'oidc',
+      flow: 'login',
     });
 
     await expect(api.completeOAuthCallback({
@@ -1150,6 +1173,47 @@ describe('BillManagerApi security behavior', () => {
       message: 'The authorization session belongs to a different server.',
     });
     expect(testMocks.mockClient.post).not.toHaveBeenCalled();
+  });
+
+  it('deduplicates concurrent OAuth callback exchanges for the same state', async () => {
+    let resolvePost: ((value: unknown) => void) | undefined;
+    testMocks.mockClient.post.mockImplementationOnce(() => new Promise((resolve) => {
+      resolvePost = resolve;
+    }));
+    const { api, oauthScopeStore } = createApi();
+    await oauthScopeStore.save('oauth-state-a', {
+      scope: { serverProfileId: 'billmanager-cloud', databaseId: null },
+      provider: 'google',
+      flow: 'login',
+      redirectUri: 'https://app.billmanager.app/auth/callback',
+    });
+    const callback = {
+      provider: 'google',
+      code: 'authorization-code-a',
+      state: 'oauth-state-a',
+      redirectUri: 'https://app.billmanager.app/auth/callback',
+    };
+
+    const first = api.completeOAuthCallback(callback);
+    const second = api.completeOAuthCallback(callback);
+    await vi.waitFor(() => expect(testMocks.mockClient.post).toHaveBeenCalledTimes(1));
+    resolvePost?.({
+      data: {
+        success: true,
+        data: {
+          access_token: 'oauth-access-a',
+          refresh_token: 'oauth-refresh-a',
+          user: { id: 1, username: 'alice', role: 'user' },
+          databases: [{ id: 1, name: 'personal', display_name: 'Personal' }],
+        },
+      },
+    });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      expect.objectContaining({ status: 'authenticated' }),
+      expect.objectContaining({ status: 'authenticated' }),
+    ]);
+    expect(testMocks.mockClient.post).toHaveBeenCalledTimes(1);
   });
 
   it('stores verified two-factor tokens in the active profile', async () => {

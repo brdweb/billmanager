@@ -21,7 +21,7 @@ export type AuthStackParamList = {
   AcceptShareInvite: { token: string };
   OAuthProviders: { flow?: 'login' | 'link' } | undefined;
   OAuthCallback: {
-    provider: string;
+    provider?: string;
     code: string;
     state: string;
     redirectUri?: string;

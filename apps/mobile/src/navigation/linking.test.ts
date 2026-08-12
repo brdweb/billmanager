@@ -1,5 +1,12 @@
 import { getStateFromPath } from '@react-navigation/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('expo-linking', () => ({ createURL: vi.fn(() => 'billmanager://auth/callback') }));
+vi.mock('expo-web-browser', () => ({
+  maybeCompleteAuthSession: vi.fn(),
+  openAuthSessionAsync: vi.fn(),
+}));
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 
 import { linking } from './linking';
 

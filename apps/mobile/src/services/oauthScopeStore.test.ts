@@ -11,7 +11,7 @@ vi.mock('expo-secure-store', () => ({
 import { oauthScopeTtlMs, SecureOAuthScopeStore } from './oauthScopeStore';
 
 describe('SecureOAuthScopeStore', () => {
-  it('consumes an authorization scope exactly once', async () => {
+  it('loads and consumes an authorization transaction exactly once', async () => {
     const values = new Map<string, string>();
     const storage = {
       getItemAsync: vi.fn(async (key: string) => values.get(key) ?? null),
@@ -19,11 +19,18 @@ describe('SecureOAuthScopeStore', () => {
       deleteItemAsync: vi.fn(async (key: string) => { values.delete(key); }),
     };
     const store = new SecureOAuthScopeStore(storage, () => 1000);
-    const scope = { serverProfileId: 'server-a', databaseId: 'personal' };
+    const transaction = {
+      scope: { serverProfileId: 'server-a', databaseId: 'personal' },
+      provider: 'google',
+      flow: 'login' as const,
+      redirectUri: 'https://app.billmanager.app/auth/callback',
+    };
 
-    await store.save('oauth-state-a', scope);
+    await store.save('oauth-state-a', transaction);
 
-    await expect(store.consume('oauth-state-a')).resolves.toEqual(scope);
+    await expect(store.load('oauth-state-a')).resolves.toEqual(transaction);
+    await expect(store.load('oauth-state-a')).resolves.toEqual(transaction);
+    await expect(store.consume('oauth-state-a')).resolves.toEqual(transaction);
     await expect(store.consume('oauth-state-a')).resolves.toBeNull();
   });
 
@@ -36,7 +43,11 @@ describe('SecureOAuthScopeStore', () => {
     };
     let now = 1000;
     const store = new SecureOAuthScopeStore(storage, () => now);
-    await store.save('oauth-state-a', { serverProfileId: 'server-a', databaseId: null });
+    await store.save('oauth-state-a', {
+      scope: { serverProfileId: 'server-a', databaseId: null },
+      provider: 'google',
+      flow: 'login',
+    });
     now += oauthScopeTtlMs + 1;
 
     await expect(store.consume('oauth-state-a')).resolves.toBeNull();
