@@ -256,6 +256,32 @@ def test_transactional_helpers_keep_existing_send_contract(monkeypatch):
     )
 
 
+def test_bill_share_email_escapes_untrusted_html(monkeypatch):
+    email_service = _reload_email_service(
+        monkeypatch,
+        EMAIL_PROVIDER="none",
+        APP_URL="https://bills.example.com",
+    )
+    calls = []
+    monkeypatch.setattr(
+        email_service,
+        "send_email",
+        lambda to, subject, html: calls.append((to, subject, html)) or True,
+    )
+
+    assert email_service.send_bill_share_email(
+        "share@example.com",
+        "token",
+        '<img src=x onerror="alert(1)">',
+        "<b>Attacker</b>",
+    )
+
+    html = calls[0][2]
+    assert '<img src=x onerror="alert(1)">' not in html
+    assert "<b>Attacker</b>" not in html
+    assert "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;" in html
+
+
 def test_forgot_password_does_not_enumerate_when_send_fails(
     client, db_session, monkeypatch
 ):

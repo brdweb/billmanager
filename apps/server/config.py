@@ -95,6 +95,15 @@ def get_stripe_price_id(tier: str, interval: str) -> str | None:
     return STRIPE_PRICES[tier].get(interval)
 
 
+def get_plan_for_stripe_price_id(price_id: str) -> tuple[str, str] | None:
+    """Resolve a trusted entitlement exclusively from a configured Stripe price."""
+    for tier, prices in STRIPE_PRICES.items():
+        for interval, configured_price_id in prices.items():
+            if configured_price_id and configured_price_id == price_id:
+                return tier, interval
+    return None
+
+
 def is_saas():
     """Check if running in SaaS mode."""
     return DEPLOYMENT_MODE == "saas"
@@ -229,9 +238,9 @@ def get_enabled_oauth_providers():
 def get_oauth_redirect_uris():
     """Return exact OAuth callback URIs accepted by authorize and callback.
 
-    The current web callback and the official native app callback remain
-    available by default. Deployments can append universal links or alternate
-    development-client schemes with ``OAUTH_REDIRECT_URIS``.
+    The current web callback is available by default. Deployments can append
+    claimed HTTPS app links with ``OAUTH_REDIRECT_URIS``; custom schemes are
+    intentionally not trusted by default because another app can claim them.
     """
     app_url = os.environ.get("APP_URL", "http://localhost:5173").rstrip("/")
     configured = [
@@ -241,7 +250,6 @@ def get_oauth_redirect_uris():
     ]
     candidates = [
         f"{app_url}/auth/callback",
-        "billmanager://auth/callback",
         *configured,
     ]
     return tuple(dict.fromkeys(candidates))
@@ -307,7 +315,7 @@ DEFAULT_LOCALE = os.environ.get("DEFAULT_LOCALE", "en-US")
 # version: it only changes when a mobile client must handle a breaking contract
 # change. An unset minimum version means that any client implementing the
 # advertised contract is accepted.
-SERVER_VERSION = os.environ.get("APP_VERSION", "4.7.5")
+SERVER_VERSION = os.environ.get("APP_VERSION", "4.7.6")
 MOBILE_CONTRACT_VERSION = 1
 MINIMUM_MOBILE_VERSION = os.environ.get("MINIMUM_MOBILE_VERSION") or None
 

@@ -1,5 +1,5 @@
 # BillManager - Docker Compose
-# Update the environment variables before running: docker compose up -d
+# Create a private .env file before running: docker compose up -d
 
 services:
   billmanager:
@@ -9,12 +9,14 @@ services:
       - "5000:5000"
     environment:
       # Required - generate with: openssl rand -hex 32
-      - FLASK_SECRET_KEY=change-me-generate-with-openssl
-      - JWT_SECRET_KEY=change-me-generate-with-openssl
-      - DATABASE_URL=postgresql://billsuser:change-me@db:5432/billmanager
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:?set FLASK_SECRET_KEY to a random value}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY to a different random value}
+      - DATABASE_URL=postgresql://billsuser:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/billmanager
 
       # Deployment mode (self-hosted or saas)
       - DEPLOYMENT_MODE=self-hosted
+      # Required public HTTPS URL; self-hosted mode enables HTTPS-only browser security.
+      - APP_URL=${APP_URL:?set APP_URL to the public HTTPS URL}
 
       # DEFAULT_LOCALE controls regional formatting and defaults to en-US.
       - DEFAULT_LOCALE=${DEFAULT_LOCALE:-en-US}
@@ -47,7 +49,7 @@ services:
     image: postgres:17-alpine
     environment:
       - POSTGRES_USER=billsuser
-      - POSTGRES_PASSWORD=change-me  # Match DATABASE_URL password
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       - POSTGRES_DB=billmanager
     volumes:
       - postgres_data:/var/lib/postgresql/data

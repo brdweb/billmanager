@@ -10,15 +10,15 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.7.5
+## 🎉 What's New in v4.7.6
 
-**Android Sign-In Completion** - Google now uses Android's native account flow, while successful Microsoft and passkey sessions leave authentication cleanly.
+**Security Hardening** - Authentication, OAuth, sharing, deployment, telemetry, and export boundaries now fail closed against the validated Codex Security findings.
 
 ### Highlights
 
-- **Native Google Sign-In** - Android uses Credential Manager instead of a browser OAuth redirect
-- **Completed Microsoft Sessions** - Successful Microsoft and passkey sign-ins no longer return to the authentication flow
-- **Direct Phone-Test Build 8** - The signed local APK can update the previous Android test build without clearing app data
+- **Safer Sessions and OAuth** - One-time credentials are consumed atomically, password changes revoke old sessions, and OAuth secrets remain server-side
+- **Stronger Authorization** - Share recipients, SaaS tenant administrators, telemetry controls, and push fan-out respect their intended boundaries
+- **Hardened Deployments and Exports** - Production secrets fail closed, pull requests cannot publish images, and HTML/CSV exports neutralize injected content
 
 ---
 
@@ -83,7 +83,16 @@ make test-db-down
 
 ### Run the Application
 
-1. **Create a `docker-compose.yml` file** with the following content:
+1. **Create a private `.env` file** containing three independently generated
+   secrets (`openssl rand -hex 32`) and your public HTTPS URL, then create a
+   `docker-compose.yml` file with the following content:
+
+   ```dotenv
+   FLASK_SECRET_KEY=<random value>
+   JWT_SECRET_KEY=<different random value>
+   POSTGRES_PASSWORD=<random database password>
+   APP_URL=https://bills.example.com
+   ```
 
    ```yaml
    services:
@@ -94,8 +103,11 @@ make test-db-down
          - "5000:5000"
        restart: unless-stopped
        environment:
-         - DATABASE_URL=postgresql://billsuser:billspass@db:5432/billsdb
-         - JWT_SECRET_KEY=change-this-to-a-secure-random-string
+         - DATABASE_URL=postgresql://billsuser:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/billsdb
+         - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:?set FLASK_SECRET_KEY}
+         - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY}
+         - APP_URL=${APP_URL:?set APP_URL to the public HTTPS URL}
+         - DEPLOYMENT_MODE=self-hosted
        depends_on:
          - db
 
@@ -105,7 +117,7 @@ make test-db-down
        restart: unless-stopped
        environment:
          - POSTGRES_USER=billsuser
-         - POSTGRES_PASSWORD=billspass
+         - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
          - POSTGRES_DB=billsdb
        volumes:
          - postgres_data:/var/lib/postgresql/data
@@ -124,7 +136,9 @@ make test-db-down
    docker compose up -d
    ```
 
-3. **Open your browser** and visit: http://localhost:5000
+3. **Open the HTTPS URL** from `APP_URL`. Production/self-hosted mode enables
+   HTTPS redirects, secure cookies, HSTS, and browser security headers, so put
+   port 5000 behind a TLS-terminating reverse proxy.
 
 ### Using Your Own PostgreSQL Database
 
@@ -148,7 +162,10 @@ If you already have a PostgreSQL server or prefer to use a managed database serv
        restart: unless-stopped
        environment:
          - DATABASE_URL=postgresql://billsuser:your-secure-password@your-db-host:5432/billsdb
-         - JWT_SECRET_KEY=change-this-to-a-secure-random-string
+         - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:?set FLASK_SECRET_KEY}
+         - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY}
+         - APP_URL=${APP_URL:?set APP_URL to the public HTTPS URL}
+         - DEPLOYMENT_MODE=self-hosted
    ```
 
 3. **Or run with Docker directly**:
@@ -157,7 +174,10 @@ If you already have a PostgreSQL server or prefer to use a managed database serv
      --name billmanager \
      -p 5000:5000 \
      -e DATABASE_URL=postgresql://billsuser:your-secure-password@your-db-host:5432/billsdb \
-     -e JWT_SECRET_KEY=change-this-to-a-secure-random-string \
+     -e FLASK_SECRET_KEY="$FLASK_SECRET_KEY" \
+     -e JWT_SECRET_KEY="$JWT_SECRET_KEY" \
+     -e APP_URL="$APP_URL" \
+     -e DEPLOYMENT_MODE=self-hosted \
      ghcr.io/brdweb/billmanager:latest
    ```
 
@@ -232,6 +252,10 @@ postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
 | `OAUTH_OIDC_USERNAME_CLAIM` | Claim name for username | `preferred_username` |
 | `OAUTH_OIDC_NAME_CLAIM` | Claim name for display name | `name` |
 | `OAUTH_OIDC_SKIP_EMAIL_VERIFICATION` | Skip email verification check (for providers that don't include `email_verified`) | `false` |
+| `MAX_REQUEST_BYTES` | Maximum HTTP request body size | `1048576` |
+| `MAX_SYNC_ITEMS_PER_COLLECTION` | Maximum items accepted in each sync collection | `500` |
+| `MAX_PUSH_DEVICES_PER_USER` | Maximum registered push devices per user | `10` |
+| `INSTANCE_OPERATOR_USER_IDS` | SaaS user IDs allowed to run instance-wide operations | unset |
 
 #### Currency and Language
 

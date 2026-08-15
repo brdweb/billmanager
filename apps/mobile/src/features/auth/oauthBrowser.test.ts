@@ -36,14 +36,14 @@ describe('OAuth redirect selection', () => {
     )).toBe('https://app.billmanager.app/auth/callback');
   });
 
-  it('keeps the app scheme for self-hosted servers and other platforms', () => {
+  it('keeps the app scheme for self-hosted servers and uses the app link on iOS', () => {
     expect(createOAuthRedirectUri('google', 'https://bills.example/api/v2', 'android'))
       .toBe('billmanager://auth/callback');
     expect(createOAuthRedirectUri(
       'google',
       'https://app.billmanager.app/api/v2',
       'ios',
-    )).toBe('billmanager://auth/callback');
+    )).toBe('https://app.billmanager.app/auth/callback');
   });
 
   it('rejects a redirect URI changed by the authorization server', () => {

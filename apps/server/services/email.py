@@ -4,6 +4,7 @@ Provider-neutral outbound email service for transactional emails.
 import logging
 import os
 import smtplib
+from html import escape
 from email.message import EmailMessage
 
 from services.email_config import get_email_config
@@ -279,22 +280,25 @@ def send_bill_share_email(email: str, token: str, bill_name: str, shared_by: str
     """Send bill share invitation email"""
     share_url = f"{APP_URL}/share/accept?token={token}"
 
+    safe_bill_name = escape(bill_name, quote=True)
+    safe_shared_by = escape(shared_by, quote=True)
+    safe_share_url = escape(share_url, quote=True)
     content = f"""
         <p>Hi there!</p>
-        <p><strong>{shared_by}</strong> wants to share a bill with you on BillManager.</p>
+        <p><strong>{safe_shared_by}</strong> wants to share a bill with you on BillManager.</p>
 
         <div class="feature">
-            <strong>Bill: {bill_name}</strong><br>
+            <strong>Bill: {safe_bill_name}</strong><br>
             You'll be able to see when this bill is paid and track it alongside your own bills.
         </div>
 
         <p>This feature helps roommates and partners keep track of shared expenses together.</p>
 
         <p style="text-align: center;">
-            <a href="{share_url}" class="button">View Shared Bill</a>
+            <a href="{safe_share_url}" class="button">View Shared Bill</a>
         </p>
         <p>Or copy and paste this link into your browser:</p>
-        <p class="link">{share_url}</p>
+        <p class="link">{safe_share_url}</p>
 
         <div class="warning">
             <strong>⏰ This invitation will expire in 7 days.</strong>

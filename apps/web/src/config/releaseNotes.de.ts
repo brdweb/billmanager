@@ -2,6 +2,21 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.6',
+    date: '2026-08-15',
+    title: 'Sicherheitsverstärkung',
+    sections: [
+      {
+        heading: 'Sicherheit',
+        items: [
+          'OAuth-PKCE-Geheimnisse bleiben serverseitig, Kontoverknüpfungen sind an den angemeldeten Benutzer gebunden und E-Mail-Angaben der Anbieter müssen verifiziert sein',
+          'Aktualisierungstoken, OAuth-Status und Zwei-Faktor-Herausforderungen werden atomar nur einmal verwendet; Passwortänderungen widerrufen bestehende Sitzungen',
+          'Mandanten-, Freigabe-, Telemetrie-, Push-Geräte-, Anfragegrößen-, Bereitstellungs-, HTML- und CSV-Sicherheitsgrenzen wurden verstärkt',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.5',
     date: '2026-08-12',
     title: 'Abgeschlossene Android-Anmeldung',

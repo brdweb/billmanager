@@ -6,16 +6,13 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../api/client';
 
-function decodeState(stateToken: string): { provider: string; flow: 'login' | 'link' } | null {
-  const parts = stateToken.split('.');
-  if (parts.length !== 3) return null;
-
+function consumeOAuthTransaction(state: string): { provider: string; flow: 'login' | 'link' } | null {
+  const key = `billmanager.oauth.${state}`;
   try {
-    // JWT payload is base64url-encoded JSON
-    const payloadB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padding = '='.repeat((4 - (payloadB64.length % 4)) % 4);
-    const payloadJson = atob(payloadB64 + padding);
-    const payload = JSON.parse(payloadJson) as { provider?: unknown; flow?: unknown };
+    const raw = sessionStorage.getItem(key);
+    sessionStorage.removeItem(key);
+    if (!raw) return null;
+    const payload = JSON.parse(raw) as { provider?: unknown; flow?: unknown };
     if (typeof payload.provider !== 'string') {
       return null;
     }
@@ -52,7 +49,7 @@ export function AuthCallback() {
         return;
       }
 
-      const decoded = decodeState(state);
+      const decoded = consumeOAuthTransaction(state);
       if (!decoded) {
         setError(t('authCallbackPage.invalidState'));
         return;

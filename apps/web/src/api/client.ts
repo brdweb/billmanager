@@ -923,8 +923,14 @@ export interface OAuthAccount {
 export const getOAuthProviders = () =>
   unwrap(api.get<ApiResponse<OAuthProvider[]>>('/auth/oauth/providers'));
 
-export const getOAuthAuthorizeUrl = (provider: string, flow: 'login' | 'link' = 'login') =>
-  unwrap(api.get<ApiResponse<{ auth_url: string; state: string }>>(`/auth/oauth/${provider}/authorize?flow=${flow}`));
+export const getOAuthAuthorizeUrl = async (provider: string, flow: 'login' | 'link' = 'login') => {
+  const result = await unwrap(api.get<ApiResponse<{ auth_url: string; state: string }>>(`/auth/oauth/${provider}/authorize?flow=${flow}`));
+  sessionStorage.setItem(
+    `billmanager.oauth.${result.state}`,
+    JSON.stringify({ provider, flow }),
+  );
+  return result;
+};
 
 export interface OAuthCallbackResponse {
   access_token: string;

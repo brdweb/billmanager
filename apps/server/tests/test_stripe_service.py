@@ -30,3 +30,20 @@ def test_immediate_cancel_treats_missing_subscription_as_already_canceled(
         "cancel_at_period_end": None,
         "already_absent": True,
     }
+
+
+def test_checkout_does_not_fall_back_to_legacy_price(monkeypatch):
+    monkeypatch.setattr(stripe_service, "STRIPE_AVAILABLE", True)
+    monkeypatch.setattr(stripe_service, "STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setattr(stripe_service, "STRIPE_PRICE_ID", "price_legacy")
+    monkeypatch.setattr(stripe_service, "get_stripe_price_id", lambda tier, interval: None)
+
+    result = stripe_service.create_checkout_session(
+        1,
+        "user@example.com",
+        None,
+        "plus",
+        "annual",
+    )
+
+    assert result == {"error": "Stripe price ID not configured for the selected plan"}

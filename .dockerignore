@@ -6,6 +6,21 @@ dbs/
 .git/
 .gitignore
 
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+
 # Node.js (built in Docker, not copied from host)
 apps/web/node_modules/
 apps/web/dist/
@@ -13,6 +28,8 @@ apps/mobile/node_modules/
 
 # Backup
 client-backup/
+*.bak
+*.backup
 
 # IDE
 .vscode/

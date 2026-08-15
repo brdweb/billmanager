@@ -1052,6 +1052,30 @@ def migrate_20260812_01_create_oauth_state_uses(db):
     logger.info("Created oauth_state_uses replay ledger")
 
 
+def migrate_20260815_01_expand_oauth_state_transactions(db):
+    """Move OAuth transaction secrets out of front-channel signed state."""
+    columns = {
+        column['name']
+        for column in inspect(db.engine).get_columns('oauth_state_uses')
+    }
+    additions = {
+        'provider': 'VARCHAR(20)',
+        'flow': 'VARCHAR(20)',
+        'code_verifier': 'VARCHAR(255)',
+        'id_token_nonce': 'VARCHAR(255)',  # nosec B105 -- SQL column type
+        'link_user_id': 'INTEGER',
+        'redirect_uri': 'TEXT',
+        'channel': 'VARCHAR(30)',
+        'consumed_at': 'TIMESTAMP',
+    }
+    for column_name, column_type in additions.items():
+        if column_name not in columns:
+            db.session.execute(
+                text(f'ALTER TABLE oauth_state_uses ADD COLUMN {column_name} {column_type}')
+            )
+    db.session.commit()
+
+
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -1086,6 +1110,7 @@ MIGRATIONS = [
     ('20260716_01', 'Normalize destructive foreign-key cascades', migrate_20260716_01_normalize_delete_cascades),
     ('20260724_01', 'Add persisted per-user currency preference', migrate_20260724_01_add_user_currency),
     ('20260812_01', 'Create durable OAuth state replay ledger', migrate_20260812_01_create_oauth_state_uses),
+    ('20260815_01', 'Store OAuth transactions server-side', migrate_20260815_01_expand_oauth_state_transactions),
 ]
 
 

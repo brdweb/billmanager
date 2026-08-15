@@ -32,7 +32,7 @@ class TestOneTimeTokenStorage:
             assert User.find_by_change_token(raw_token).id == user.id
             assert user.verify_change_token(raw_token) is True
 
-    def test_user_tokens_support_hashed_storage_and_legacy_raw_values(self, app, db_session):
+    def test_user_tokens_use_hashed_storage_and_reject_legacy_raw_values(self, app, db_session):
         with app.app_context():
             user = User(username="tokens", role="user", email="tokens@example.com")
             db_session.add(user)
@@ -66,13 +66,13 @@ class TestOneTimeTokenStorage:
             user.change_token_expires = _future()
             db_session.commit()
 
-            assert User.find_by_email_verification_token(legacy_email).id == user.id
-            assert User.find_by_password_reset_token(legacy_reset).id == user.id
-            assert User.find_by_change_token(legacy_change).id == user.id
+            assert User.find_by_email_verification_token(legacy_email) is None
+            assert User.find_by_password_reset_token(legacy_reset) is None
+            assert User.find_by_change_token(legacy_change) is None
 
-            assert user.verify_email_token(legacy_email) is True
-            assert user.verify_password_reset_token(legacy_reset) is True
-            assert user.verify_change_token(legacy_change) is True
+            assert user.verify_email_token(legacy_email) is False
+            assert user.verify_password_reset_token(legacy_reset) is False
+            assert user.verify_change_token(legacy_change) is False
 
     def test_invite_and_share_tokens_are_hashed_at_rest(self, app, db_session, admin_user, test_bill):
         with app.app_context():

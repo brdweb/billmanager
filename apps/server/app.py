@@ -89,6 +89,7 @@ from config import (
     is_self_hosted,
     get_public_config,
     get_mobile_capabilities,
+    get_plan_for_stripe_price_id,
     SERVER_VERSION,
     OAUTH_PROVIDER_PUBLIC_INFO,
     get_oauth_provider_config,
@@ -125,6 +126,27 @@ OAUTH_PROVIDERS = __import__("config").OAUTH_PROVIDERS
 # In production, JWT_SECRET_KEY must be explicitly set
 _jwt_secret = os.environ.get("JWT_SECRET_KEY") or os.environ.get("FLASK_SECRET_KEY")
 
+_INSECURE_SECRET_VALUES = {
+    "change-me",
+    "change-me-generate-with-openssl",
+    "changeme",
+    "secret",
+}
+
+
+def _validate_configured_secret(name, value):
+    """Reject public placeholders and weak configured signing secrets."""
+    if not value:
+        return
+    normalized = value.strip().lower()
+    if normalized in _INSECURE_SECRET_VALUES or normalized.startswith("change-me"):
+        raise RuntimeError(f"{name} uses an insecure placeholder value")
+    if len(value) < 32 and os.environ.get("FLASK_ENV") != "testing":
+        raise RuntimeError(f"{name} must contain at least 32 characters")
+
+
+_validate_configured_secret("JWT_SECRET_KEY", _jwt_secret)
+
 # --- Initialize Structured Logging ---
 # Environment variables: LOG_LEVEL, LOG_FORMAT, LOG_REQUESTS, LOG_SQL
 setup_logging()
@@ -134,6 +156,7 @@ if not _jwt_secret:
     if (
         os.environ.get("FLASK_ENV") == "production"
         or os.environ.get("ENVIRONMENT") == "production"
+        or os.environ.get("DEPLOYMENT_MODE") in {"self-hosted", "saas"}
     ):
         raise RuntimeError(
             "JWT_SECRET_KEY or FLASK_SECRET_KEY must be set in production"
@@ -167,9 +190,12 @@ limiter = Limiter(
 
 def _is_production_security_mode():
     """Return True when strict cookie/security defaults should be used."""
+    if os.environ.get("FLASK_ENV") == "testing":
+        return False
     return (
         os.environ.get("FLASK_ENV") == "production"
         or os.environ.get("ENVIRONMENT") == "production"
+        or os.environ.get("DEPLOYMENT_MODE") in {"self-hosted", "saas"}
         or "billmanager.app" in os.environ.get("APP_URL", "")
     )
 
@@ -259,23 +285,27 @@ def verify_access_token(token):
         return None
 
 
-def verify_refresh_token(token):
-    """Verify a refresh token against stored hash."""
+def consume_refresh_token(token):
+    """Atomically validate and revoke a refresh token."""
     token_hash = hashlib.sha256(token.encode()).hexdigest()
-    refresh = RefreshToken.query.filter_by(token_hash=token_hash, revoked=False).first()
-    if not refresh:
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    consumed = db.session.execute(
+        db.update(RefreshToken)
+        .where(
+            RefreshToken.token_hash == token_hash,
+            RefreshToken.revoked.is_(False),
+            RefreshToken.expires_at > now,
+        )
+        .values(revoked=True)
+        .returning(RefreshToken.user_id, RefreshToken.device_info)
+    ).first()
+    if not consumed:
+        db.session.rollback()
         return None
-    # Handle comparison between naive (from DB) and aware datetimes
-    expires_at = (
-        refresh.expires_at.replace(tzinfo=datetime.timezone.utc)
-        if refresh.expires_at.tzinfo is None
-        else refresh.expires_at
-    )
-    if expires_at < datetime.datetime.now(datetime.timezone.utc):
-        refresh.revoked = True
-        db.session.commit()
-        return None
-    return refresh
+    return {
+        "user_id": consumed.user_id,
+        "device_info": consumed.device_info,
+    }
 
 
 def check_bill_access(bill):
@@ -959,6 +989,34 @@ def jwt_admin_required(f):
     return decorated_function
 
 
+def _is_instance_operator(user):
+    """Separate instance operators from SaaS tenant administrators."""
+    if not user:
+        return False
+    if not is_saas():
+        return user.role in {"admin", "operator"}
+    configured_ids = {
+        int(value)
+        for value in os.environ.get("INSTANCE_OPERATOR_USER_IDS", "").split(",")
+        if value.strip().isdigit()
+    }
+    return user.id in configured_ids
+
+
+def jwt_operator_required(f):
+    """Require current database-backed instance-operator authorization."""
+
+    @wraps(f)
+    @jwt_required
+    def decorated_function(*args, **kwargs):
+        user = db.session.get(User, g.jwt_user_id)
+        if not _is_instance_operator(user):
+            return jsonify({"success": False, "error": "Operator access required"}), 403
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
 # --- Subscription & Tier Helpers ---
 
 
@@ -1415,20 +1473,19 @@ def jwt_refresh():
     if not refresh_token:
         return jsonify({"success": False, "error": "Refresh token required"}), 400
 
-    stored_token = verify_refresh_token(refresh_token)
+    stored_token = consume_refresh_token(refresh_token)
     if not stored_token:
         return jsonify(
             {"success": False, "error": "Invalid or expired refresh token"}
         ), 401
 
-    user = db.session.get(User, stored_token.user_id)
+    user = db.session.get(User, stored_token["user_id"])
     if not user:
         return jsonify({"success": False, "error": "User not found"}), 401
 
     # Rotate refresh token on every refresh to limit replay window.
-    stored_token.revoked = True
     access_token = create_access_token(user.id, user.role)
-    new_refresh_token = create_refresh_token(user.id, stored_token.device_info)
+    new_refresh_token = create_refresh_token(user.id, stored_token["device_info"])
 
     response = jsonify(
         {
@@ -1624,6 +1681,7 @@ def verify_email():
 
 
 @api_v2_bp.route("/auth/resend-verification", methods=["POST"])
+@limiter.limit("3 per hour")
 def resend_verification():
     """Resend email verification link."""
     data = request.get_json(force=True, silent=True)
@@ -2051,14 +2109,20 @@ def stripe_webhook():
             # Payment successful, activate subscription
             metadata = data.get("metadata", {})
             user_id = metadata.get("user_id")
-            tier = metadata.get("tier", "basic")
-            interval = metadata.get("interval", "monthly")
             customer_id = data.get("customer")
             subscription_id = data.get("subscription")
 
             if user_id:
                 user = db.session.get(User, int(user_id))
                 if user:
+                    sub_details = get_subscription(subscription_id)
+                    trusted_plan = get_plan_for_stripe_price_id(
+                        sub_details.get("price_id") if "error" not in sub_details else None
+                    )
+                    if not trusted_plan:
+                        raise ValueError("Stripe subscription uses an unknown price ID")
+                    tier, interval = trusted_plan
+
                     if not user.subscription:
                         subscription = Subscription(user_id=user.id)
                         db.session.add(subscription)
@@ -2072,8 +2136,6 @@ def stripe_webhook():
                     subscription.billing_interval = interval
                     subscription.plan = f"{tier}_{interval}"  # e.g., "basic_monthly"
 
-                    # Get subscription details from Stripe
-                    sub_details = get_subscription(subscription_id)
                     if "error" not in sub_details:
                         subscription.current_period_start = (
                             datetime.datetime.fromtimestamp(
@@ -3391,7 +3453,12 @@ def jwt_update_payment(payment_id):
     if payment.share_id:
         # This is a share payment - only the sharee who made it can edit
         share = db.session.get(BillShare, payment.share_id)
-        if not share or share.shared_with_user_id != g.jwt_user_id:
+        if (
+            not share
+            or share.shared_with_user_id != g.jwt_user_id
+            or share.status != "accepted"
+            or share.is_expired
+        ):
             return jsonify(
                 {"success": False, "error": "Cannot edit payments made by others"}
             ), 403
@@ -3475,7 +3542,12 @@ def jwt_delete_payment(payment_id):
     if payment.share_id:
         # This is a share payment - only the sharee who made it can delete
         share = db.session.get(BillShare, payment.share_id)
-        if not share or share.shared_with_user_id != g.jwt_user_id:
+        if (
+            not share
+            or share.shared_with_user_id != g.jwt_user_id
+            or share.status != "accepted"
+            or share.is_expired
+        ):
             return jsonify(
                 {"success": False, "error": "Cannot delete payments made by others"}
             ), 403
@@ -3542,6 +3614,10 @@ def jwt_share_bill(bill_id):
     access = check_bill_access(bill)
     if access is not True:
         return access
+
+    database = db.session.get(Database, bill.database_id)
+    if is_saas() and (not database or database.owner_id != g.jwt_user_id):
+        return jsonify({"success": False, "error": "Only the bill owner may share it"}), 403
 
     mutation, mutation_response = _prepare_client_mutation(
         data, bill.database_id, f"shares.create:{bill_id}"
@@ -3634,7 +3710,7 @@ def jwt_share_bill(bill_id):
     # Create the share
     share = BillShare(
         bill_id=bill_id,
-        owner_user_id=g.jwt_user_id,
+        owner_user_id=database.owner_id if is_saas() else g.jwt_user_id,
         shared_with_user_id=shared_with_user_id,
         shared_with_identifier=identifier,
         identifier_type=identifier_type,
@@ -3733,9 +3809,6 @@ def jwt_get_bill_shares(bill_id):
 
     shares = BillShare.query.filter_by(bill_id=bill_id).all()
 
-    # Security: Only return shares owned by the current user
-    filtered_shares = [s for s in shares if s.owner_user_id == g.jwt_user_id]
-
     result = [
         {
             "id": s.id,
@@ -3751,7 +3824,7 @@ def jwt_get_bill_shares(bill_id):
             if s.recipient_paid_date
             else None,
         }
-        for s in filtered_shares
+        for s in shares
     ]
 
     return jsonify({"success": True, "data": result})
@@ -3765,7 +3838,13 @@ def jwt_revoke_share(share_id):
     data = request.get_json(silent=True) or {}
     share = _get_share_for_mutation(share_id)
 
-    if share.owner_user_id != g.jwt_user_id:
+    database = db.session.get(Database, share.bill.database_id)
+    can_revoke = (
+        database is not None and database.owner_id == g.jwt_user_id
+        if is_saas()
+        else share.owner_user_id == g.jwt_user_id
+    )
+    if not can_revoke:
         return jsonify({"success": False, "error": "Access denied"}), 403
 
     mutation, mutation_response = _prepare_client_mutation(
@@ -5503,6 +5582,9 @@ def jwt_change_password():
             ), 401
 
     user.set_password(new_password)
+    RefreshToken.query.filter_by(user_id=user.id, revoked=False).update(
+        {"revoked": True}, synchronize_session=False
+    )
     db.session.commit()
 
     # Optionally auto-login after password change
@@ -5628,28 +5710,30 @@ def _generate_oauth_state(
     redirect_uri=None,
     channel="browser",
 ):
-    """Generate encrypted state parameter as signed JWT.
-
-    The nonce is included so it can be validated in the ID token callback.
-    A separate state_nonce prevents replay of the state token itself.
-    """
-    state_nonce = secrets.token_hex(16)
+    """Create server-side OAuth state and return an opaque signed handle."""
+    state_nonce = secrets.token_urlsafe(32)
+    expires_at = _naive_utcnow() + datetime.timedelta(minutes=5)
+    db.session.add(
+        OAuthStateUse(
+            nonce_hash=hashlib.sha256(state_nonce.encode()).hexdigest(),
+            provider=provider,
+            flow=flow,
+            code_verifier=code_verifier,
+            id_token_nonce=nonce,
+            link_user_id=link_user_id,
+            redirect_uri=redirect_uri,
+            channel=channel,
+            expires_at=expires_at,
+        )
+    )
+    db.session.commit()
     state_payload = {
-        "provider": provider,
-        "flow": flow,
         "state_nonce": state_nonce,
-        "id_token_nonce": nonce,
-        "code_verifier": code_verifier,
         "exp": datetime.datetime.now(datetime.timezone.utc)
         + datetime.timedelta(minutes=5),
         "iat": datetime.datetime.now(datetime.timezone.utc),
         "type": "oauth_state",
-        "channel": channel,
     }
-    if link_user_id is not None:
-        state_payload["link_user_id"] = link_user_id
-    if redirect_uri is not None:
-        state_payload["redirect_uri"] = redirect_uri
     return jwt.encode(state_payload, JWT_SECRET_KEY, algorithm="HS256")
 
 
@@ -5672,7 +5756,7 @@ def _resolve_oauth_redirect_uri(requested_uri=None):
 
 
 def _decode_oauth_state(state_token):
-    """Verify and decode a signed OAuth state without consuming it."""
+    """Resolve an opaque signed state handle to its server-side transaction."""
     try:
         payload = jwt.decode(state_token, JWT_SECRET_KEY, algorithms=["HS256"])
         if payload.get("type") != "oauth_state":
@@ -5680,36 +5764,52 @@ def _decode_oauth_state(state_token):
         state_nonce = payload.get("state_nonce")
         if not isinstance(state_nonce, str) or not state_nonce:
             return None
-        return payload
+        transaction = OAuthStateUse.query.filter_by(
+            nonce_hash=hashlib.sha256(state_nonce.encode()).hexdigest(),
+            consumed_at=None,
+        ).first()
+        if not transaction or transaction.expires_at <= _naive_utcnow():
+            return None
+        return {
+            "state_nonce": state_nonce,
+            "provider": transaction.provider,
+            "flow": transaction.flow,
+            "code_verifier": transaction.code_verifier,
+            "id_token_nonce": transaction.id_token_nonce,
+            "link_user_id": transaction.link_user_id,
+            "redirect_uri": transaction.redirect_uri,
+            "channel": transaction.channel,
+        }
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
 
 
 def _consume_oauth_state(payload):
-    """Atomically mark a verified OAuth state as used in the replay ledger."""
+    """Atomically consume a server-side OAuth transaction."""
     state_nonce = payload.get("state_nonce") if isinstance(payload, dict) else None
     if not isinstance(state_nonce, str) or not state_nonce:
         return False
 
-    # Store only a one-way digest. The unique constraint makes consumption
-    # atomic across threads, processes, and application replicas.
     nonce_hash = hashlib.sha256(state_nonce.encode()).hexdigest()
     now = _naive_utcnow()
     db.session.query(OAuthStateUse).filter(OAuthStateUse.expires_at < now).delete(
         synchronize_session=False
     )
-    db.session.add(
-        OAuthStateUse(
-            nonce_hash=nonce_hash,
-            expires_at=now + datetime.timedelta(minutes=10),
+    consumed_id = db.session.execute(
+        db.update(OAuthStateUse)
+        .where(
+            OAuthStateUse.nonce_hash == nonce_hash,
+            OAuthStateUse.consumed_at.is_(None),
+            OAuthStateUse.expires_at > now,
         )
-    )
-    try:
-        db.session.commit()
-    except IntegrityError:
+        .values(consumed_at=now)
+        .returning(OAuthStateUse.id)
+    ).scalar_one_or_none()
+    if consumed_id is None:
         db.session.rollback()
         logger.warning("Replayed OAuth state detected")
         return False
+    db.session.commit()
     return True
 
 
@@ -5999,14 +6099,17 @@ def _complete_oauth_identity(
     existing_identity = OAuthAccount.query.filter_by(
         provider=provider, provider_user_id=provider_user_id
     ).first()
-    trusted_email_providers = ["microsoft", "apple"]
-    skip_email_check = provider in trusted_email_providers
-    if not skip_email_check and provider == "oidc":
+    skip_email_check = False
+    if provider == "oidc":
         from config import OAUTH_OIDC_SKIP_EMAIL_VERIFICATION
 
         skip_email_check = OAUTH_OIDC_SKIP_EMAIL_VERIFICATION
 
-    if not skip_email_check and claims.get("email") is not None:
+    if (
+        not skip_email_check
+        and not existing_identity
+        and claims.get("email") is not None
+    ):
         email_verified_claim = claims.get("email_verified")
         is_email_verified = False
         if isinstance(email_verified_claim, bool):
@@ -6048,13 +6151,6 @@ def _complete_oauth_identity(
             ), 401
 
     email = claims.get("email")
-
-    # Microsoft personal accounts may not have email; fall back to
-    # preferred_username when it is syntactically an email address.
-    if not email and provider == "microsoft":
-        fallback = claims.get("preferred_username", "")
-        if fallback and "@" in fallback and "." in fallback.split("@")[-1]:
-            email = fallback
 
     email = email.strip().lower() if email else None
     profile_data = {
@@ -6449,8 +6545,9 @@ def oauth_callback(provider):
     if not code or not state:
         return jsonify({"success": False, "error": "Missing code or state"}), 400
 
-    # Verify state token
-    state_payload = _verify_oauth_state(state)
+    # Resolve state first so account-link authentication can be checked before
+    # the one-time transaction is consumed.
+    state_payload = _decode_oauth_state(state)
     if not state_payload:
         return jsonify({"success": False, "error": "Invalid or expired state"}), 400
 
@@ -6458,6 +6555,16 @@ def oauth_callback(provider):
         return jsonify({"success": False, "error": "State provider mismatch"}), 400
     if state_payload.get("channel") != "browser":
         return jsonify({"success": False, "error": "State channel mismatch"}), 400
+
+    flow = state_payload.get("flow")
+    if flow not in ("login", "link"):
+        return jsonify({"success": False, "error": "Invalid OAuth flow"}), 400
+    if flow == "link":
+        authenticated_user_id, link_error = _oauth_link_user_from_bearer()
+        if link_error:
+            return link_error
+        if authenticated_user_id != state_payload.get("link_user_id"):
+            return jsonify({"success": False, "error": "Link session user mismatch"}), 401
 
     redirect_uri, redirect_error = _resolve_oauth_redirect_uri(
         state_payload.get("redirect_uri")
@@ -6469,6 +6576,10 @@ def oauth_callback(provider):
         return jsonify(
             {"success": False, "error": "Redirect URI does not match authorization request"}
         ), 400
+
+
+    if not _consume_oauth_state(state_payload):
+        return jsonify({"success": False, "error": "Invalid or expired state"}), 400
 
     code_verifier = state_payload.get("code_verifier")
     cfg = get_oauth_provider_config(provider)
@@ -6601,7 +6712,13 @@ def oauth_callback(provider):
                     type(e).__name__,
                 )
 
-    return _complete_oauth_identity(provider, claims, state_payload, data)
+    return _complete_oauth_identity(
+        provider,
+        claims,
+        state_payload,
+        data,
+        issue_link_session=False,
+    )
 
 
 @api_v2_bp.route("/auth/oauth/accounts", methods=["GET"])
@@ -7163,6 +7280,7 @@ def twofa_list_passkeys():
 
 @api_v2_bp.route("/auth/2fa/setup/passkey/<int:passkey_id>", methods=["DELETE"])
 @jwt_required
+@limiter.limit("5 per minute")
 def twofa_delete_passkey(passkey_id):
     """Remove a registered passkey. Requires password or email OTP confirmation (HIGH-5)."""
     data = request.get_json(force=True, silent=True) or {}
@@ -7229,6 +7347,9 @@ def twofa_delete_passkey(passkey_id):
         config = TwoFAConfig.query.filter_by(user_id=g.jwt_user_id).first()
         if config:
             config.passkey_enabled = False
+        TwoFAChallenge.query.filter_by(
+            user_id=g.jwt_user_id, challenge_type="passkey"
+        ).delete(synchronize_session=False)
 
     db.session.commit()
     return jsonify({"success": True, "data": {"message": "Passkey removed"}})
@@ -7369,6 +7490,16 @@ def twofa_challenge():
     if not user:
         return jsonify({"success": False, "error": "User not found"}), 404
 
+    twofa_config = user.twofa_config
+    if method == "email_otp" and (
+        not twofa_config or not twofa_config.email_otp_enabled
+    ):
+        return jsonify({"success": False, "error": "Email OTP is not enabled"}), 400
+    if method == "passkey" and (
+        not twofa_config or not twofa_config.passkey_enabled
+    ):
+        return jsonify({"success": False, "error": "Passkey 2FA is not enabled"}), 400
+
     if method == "email_otp":
         if not user.email:
             return jsonify(
@@ -7423,6 +7554,10 @@ def twofa_passkey_auth_options():
     challenge, err = _verify_2fa_session(session_token)
     if err:
         return err
+
+    twofa_config = TwoFAConfig.query.filter_by(user_id=challenge.user_id).first()
+    if not twofa_config or not twofa_config.passkey_enabled:
+        return jsonify({"success": False, "error": "Passkey 2FA is not enabled"}), 400
 
     # Get user's passkeys
     creds = WebAuthnCredential.query.filter_by(user_id=challenge.user_id).all()
@@ -7480,6 +7615,15 @@ def twofa_verify():
     user = db.session.get(User, challenge.user_id)
     if not user:
         return jsonify({"success": False, "error": "User not found"}), 404
+
+    twofa_config = user.twofa_config
+    method_enabled = {
+        "email_otp": bool(twofa_config and twofa_config.email_otp_enabled),
+        "passkey": bool(twofa_config and twofa_config.passkey_enabled),
+        "recovery": bool(twofa_config and twofa_config.is_enabled),
+    }
+    if method in method_enabled and not method_enabled[method]:
+        return jsonify({"success": False, "error": "2FA method is not enabled"}), 400
 
     verified = False
 
@@ -7640,8 +7784,22 @@ def twofa_verify():
     if not verified:
         return jsonify({"success": False, "error": "2FA verification failed"}), 401
 
-    # Mark challenge as used
-    challenge.used = True
+    # Claim the challenge atomically. Concurrent successful verifiers lose the
+    # conditional update and roll back any credential or recovery-code changes.
+    claimed_challenge_id = db.session.execute(
+        db.update(TwoFAChallenge)
+        .where(
+            TwoFAChallenge.id == challenge.id,
+            TwoFAChallenge.used.is_(False),
+            TwoFAChallenge.attempts < TwoFAChallenge.max_attempts,
+            TwoFAChallenge.expires_at > _naive_utcnow(),
+        )
+        .values(used=True)
+        .returning(TwoFAChallenge.id)
+    ).scalar_one_or_none()
+    if claimed_challenge_id is None:
+        db.session.rollback()
+        return jsonify({"success": False, "error": "2FA session already used"}), 401
     _record_login_if_due(user)
     db.session.commit()
 
@@ -8207,6 +8365,7 @@ def jwt_delete_invitation(invite_id):
 
 @api_v2_bp.route("/invitations/<int:invite_id>/resend", methods=["POST"])
 @jwt_admin_required
+@limiter.limit("5 per hour")
 def jwt_resend_invitation(invite_id):
     """Resend an invitation email (admin only)."""
     current_user_id = g.jwt_user_id
@@ -8215,9 +8374,13 @@ def jwt_resend_invitation(invite_id):
         return jsonify({"success": False, "error": "Access denied"}), 403
     if invite.is_accepted:
         return jsonify({"success": False, "error": "Invitation already accepted"}), 400
+    if invite.is_expired:
+        return jsonify({"success": False, "error": "Invitation expired"}), 400
 
     current_user = db.session.get(User, current_user_id)
-    email_sent = send_invite_email(invite.email, invite.token, current_user.username)
+    raw_token = invite.set_token()
+    db.session.commit()
+    email_sent = send_invite_email(invite.email, raw_token, current_user.username)
 
     return jsonify(
         {
@@ -8620,6 +8783,7 @@ def get_notification_config():
 
 @api_v2_bp.route("/notifications/test", methods=["POST"])
 @jwt_required
+@limiter.limit("3 per minute")
 def send_test_notification():
     """Send a test push notification to verify device setup."""
     from services.push_notifications import send_push_to_user, is_push_enabled
@@ -8652,7 +8816,7 @@ def send_test_notification():
 
 
 @api_v2_bp.route("/notifications/reminders", methods=["POST"])
-@jwt_admin_required
+@jwt_operator_required
 def trigger_bill_reminders():
     """
     Trigger bill reminder notifications (admin only).
@@ -8812,6 +8976,7 @@ def jwt_get_devices():
 
 @api_v2_bp.route("/devices", methods=["POST"])
 @jwt_required
+@limiter.limit("10 per minute")
 def jwt_register_device():
     """Register or update a device for push notifications."""
     data = request.get_json(force=True, silent=True)
@@ -8839,6 +9004,15 @@ def jwt_register_device():
         user_id=g.jwt_user_id, device_id=device_id
     ).first()
     is_new = existing_device is None
+
+    max_devices = int(os.environ.get("MAX_PUSH_DEVICES_PER_USER", "10"))
+    if is_new and UserDevice.query.filter_by(user_id=g.jwt_user_id).count() >= max_devices:
+        return jsonify(
+            {
+                "success": False,
+                "error": f"Device limit reached ({max_devices})",
+            }
+        ), 409
 
     if existing_device:
         # Update existing device
@@ -8968,12 +9142,19 @@ def jwt_sync_push():
         "deleted_bills",
         "deleted_payments",
     )
+    max_sync_items = int(os.environ.get("MAX_SYNC_ITEMS_PER_COLLECTION", "500"))
     for collection_name in sync_collection_names:
         if collection_name in data and not isinstance(data[collection_name], list):
             return _error_response(
                 "invalid_sync_payload",
                 f"{collection_name} must be an array",
                 400,
+            )
+        if len(data.get(collection_name, [])) > max_sync_items:
+            return _error_response(
+                "sync_collection_too_large",
+                f"{collection_name} exceeds the {max_sync_items} item limit",
+                413,
             )
 
     mutation, mutation_response = _prepare_client_mutation(
@@ -9694,7 +9875,7 @@ def get_telemetry_notice():
 
 
 @api_v2_bp.route("/telemetry/accept", methods=["POST"])
-@jwt_required
+@jwt_operator_required
 def accept_telemetry():
     """Accept telemetry (dismiss notice without opting out)."""
     user = User.query.get(g.jwt_user_id)
@@ -9723,7 +9904,7 @@ def accept_telemetry():
 
 
 @api_v2_bp.route("/telemetry/opt-out", methods=["POST"])
-@jwt_required
+@jwt_operator_required
 def opt_out_telemetry():
     """Opt out of telemetry."""
     user = User.query.get(g.jwt_user_id)
@@ -9823,6 +10004,9 @@ def serve_static(path):
 def create_app():
     app = Flask(__name__, static_folder=None)
     app.url_map.strict_slashes = False
+    app.config["MAX_CONTENT_LENGTH"] = int(
+        os.environ.get("MAX_REQUEST_BYTES", str(1024 * 1024))
+    )
 
     # Get DATABASE_URL and convert to psycopg3 dialect if needed
     db_url = os.environ.get(
@@ -9870,9 +10054,7 @@ def create_app():
     limiter.init_app(app)
 
     # Security headers with Talisman (only in production - check for production URL or explicit env var)
-    is_production = os.environ.get(
-        "FLASK_ENV"
-    ) == "production" or "billmanager.app" in os.environ.get("APP_URL", "")
+    is_production = _is_production_security_mode()
     if is_production:
         Talisman(
             app,

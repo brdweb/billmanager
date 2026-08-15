@@ -41,14 +41,13 @@ TELEMETRY_TRUSTED_PROXY_IPS = {
     ip.strip() for ip in os.environ.get('TELEMETRY_TRUSTED_PROXY_IPS', '').split(',') if ip.strip()
 }
 
-# Anonymous installations cannot safely share a secret baked into the client.
-# Ingestion is therefore public by default and protected by payload validation,
-# size limits, and rate limiting. A legacy receiver-wide auth setting is still
-# honored for ingestion when explicitly configured. Stats always require auth.
+# Ingestion is authenticated by default. Operators that intentionally expose
+# anonymous telemetry must opt out explicitly and accept the associated abuse
+# risk; production deployments should provision a receiver API key.
 _legacy_receiver_auth = os.environ.get('TELEMETRY_RECEIVER_REQUIRE_AUTH')
 TELEMETRY_INGEST_REQUIRE_AUTH = os.environ.get(
     'TELEMETRY_INGEST_REQUIRE_AUTH',
-    _legacy_receiver_auth if _legacy_receiver_auth is not None else 'false',
+    _legacy_receiver_auth if _legacy_receiver_auth is not None else 'true',
 ).lower() == 'true'
 
 _rate_window_seconds = 60
@@ -129,7 +128,7 @@ def _cleanup_old_submissions(db, submission_model) -> None:
 
 
 def _is_admin_jwt() -> bool:
-    """Validate Authorization bearer token and require admin role."""
+    """Validate the token and require current instance-operator authority."""
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
         return False
@@ -138,12 +137,15 @@ def _is_admin_jwt() -> bool:
         return False
 
     try:
-        from app import verify_access_token
+        from app import verify_access_token, _is_instance_operator
+        from models import db, User
         payload = verify_access_token(token)
     except Exception:
         return False
 
-    return bool(payload and payload.get('role') == 'admin')
+    if not payload:
+        return False
+    return _is_instance_operator(db.session.get(User, payload.get('user_id')))
 
 
 def _is_valid_api_key() -> bool:
@@ -197,8 +199,8 @@ def receive_telemetry():
 
     try:
         # Request size guard to reduce abuse and accidental oversized payloads.
-        content_length = request.content_length or 0
-        if content_length > TELEMETRY_MAX_PAYLOAD_BYTES:
+        raw_body = request.get_data(cache=True)
+        if len(raw_body) > TELEMETRY_MAX_PAYLOAD_BYTES:
             return jsonify({'error': 'Payload too large'}), 413
 
         rate_limited = _require_rate_limit('telemetry_ingest', TELEMETRY_INGEST_RATE_PER_MINUTE)

@@ -21,6 +21,7 @@ import {
   parseMoneyInput,
 } from '../../i18n/format';
 import { createAndSharePdf, printHtml, shareCsv } from '../../native/shareExport';
+import { escapeCsvCell, escapeHtml } from '../../native/exportEncoding';
 import type { Payment } from '../../types';
 import PaymentHistoryScreen from './PaymentHistoryScreen';
 import {
@@ -38,14 +39,13 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
 function csvCell(value: unknown): string {
-  const text = String(value ?? '');
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  return escapeCsvCell(value);
 }
 
 function paymentHtml(items: PaymentHistoryItem[], currency: string, locale: string, labels: { title: string; date: string; bill: string; bucket: string; amount: string }): string {
   const money = new Intl.NumberFormat(locale, { style: 'currency', currency });
-  const rows = items.map((item) => `<tr><td>${item.paidAtLabel}</td><td>${item.billName}</td><td>${item.bucketName}</td><td style="text-align:right">${money.format(item.direction === 'deposit' ? item.amount : -item.amount)}</td></tr>`).join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#17231e;padding:28px}h1{color:#006c4c}table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid #d8e1dc;text-align:left}</style></head><body><h1>${labels.title}</h1><table><thead><tr><th>${labels.date}</th><th>${labels.bill}</th><th>${labels.bucket}</th><th style="text-align:right">${labels.amount}</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  const rows = items.map((item) => `<tr><td>${escapeHtml(item.paidAtLabel)}</td><td>${escapeHtml(item.billName)}</td><td>${escapeHtml(item.bucketName)}</td><td style="text-align:right">${escapeHtml(money.format(item.direction === 'deposit' ? item.amount : -item.amount))}</td></tr>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#17231e;padding:28px}h1{color:#006c4c}table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid #d8e1dc;text-align:left}</style></head><body><h1>${escapeHtml(labels.title)}</h1><table><thead><tr><th>${escapeHtml(labels.date)}</th><th>${escapeHtml(labels.bill)}</th><th>${escapeHtml(labels.bucket)}</th><th style="text-align:right">${escapeHtml(labels.amount)}</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
 }
 
 function localizedSortLabel(t: TFunction, sort: PaymentSort): string {

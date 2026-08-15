@@ -57,9 +57,10 @@ function getDateForFilename(): string {
 }
 
 // Escape CSV values (handle commas, quotes, newlines)
-function escapeCSV(value: string | number | null | undefined): string {
+export function escapeCSV(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '';
-  const str = String(value);
+  const raw = String(value);
+  const str = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
   if (str.includes(',') || str.includes('"') || str.includes('\n')) {
     return `"${str.replace(/"/g, '""')}"`;
   }

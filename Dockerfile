@@ -27,8 +27,9 @@ RUN apt-get update && apt-get install -y \
 COPY apps/server/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application code
-COPY . .
+# Copy only the backend application. Local repository files and credentials
+# must never become part of the runtime image.
+COPY apps/server ./apps/server
 
 # Copy built frontend from stage 1
 COPY --from=frontend-builder /app/apps/web/dist ./apps/web/dist

@@ -139,7 +139,11 @@ def test_openapi_covers_runtime_contract_and_resolves_all_local_refs():
             # This endpoint intentionally supports both a public change-token
             # flow and an authenticated current-password flow.
             assert security_names == {"bearerAuth"}, key
-        elif decorators & {"jwt_required", "jwt_admin_required"}:
+        elif decorators & {
+            "jwt_required",
+            "jwt_admin_required",
+            "jwt_operator_required",
+        }:
             assert "bearerAuth" in security_names, key
         elif "auth_required" in decorators:
             assert security_names == {"bearerAuth", "cookieAuth"}, key

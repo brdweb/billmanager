@@ -62,12 +62,8 @@ def create_checkout_session(
     # Get the price ID for the selected tier and interval
     price_id = get_stripe_price_id(tier, interval)
 
-    # Fall back to legacy STRIPE_PRICE_ID if tier pricing not configured
     if not price_id:
-        price_id = STRIPE_PRICE_ID
-
-    if not price_id:
-        return {'error': 'Stripe price ID not configured'}
+        return {'error': 'Stripe price ID not configured for the selected plan'}
 
     stripe.api_key = STRIPE_SECRET_KEY
 
@@ -172,13 +168,17 @@ def get_subscription(subscription_id: str) -> dict:
 
     try:
         subscription = stripe.Subscription.retrieve(subscription_id)
+        items = subscription.get('items', {}).get('data', [])
+        price = items[0].get('price') if items else None
+        price_id = price.get('id') if hasattr(price, 'get') else getattr(price, 'id', None)
         return {
             'id': subscription.id,
             'status': subscription.status,
             'current_period_start': subscription.current_period_start,
             'current_period_end': subscription.current_period_end,
             'cancel_at_period_end': subscription.cancel_at_period_end,
-            'canceled_at': subscription.canceled_at
+            'canceled_at': subscription.canceled_at,
+            'price_id': price_id,
         }
     except stripe.error.StripeError as e:
         logger.error(f"Stripe subscription error: {e}")

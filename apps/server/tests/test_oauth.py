@@ -196,7 +196,8 @@ def _mock_oauth_dependencies(
     with (
         patch("app.get_enabled_oauth_providers", return_value=[provider]),
         patch("app._get_oidc_metadata", return_value=metadata),
-        patch("app._verify_oauth_state", return_value=state_payload),
+        patch("app._decode_oauth_state", return_value=state_payload),
+        patch("app._consume_oauth_state", return_value=True),
         patch("app._get_jwks", return_value={"keys": [{"kid": "1"}]}),
         patch("requests.post", return_value=token_resp) as post_mock,
         patch("requests.get", return_value=userinfo_resp) as get_mock,
@@ -259,9 +260,13 @@ class TestNativeGoogleOAuth:
         payload = response.get_json()["data"]
         assert payload["client_id"] == client_id
         assert payload["nonce"]
-        state = app_module.jwt.decode(
+        public_state = app_module.jwt.decode(
             payload["state"], app_module.JWT_SECRET_KEY, algorithms=["HS256"]
         )
+        assert set(public_state).isdisjoint(
+            {"provider", "flow", "channel", "id_token_nonce", "code_verifier", "link_user_id"}
+        )
+        state = app_module._decode_oauth_state(payload["state"])
         assert state["provider"] == "google"
         assert state["flow"] == "login"
         assert state["channel"] == "native_google"
@@ -534,14 +539,14 @@ class TestNativeGoogleOAuth:
                 "/api/v2/auth/oauth/google/native/callback",
                 json=callback_body,
             )
-            assert OAuthStateUse.query.count() == 0
+            assert OAuthStateUse.query.filter_by(consumed_at=None).count() == 1
 
             invalid_bearer = client.post(
                 "/api/v2/auth/oauth/google/native/callback",
                 json=callback_body,
                 headers={"Authorization": "Bearer invalid-token"},
             )
-            assert OAuthStateUse.query.count() == 0
+            assert OAuthStateUse.query.filter_by(consumed_at=None).count() == 1
 
             retried = client.post(
                 "/api/v2/auth/oauth/google/native/callback",
@@ -553,7 +558,7 @@ class TestNativeGoogleOAuth:
         assert invalid_bearer.status_code == 401
         assert retried.status_code == 200
         assert retried.get_json() == {"success": True, "data": {"linked": True}}
-        assert OAuthStateUse.query.count() == 1
+        assert OAuthStateUse.query.filter(OAuthStateUse.consumed_at.isnot(None)).count() == 1
         assert (
             _oauth_account("google", "native-link-retry-user").user_id
             == admin_user.id
@@ -680,6 +685,23 @@ def test_oauth_state_replay_migration_supports_sqlite():
         assert any(
             index["name"] == "idx_oauth_state_uses_expires_at" for index in indexes
         )
+        db_migrations_module.migrate_20260815_01_expand_oauth_state_transactions(
+            migration_db
+        )
+        columns = {
+            column["name"]
+            for column in inspect(engine).get_columns("oauth_state_uses")
+        }
+        assert {
+            "provider",
+            "flow",
+            "code_verifier",
+            "id_token_nonce",
+            "link_user_id",
+            "redirect_uri",
+            "channel",
+            "consumed_at",
+        } <= columns
     finally:
         migration_db.session.close()
         engine.dispose()
@@ -688,27 +710,40 @@ def test_oauth_state_replay_migration_supports_sqlite():
 class TestNativeRedirectUris:
     """Native callbacks are exact-allowlisted and bound into OAuth state."""
 
-    def test_authorize_uses_official_mobile_callback(self, client, monkeypatch):
+    def test_authorize_uses_claimed_mobile_callback(self, client, monkeypatch):
         provider = "google"
         _set_provider_config(monkeypatch, provider)
         metadata = {
             "authorization_endpoint": "https://issuer.example/google/authorize",
         }
 
+        claimed_callback = "https://app.billmanager.app/auth/callback"
+        monkeypatch.setenv("OAUTH_REDIRECT_URIS", claimed_callback)
         with (
             patch("app.get_enabled_oauth_providers", return_value=[provider]),
             patch("app._get_oidc_metadata", return_value=metadata),
         ):
             response = client.get(
                 f"/api/v2/auth/oauth/{provider}/authorize",
-                query_string={"redirect_uri": "billmanager://auth/callback"},
+                query_string={"redirect_uri": claimed_callback},
             )
 
         assert response.status_code == 200
         data = response.get_json()["data"]
         params = parse_qs(urlparse(data["auth_url"]).query)
-        assert data["redirect_uri"] == "billmanager://auth/callback"
-        assert params["redirect_uri"] == ["billmanager://auth/callback"]
+        assert data["redirect_uri"] == claimed_callback
+        assert params["redirect_uri"] == [claimed_callback]
+
+    def test_authorize_rejects_custom_scheme_by_default(self, client, monkeypatch):
+        provider = "google"
+        _set_provider_config(monkeypatch, provider)
+        monkeypatch.delenv("OAUTH_REDIRECT_URIS", raising=False)
+        with patch("app.get_enabled_oauth_providers", return_value=[provider]):
+            response = client.get(
+                f"/api/v2/auth/oauth/{provider}/authorize",
+                query_string={"redirect_uri": "billmanager://auth/callback"},
+            )
+        assert response.status_code == 400
 
     def test_authorize_rejects_unlisted_callback(self, client, monkeypatch):
         provider = "google"
@@ -727,6 +762,9 @@ class TestNativeRedirectUris:
         self, client, db_session, admin_user, monkeypatch
     ):
         provider = "google"
+        monkeypatch.setenv(
+            "OAUTH_REDIRECT_URIS", "https://app.billmanager.app/auth/callback"
+        )
         client_id = _set_provider_config(monkeypatch, provider)
         sub = "google-native-user"
         _link_account(db_session, admin_user, provider, sub)
@@ -743,20 +781,58 @@ class TestNativeRedirectUris:
             provider,
             client_id,
             claims,
-            state_overrides={"redirect_uri": "billmanager://auth/callback"},
+            state_overrides={"redirect_uri": "https://app.billmanager.app/auth/callback"},
         ) as mocks:
             response = client.post(
                 f"/api/v2/auth/oauth/{provider}/callback",
                 json={
                     "code": "auth-code",
                     "state": "state-token",
-                    "redirect_uri": "billmanager://auth/callback",
+                    "redirect_uri": "https://app.billmanager.app/auth/callback",
                 },
             )
 
         assert response.status_code == 200
         token_data = mocks["post"].call_args.kwargs["data"]
-        assert token_data["redirect_uri"] == "billmanager://auth/callback"
+        assert token_data["redirect_uri"] == "https://app.billmanager.app/auth/callback"
+
+
+class TestBrowserAccountLinkSecurity:
+    def test_link_callback_requires_same_authenticated_user_and_issues_no_session(
+        self, client, db_session, admin_user, monkeypatch
+    ):
+        provider = "google"
+        client_id = _set_provider_config(monkeypatch, provider)
+        claims = {
+            "iss": "https://accounts.google.com",
+            "aud": client_id,
+            "nonce": "nonce-123",
+            "sub": "browser-link-user",
+            "email": "browser.link@gmail.com",
+            "email_verified": True,
+        }
+        state_overrides = {
+            "flow": "link",
+            "link_user_id": admin_user.id,
+        }
+        with _mock_oauth_dependencies(
+            provider, client_id, claims, state_overrides=state_overrides
+        ):
+            unauthenticated = _call_callback(client, provider)
+        assert unauthenticated.status_code == 401
+
+        access_token = app_module.create_access_token(admin_user.id, admin_user.role)
+        with _mock_oauth_dependencies(
+            provider, client_id, claims, state_overrides=state_overrides
+        ):
+            authenticated = client.post(
+                f"/api/v2/auth/oauth/{provider}/callback",
+                headers={"Authorization": f"Bearer {access_token}"},
+                json={"code": "auth-code", "state": "state-token"},
+            )
+        assert authenticated.status_code == 200
+        assert authenticated.get_json() == {"success": True, "data": {"linked": True}}
+        assert _oauth_account(provider, "browser-link-user").user_id == admin_user.id
 
 
 # ---------------------------------------------------------------------------
@@ -1028,12 +1104,12 @@ class TestUserinfoFetch:
 
 
 class TestEmailVerified:
-    """Bug 3: Trusted providers skip email_verified; OIDC has env var toggle."""
+    """Email-based linking requires a verified provider claim."""
 
     def test_microsoft_trusted_no_email_verified(
         self, client, db_session, admin_user, monkeypatch
     ):
-        """Microsoft is trusted — missing email_verified should not block login."""
+        """An already-linked Microsoft subject does not depend on its email claim."""
         provider = "microsoft"
         client_id = _set_provider_config(monkeypatch, provider)
         sub = "ms-user-4"
@@ -1072,6 +1148,25 @@ class TestEmailVerified:
 
         assert response.status_code == 401
         assert response.get_json()["error"] == "Provider email is not verified"
+
+    def test_microsoft_unverified_email_cannot_auto_link(
+        self, client, db_session, admin_user, monkeypatch
+    ):
+        provider = "microsoft"
+        client_id = _set_provider_config(monkeypatch, provider)
+        claims = {
+            "iss": f"https://issuer.example/{provider}",
+            "tid": "tenant-unverified",
+            "aud": client_id,
+            "nonce": "nonce-123",
+            "sub": "unverified-microsoft-user",
+            "email": admin_user.email,
+        }
+        with _mock_oauth_dependencies(provider, client_id, claims):
+            response = _call_callback(client, provider)
+        assert response.status_code == 401
+        assert response.get_json()["error"] == "Provider email is not verified"
+        assert _oauth_account(provider, "unverified-microsoft-user") is None
 
     def test_oidc_skip_verification_enabled(
         self, client, db_session, admin_user, monkeypatch
@@ -1124,12 +1219,12 @@ class TestEmailVerified:
 
 
 class TestEmailFallback:
-    """Bug 4: preferred_username used as email fallback with format validation."""
+    """Microsoft preferred_username is never treated as a verified email."""
 
     def test_preferred_username_as_email(
         self, client, db_session, admin_user, monkeypatch
     ):
-        """Valid email in preferred_username should be used and lowercased."""
+        """Email-shaped preferred_username is not used as an email."""
         provider = "microsoft"
         client_id = _set_provider_config(monkeypatch, provider)
         sub = "ms-user-8"
@@ -1151,7 +1246,7 @@ class TestEmailFallback:
         assert response.status_code == 200
         assert response.get_json()["success"] is True
         assert account is not None
-        assert account.provider_email == "fallback.user@example.com"
+        assert account.provider_email is None
 
     def test_phone_number_in_preferred_username_ignored(
         self, client, db_session, admin_user, monkeypatch

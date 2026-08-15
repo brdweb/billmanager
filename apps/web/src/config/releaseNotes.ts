@@ -50,6 +50,21 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.7.6',
+    date: '2026-08-15',
+    title: 'Security Hardening',
+    sections: [
+      {
+        heading: 'Security',
+        items: [
+          'Kept OAuth PKCE secrets server-side, bound account linking to the authenticated user, and required verified provider email claims',
+          'Made refresh tokens, OAuth state, and two-factor challenges atomic one-time credentials and revoked old sessions after password changes',
+          'Strengthened tenant, share, telemetry, push-device, request-size, deployment, HTML, and CSV security boundaries',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.5',
     date: '2026-08-12',
     title: 'Android Sign-In Completion',

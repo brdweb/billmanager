@@ -2,7 +2,6 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
-from sqlalchemy import or_
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from currency import currency_amount_value
@@ -28,19 +27,16 @@ def _hash_password_reset_token(token):
 
 
 def _token_lookup_filter(column, token):
-    """Match either a legacy raw token or the hashed-at-rest form."""
-    token_hash = _hash_token_value(token)
-    return or_(column == token, column == token_hash)
+    """Match only the hashed-at-rest representation of a one-time token."""
+    return column == _hash_token_value(token)
 
 
 def _token_matches(stored_token, provided_token):
-    """Accept legacy raw tokens during the transition to hashed storage."""
+    """Compare a raw one-time token with its hashed-at-rest representation."""
     if not stored_token or not provided_token:
         return False
     provided_hash = _hash_token_value(provided_token)
-    return secrets.compare_digest(stored_token, provided_token) or secrets.compare_digest(
-        stored_token, provided_hash
-    )
+    return secrets.compare_digest(stored_token, provided_hash)
 
 # Association table for User-Database access (Tenancy)
 user_database_access = db.Table('user_database_access',
@@ -150,9 +146,7 @@ class User(db.Model):
         if not self.password_reset_token or not self.password_reset_expires:
             return False
         password_reset_hash = _hash_password_reset_token(token)
-        if not secrets.compare_digest(self.password_reset_token, token) and not secrets.compare_digest(
-            self.password_reset_token, password_reset_hash
-        ):
+        if not secrets.compare_digest(self.password_reset_token, password_reset_hash):
             return False
         # Normalize comparison (database may return naive datetimes)
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -180,9 +174,7 @@ class User(db.Model):
     @classmethod
     def find_by_password_reset_token(cls, token):
         token_hash = _hash_password_reset_token(token)
-        return cls.query.filter(
-            or_(cls.password_reset_token == token, cls.password_reset_token == token_hash)
-        ).first()
+        return cls.query.filter(cls.password_reset_token == token_hash).first()
 
     @classmethod
     def find_by_change_token(cls, token):
@@ -839,11 +831,19 @@ class OAuthAccount(db.Model):
 
 
 class OAuthStateUse(db.Model):
-    """Database-backed ledger that makes signed OAuth state single-use."""
+    """Server-side, single-use OAuth transaction state."""
     __tablename__ = 'oauth_state_uses'
     id = db.Column(db.Integer, primary_key=True)
     nonce_hash = db.Column(db.String(64), nullable=False, unique=True)
+    provider = db.Column(db.String(20), nullable=True)
+    flow = db.Column(db.String(20), nullable=True)
+    code_verifier = db.Column(db.String(255), nullable=True)
+    id_token_nonce = db.Column(db.String(255), nullable=True)
+    link_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
+    redirect_uri = db.Column(db.Text, nullable=True)
+    channel = db.Column(db.String(30), nullable=True)
     expires_at = db.Column(db.DateTime, nullable=False, index=True)
+    consumed_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(
         db.DateTime,
         nullable=False,

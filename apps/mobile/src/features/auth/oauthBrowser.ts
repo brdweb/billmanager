@@ -24,10 +24,7 @@ export function createOAuthRedirectUri(
   apiBaseUrl: string,
   platform: string = Platform.OS,
 ): string {
-  if (
-    platform === 'android'
-    && apiBaseUrl === CLOUD_API_BASE_URL
-  ) {
+  if (platform !== 'web' && apiBaseUrl === CLOUD_API_BASE_URL) {
     return CLOUD_OAUTH_REDIRECT_URI;
   }
   return Linking.createURL('auth/callback');

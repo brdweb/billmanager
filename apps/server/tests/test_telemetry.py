@@ -294,6 +294,26 @@ def test_receiver_persists_valid_json(app, db_session, monkeypatch):
     assert json.loads(submission.platform_json) == payload["platform"]
 
 
+def test_receiver_requires_authentication_by_default():
+    assert telemetry_receiver.TELEMETRY_INGEST_REQUIRE_AUTH is True
+
+
+def test_receiver_limits_body_without_content_length(app, monkeypatch):
+    monkeypatch.setattr(telemetry_receiver, "TELEMETRY_INGEST_REQUIRE_AUTH", False)
+    monkeypatch.setattr(telemetry_receiver, "TELEMETRY_MAX_PAYLOAD_BYTES", 16)
+    telemetry_receiver._request_buckets.clear()
+    with app.test_request_context(
+        "/api/telemetry",
+        method="POST",
+        data=b"{" + (b"x" * 64) + b"}",
+        content_type="application/json",
+        environ_overrides={"wsgi.input_terminated": True},
+    ):
+        telemetry_receiver.request.environ.pop("CONTENT_LENGTH", None)
+        _, status = _response_status(telemetry_receiver.receive_telemetry())
+    assert status == 413
+
+
 def test_receiver_deduplicates_retried_payload(app, db_session, monkeypatch):
     monkeypatch.setattr(telemetry_receiver, "TELEMETRY_INGEST_REQUIRE_AUTH", False)
     telemetry_receiver._request_buckets.clear()
@@ -539,6 +559,14 @@ def test_accept_and_opt_out_update_single_instance_setting(
     accepted = client.post(
         "/api/v2/telemetry/accept", headers=admin_auth_headers
     )
+    if config.is_saas():
+        assert accepted.status_code == 403
+        disabled = client.post(
+            "/api/v2/telemetry/opt-out", headers=admin_auth_headers
+        )
+        assert disabled.status_code == 403
+        return
+
     assert accepted.status_code == 200
     assert db.session.get(TelemetrySettings, 1).state == "enabled"
 
