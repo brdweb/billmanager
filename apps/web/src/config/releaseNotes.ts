@@ -50,6 +50,21 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.10.0',
+    date: '2026-08-24',
+    title: 'Ecosystem Migrations',
+    sections: [
+      {
+        heading: 'Major Library Upgrades',
+        items: [
+          'Validated Mantine 9, Vite 8, Vitest 4, and TypeScript 6 across the supported frontend surfaces',
+          'Validated Stripe 15 and Gunicorn 26 for the administration service',
+          'Updated compatibility tests and completed audit, production build, and container verification for the migrations',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.9.0',
     date: '2026-08-24',
     title: 'Runtime Modernization',

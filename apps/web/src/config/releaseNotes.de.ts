@@ -2,6 +2,21 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.10.0',
+    date: '2026-08-24',
+    title: 'Ökosystem-Migrationen',
+    sections: [
+      {
+        heading: 'Große Bibliotheksaktualisierungen',
+        items: [
+          'Mantine 9, Vite 8, Vitest 4 und TypeScript 6 wurden für die unterstützten Frontend-Oberflächen validiert',
+          'Stripe 15 und Gunicorn 26 wurden für den Verwaltungsdienst validiert',
+          'Kompatibilitätstests sowie Audit-, Produktions-Build- und Containerprüfungen wurden für die Migrationen aktualisiert',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.9.0',
     date: '2026-08-24',
     title: 'Modernisierte Laufzeitumgebung',
