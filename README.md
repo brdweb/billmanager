@@ -10,15 +10,15 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.9.0
+## 🎉 What's New in v4.10.0
 
-**Runtime Modernization** - Production and development builds now use the supported Node 24 LTS and Python 3.14 runtime baseline.
+**Ecosystem Migrations** - The supported frontend and service libraries now use their current major release lines.
 
 ### Highlights
 
-- **Current Runtimes** - Node 24 LTS and Python 3.14 are the supported container and CI baseline
-- **Consistent Builds** - Engine constraints prevent accidental builds with unsupported Node releases
-- **Release Verification** - Backend, web, mobile, security, and multi-architecture container checks gate published images
+- **Modern Frontend** - Mantine 9, Vite 8, Vitest 4, and TypeScript 6 form the validated frontend baseline
+- **Current Services** - Stripe 15 and Gunicorn 26 are validated for the administration service
+- **Migration Coverage** - Automated tests, audits, production builds, and containers verify the major-version transitions
 
 ---
 
