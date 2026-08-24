@@ -59,7 +59,7 @@ flask-talisman==1.1.0
     # via -r apps/server/requirements.txt
 greenlet==3.5.5
     # via sqlalchemy
-gunicorn==26.0.0
+gunicorn==26.1.0
     # via -r apps/server/requirements.txt
 idna==3.19
     # via requests
@@ -95,7 +95,6 @@ packageurl-python==0.17.6
     # via cyclonedx-python-lib
 packaging==26.3
     # via
-    #   gunicorn
     #   limits
     #   pip-audit
     #   pip-requirements-parser
@@ -108,7 +107,7 @@ pip-audit==2.10.1
     # via -r apps/server/requirements.txt
 pip-requirements-parser==32.0.1
     # via pip-audit
-platformdirs==4.11.3
+platformdirs==4.11.4
     # via pip-audit
 pluggy==1.6.0
     # via
@@ -157,7 +156,7 @@ requests==2.34.2
     #   resend
     #   responses
     #   stripe
-resend==2.36.0
+resend==2.39.0
     # via -r apps/server/requirements.txt
 responses==0.26.2
     # via -r apps/server/requirements.txt
@@ -173,7 +172,7 @@ sqlalchemy==2.0.52
     #   flask-sqlalchemy
 stevedore==5.9.1
     # via bandit
-stripe==15.5.0
+stripe==15.5.1
     # via -r apps/server/requirements.txt
 tomli==2.4.1
     # via pip-audit

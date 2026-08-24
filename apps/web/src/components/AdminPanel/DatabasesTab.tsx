@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Stack,
   Table,
@@ -43,11 +43,7 @@ export function DatabasesTab() {
   const [editDescription, setEditDescription] = useState('');
   const [editLoading, setEditLoading] = useState(false);
 
-  useEffect(() => {
-    fetchDatabases();
-  }, []);
-
-  const fetchDatabases = async () => {
+  const fetchDatabases = useCallback(async () => {
     setLoading(true);
     try {
       const response = await getDatabases();
@@ -63,7 +59,11 @@ export function DatabasesTab() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
+
+  useEffect(() => {
+    void fetchDatabases();
+  }, [fetchDatabases]);
 
   const handleAddDatabase = async () => {
     if (!newName || !newDisplayName) {
