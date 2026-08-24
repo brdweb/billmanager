@@ -50,6 +50,21 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.9.0',
+    date: '2026-08-24',
+    title: 'Runtime Modernization',
+    sections: [
+      {
+        heading: 'Build and Runtime Support',
+        items: [
+          'Standardized production and development builds on Node 24 LTS and Python 3.14',
+          'Added explicit Node engine constraints to prevent unsupported build environments',
+          'Validated the complete application and multi-architecture container build on the modern runtime baseline',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.8.0',
     date: '2026-08-24',
     title: 'Dependency Security Baseline',

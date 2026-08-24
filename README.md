@@ -10,14 +10,14 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.8.0
+## 🎉 What's New in v4.9.0
 
-**Dependency Security Baseline** - The supported web, mobile, Python, and container toolchains have been validated against their current secure release lines.
+**Runtime Modernization** - Production and development builds now use the supported Node 24 LTS and Python 3.14 runtime baseline.
 
 ### Highlights
 
-- **Current Secure Libraries** - The web and Python dependency audits complete without known vulnerabilities
-- **Supported Toolchains** - Node 24 LTS, Expo SDK 57, React Native 0.86, Mantine 9, and Vite 8 remain the validated build baseline
+- **Current Runtimes** - Node 24 LTS and Python 3.14 are the supported container and CI baseline
+- **Consistent Builds** - Engine constraints prevent accidental builds with unsupported Node releases
 - **Release Verification** - Backend, web, mobile, security, and multi-architecture container checks gate published images
 
 ---
