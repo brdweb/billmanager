@@ -10,15 +10,15 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.10.0
+## 🎉 What's New in v4.11.0
 
-**Ecosystem Migrations** - The supported frontend and service libraries now use their current major release lines.
+**Deterministic Dependencies** - Application builds now use an exact, reviewable Python dependency lock.
 
 ### Highlights
 
-- **Modern Frontend** - Mantine 9, Vite 8, Vitest 4, and TypeScript 6 form the validated frontend baseline
-- **Current Services** - Stripe 15 and Gunicorn 26 are validated for the administration service
-- **Migration Coverage** - Automated tests, audits, production builds, and containers verify the major-version transitions
+- **Reproducible Backend Builds** - The server, CI, audits, and container image install the same exact Python dependency graph
+- **Lockfile Enforcement** - CI verifies that the committed lockfile matches the declared requirements
+- **Automated Maintenance** - Grouped Dependabot updates cover npm, Python, Docker, and GitHub Actions dependencies
 
 ---
 

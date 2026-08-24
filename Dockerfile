@@ -24,8 +24,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python requirements and install
-COPY apps/server/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY apps/server/requirements.lock .
+RUN pip install --no-cache-dir -r requirements.lock
 
 # Copy only the backend application. Local repository files and credentials
 # must never become part of the runtime image.

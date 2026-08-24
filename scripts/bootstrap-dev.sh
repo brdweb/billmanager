@@ -43,7 +43,7 @@ setup_backend() {
   # Install backend Python dependencies into the repo-local virtualenv.
   source "${VENV_DIR}/bin/activate"
   python -m pip install --upgrade pip
-  pip install -r "${ROOT_DIR}/apps/server/requirements.txt"
+  pip install -r "${ROOT_DIR}/apps/server/requirements.lock"
 }
 
 setup_node_workspace() {

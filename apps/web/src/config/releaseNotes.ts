@@ -50,6 +50,21 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.11.0',
+    date: '2026-08-24',
+    title: 'Deterministic Dependencies',
+    sections: [
+      {
+        heading: 'Build Reliability',
+        items: [
+          'Added an exact Python dependency lock shared by local setup, CI security audits, and production container builds',
+          'Added a CI consistency check that prevents declared requirements and the committed lockfile from drifting',
+          'Enabled grouped Dependabot maintenance for npm, Python, Docker, and GitHub Actions dependencies',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.10.0',
     date: '2026-08-24',
     title: 'Ecosystem Migrations',

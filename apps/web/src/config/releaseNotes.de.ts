@@ -2,6 +2,21 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.11.0',
+    date: '2026-08-24',
+    title: 'Deterministische Abhängigkeiten',
+    sections: [
+      {
+        heading: 'Zuverlässige Builds',
+        items: [
+          'Eine exakte Python-Abhängigkeitssperre wird jetzt für lokale Einrichtung, CI-Sicherheitsaudits und Produktions-Container-Builds verwendet',
+          'Eine CI-Konsistenzprüfung verhindert Abweichungen zwischen den deklarierten Anforderungen und der eingecheckten Sperrdatei',
+          'Gruppierte Dependabot-Aktualisierungen pflegen npm-, Python-, Docker- und GitHub-Actions-Abhängigkeiten',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.10.0',
     date: '2026-08-24',
     title: 'Ökosystem-Migrationen',

@@ -42,12 +42,20 @@ jobs:
         with:
           python-version: '3.14'
           cache: 'pip'
-          cache-dependency-path: apps/server/requirements.txt
+          cache-dependency-path: apps/server/requirements.lock
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Verify Python dependency lock
+        run: |
+          uv pip compile apps/server/requirements.txt --python-version 3.14 --no-header --output-file /tmp/requirements.lock
+          diff -u apps/server/requirements.lock /tmp/requirements.lock
 
       - name: Install Python dependencies
         run: |
           cd apps/server
-          pip install -r requirements.txt
+          pip install -r requirements.lock
 
       - name: Run pytest (self-hosted)
         env:
@@ -70,7 +78,7 @@ jobs:
 
       - name: Run pip-audit
         run: |
-          pip-audit -r apps/server/requirements.txt
+          pip-audit -r apps/server/requirements.lock
 
   test-frontend:
     name: Frontend Tests & Security
