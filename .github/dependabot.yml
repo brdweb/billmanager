@@ -12,7 +12,7 @@ updates:
       - dependency-name: typescript
         versions: [">=7.0.0"]
       - dependency-name: "@types/node"
-        versions: [">=26.0.0"]
+        versions: [">=25.0.0"]
   - package-ecosystem: npm
     directory: /apps/mobile
     schedule:
@@ -32,6 +32,10 @@ updates:
       - dependency-name: "react-native*"
       - dependency-name: "@react-native-community/*"
       - dependency-name: "@shopify/react-native-skia"
+      - dependency-name: "@shopify/flash-list"
+      # image-size 2.x removes the API used by Metro's asset parser.
+      - dependency-name: image-size
+        versions: [">=2.0.0"]
       - dependency-name: typescript
         versions: [">=7.0.0"]
   - package-ecosystem: pip
@@ -47,7 +51,7 @@ updates:
       interval: weekly
     ignore:
       - dependency-name: node
-        versions: [">=26.0.0"]
+        versions: [">=25.0.0"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
