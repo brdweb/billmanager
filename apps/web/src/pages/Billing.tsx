@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import {
   Container,
@@ -50,16 +50,7 @@ export function Billing() {
   const [actionLoading, setActionLoading] = useState(false);
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('monthly');
 
-  useEffect(() => {
-    // Self-hosted servers don't have subscription management
-    if (isSelfHosted) {
-      setLoading(false);
-      return;
-    }
-    fetchData();
-  }, [isSelfHosted]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [statusRes, usageRes] = await Promise.all([
         api.getSubscriptionStatus(),
@@ -72,7 +63,16 @@ export function Billing() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
+
+  useEffect(() => {
+    // Self-hosted servers don't have subscription management
+    if (isSelfHosted) {
+      setLoading(false);
+      return;
+    }
+    void fetchData();
+  }, [fetchData, isSelfHosted]);
 
   const handleSubscribe = async (tier: 'basic' | 'plus') => {
     setActionLoading(true);

@@ -7,6 +7,12 @@ updates:
     groups:
       web-dependencies:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: typescript
+        versions: [">=7.0.0"]
+      - dependency-name: "@types/node"
+        versions: [">=26.0.0"]
   - package-ecosystem: npm
     directory: /apps/mobile
     schedule:
@@ -14,6 +20,20 @@ updates:
     groups:
       mobile-dependencies:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+    # Expo SDK controls the compatible native dependency matrix. Upgrade
+    # these packages through `npx expo install`, not independent bot PRs.
+    ignore:
+      - dependency-name: expo
+      - dependency-name: "expo-*"
+      - dependency-name: "@expo/*"
+      - dependency-name: react
+      - dependency-name: react-dom
+      - dependency-name: "react-native*"
+      - dependency-name: "@react-native-community/*"
+      - dependency-name: "@shopify/react-native-skia"
+      - dependency-name: typescript
+        versions: [">=7.0.0"]
   - package-ecosystem: pip
     directory: /apps/server
     schedule:
@@ -25,6 +45,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: node
+        versions: [">=26.0.0"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

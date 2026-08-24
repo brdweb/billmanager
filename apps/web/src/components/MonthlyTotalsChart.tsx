@@ -27,50 +27,52 @@ export function MonthlyTotalsChart({ opened, onClose }: MonthlyTotalsChartProps)
   const [monthRange, setMonthRange] = useState<string>('12');
 
   useEffect(() => {
-    if (opened) {
-      fetchData();
-      window.umami?.track('view_spending_trends');
+    if (!opened) {
+      return;
     }
-  }, [opened]);
 
-  const fetchData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await getMonthlyPayments();
-      const monthlyData = response ?? {};
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await getMonthlyPayments();
+        const monthlyData = response ?? {};
 
-      // Generate last 12 months of data
-      const months: ChartData[] = [];
-      const now = new Date();
+        // Generate last 12 months of data
+        const months: ChartData[] = [];
+        const now = new Date();
 
-      for (let i = 11; i >= 0; i--) {
-        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const key = `${year}-${month}`;
-        const label = date.toLocaleDateString(getLocale(), { month: 'short', year: '2-digit' });
+        for (let i = 11; i >= 0; i--) {
+          const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const key = `${year}-${month}`;
+          const label = date.toLocaleDateString(getLocale(), { month: 'short', year: '2-digit' });
 
-        // API returns {deposits, expenses} per month - use expenses for spending trends
-        const monthData = monthlyData[key];
-        const total = monthData ? monthData.expenses : 0;
+          // API returns {deposits, expenses} per month - use expenses for spending trends
+          const monthData = monthlyData[key];
+          const total = monthData ? monthData.expenses : 0;
 
-        months.push({
-          month: key,
-          label,
-          total,
-        });
+          months.push({
+            month: key,
+            label,
+            total,
+          });
+        }
+
+        setData(months);
+      } catch (err) {
+        const message = err instanceof ApiError ? err.message : t('monthlyTotalsChart.errorLoadDefault');
+        setError(message);
+        setData([]);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      setData(months);
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : t('monthlyTotalsChart.errorLoadDefault');
-      setError(message);
-      setData([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    void fetchData();
+    window.umami?.track('view_spending_trends');
+  }, [opened, t]);
 
   // Filter data based on selected range
   const displayData = monthRange === '6' ? data.slice(-6) : data;

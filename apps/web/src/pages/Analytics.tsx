@@ -214,34 +214,36 @@ export function Analytics({ hasDatabase, currentDb }: AnalyticsProps) {
   }, [layout, storageKey]);
 
   useEffect(() => {
-    if (hasDatabase) {
-      loadData();
+    if (!hasDatabase) {
+      return;
     }
-  }, [hasDatabase, currentDb]);
 
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
+    const loadData = async () => {
+      setLoading(true);
+      setError(null);
 
-    try {
-      const [accounts, yearly, comparison, allPayments] = await Promise.all([
-        getStatsByAccount().catch(() => []),
-        getStatsYearly().catch(() => ({})),
-        getMonthlyComparison().catch(() => null),
-        getAllPayments().catch(() => []),
-      ]);
+      try {
+        const [accounts, yearly, comparison, allPayments] = await Promise.all([
+          getStatsByAccount().catch(() => []),
+          getStatsYearly().catch(() => ({})),
+          getMonthlyComparison().catch(() => null),
+          getAllPayments().catch(() => []),
+        ]);
 
-      setAccountStats(accounts);
-      setYearlyStats(yearly);
-      setMonthlyComparison(comparison);
-      setPayments(Array.isArray(allPayments) ? allPayments : []);
-    } catch (err) {
-      setError(t('analyticsPage.loadFailed'));
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+        setAccountStats(accounts);
+        setYearlyStats(yearly);
+        setMonthlyComparison(comparison);
+        setPayments(Array.isArray(allPayments) ? allPayments : []);
+      } catch (err) {
+        setError(t('analyticsPage.loadFailed'));
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void loadData();
+  }, [currentDb, hasDatabase, t]);
 
   const trend = useMemo(() => {
     const now = new Date();
