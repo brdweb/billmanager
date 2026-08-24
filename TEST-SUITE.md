@@ -138,7 +138,7 @@ cat /tmp/billmanager-test-results/flask.log
 ```
 
 Common issues:
-- Missing dependencies: `pip install -r apps/server/requirements.txt`
+- Missing dependencies: `pip install -r apps/server/requirements.lock`
 - Database connection: Verify `DATABASE_URL`
 - Port conflict: Kill process on 5001
 

@@ -70,7 +70,7 @@ bandit:
 	cd apps/server && ../../$(VENV)/bin/bandit -r . -x tests -c bandit.yaml -f txt
 
 pip-audit:
-	timeout $(PIP_AUDIT_TIMEOUT) bash -lc 'source $(VENV)/bin/activate && pip-audit -r apps/server/requirements.txt'
+	timeout $(PIP_AUDIT_TIMEOUT) bash -lc 'source $(VENV)/bin/activate && pip-audit -r apps/server/requirements.lock'
 
 test-db-up:
 	@./scripts/test-backend.sh --db-only

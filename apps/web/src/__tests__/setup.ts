@@ -4,7 +4,6 @@
  */
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
-import '../i18n'
 
 // Mock window.matchMedia for components that use media queries
 Object.defineProperty(window, 'matchMedia', {
@@ -53,6 +52,10 @@ const localStorageMock = {
   clear: vi.fn(),
 }
 Object.defineProperty(window, 'localStorage', { value: localStorageMock })
+
+// Initialize i18n only after the storage API has been installed. Newer Node
+// releases expose an incomplete localStorage shim unless a backing file is set.
+await import('../i18n')
 
 // Mock scrollTo
 window.scrollTo = vi.fn()
