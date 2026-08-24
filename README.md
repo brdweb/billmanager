@@ -10,15 +10,15 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.7.6
+## 🎉 What's New in v4.8.0
 
-**Security Hardening** - Authentication, OAuth, sharing, deployment, telemetry, and export boundaries now fail closed against the validated Codex Security findings.
+**Dependency Security Baseline** - The supported web, mobile, Python, and container toolchains have been validated against their current secure release lines.
 
 ### Highlights
 
-- **Safer Sessions and OAuth** - One-time credentials are consumed atomically, password changes revoke old sessions, and OAuth secrets remain server-side
-- **Stronger Authorization** - Share recipients, SaaS tenant administrators, telemetry controls, and push fan-out respect their intended boundaries
-- **Hardened Deployments and Exports** - Production secrets fail closed, pull requests cannot publish images, and HTML/CSV exports neutralize injected content
+- **Current Secure Libraries** - The web and Python dependency audits complete without known vulnerabilities
+- **Supported Toolchains** - Node 24 LTS, Expo SDK 57, React Native 0.86, Mantine 9, and Vite 8 remain the validated build baseline
+- **Release Verification** - Backend, web, mobile, security, and multi-architecture container checks gate published images
 
 ---
 

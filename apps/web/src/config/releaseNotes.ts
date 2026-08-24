@@ -50,6 +50,21 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.8.0',
+    date: '2026-08-24',
+    title: 'Dependency Security Baseline',
+    sections: [
+      {
+        heading: 'Security and Maintenance',
+        items: [
+          'Validated the supported web and Python dependency trees without known audit findings',
+          'Kept Node 24 LTS, Expo SDK 57, React Native 0.86, Mantine 9, and Vite 8 as the supported build baseline',
+          'Required backend, web, mobile, security, and container validation before publishing the release image',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.6',
     date: '2026-08-15',
     title: 'Security Hardening',
