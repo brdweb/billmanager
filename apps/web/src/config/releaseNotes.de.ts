@@ -2,6 +2,21 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.8.0',
+    date: '2026-08-24',
+    title: 'Sichere Abhängigkeitsbasis',
+    sections: [
+      {
+        heading: 'Sicherheit und Wartung',
+        items: [
+          'Die unterstützten Web- und Python-Abhängigkeiten wurden ohne bekannte Sicherheitsfunde validiert',
+          'Node 24 LTS, Expo SDK 57, React Native 0.86, Mantine 9 und Vite 8 bleiben die unterstützte Build-Basis',
+          'Backend-, Web-, Mobil-, Sicherheits- und Containerprüfungen sind vor der Veröffentlichung des Release-Images erforderlich',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.7.6',
     date: '2026-08-15',
     title: 'Sicherheitsverstärkung',
