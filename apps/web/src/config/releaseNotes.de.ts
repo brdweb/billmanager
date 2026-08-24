@@ -2,6 +2,21 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.9.0',
+    date: '2026-08-24',
+    title: 'Modernisierte Laufzeitumgebung',
+    sections: [
+      {
+        heading: 'Build- und Laufzeitunterstützung',
+        items: [
+          'Produktions- und Entwicklungs-Builds wurden auf Node 24 LTS und Python 3.14 vereinheitlicht',
+          'Explizite Node-Engine-Vorgaben verhindern Builds mit nicht unterstützten Laufzeitversionen',
+          'Die vollständige Anwendung und der Multi-Architektur-Container-Build wurden mit der modernen Laufzeitbasis validiert',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.8.0',
     date: '2026-08-24',
     title: 'Sichere Abhängigkeitsbasis',
