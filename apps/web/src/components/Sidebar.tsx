@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import type { Bill } from '../api/client';
 import type { BillFilter, DateRangeFilter } from '../App';
+import { projectUpcomingBills } from '../utils/upcomingBills';
 
 interface SidebarProps {
   bills: Bill[];
@@ -51,11 +52,9 @@ export function Sidebar({ bills, isLoggedIn, filter, onFilterChange }: SidebarPr
     const end21 = new Date(today.getTime() + 21 * oneDay);
     const end30 = new Date(today.getTime() + 30 * oneDay);
 
+    const activeBills = bills.filter((bill) => !bill.archived);
     const countInRange = (start: Date, end: Date) =>
-      bills.filter((b) => {
-        const due = parseDate(b.next_due);
-        return due >= start && due < end && !b.archived;
-      }).length;
+      projectUpcomingBills(activeBills, start, end).length;
 
     const countOverdue = () =>
       bills.filter((b) => {

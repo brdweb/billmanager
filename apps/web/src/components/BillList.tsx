@@ -399,7 +399,7 @@ export function BillList({
           <Table.Tbody>
             {paginatedBills.map((bill) => (
               <Table.Tr
-                key={bill.id}
+                key={`${bill.database_id ?? 'default'}-${bill.id}-${bill.next_due}`}
                 style={{
                   cursor: 'pointer',
                   opacity: bill.archived ? 0.6 : 1,

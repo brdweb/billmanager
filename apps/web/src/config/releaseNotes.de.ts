@@ -2,6 +2,21 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.12.0',
+    date: '2026-08-26',
+    title: 'Vollständige Übersicht anstehender Termine',
+    sections: [
+      {
+        heading: 'Anstehende Rechnungen',
+        items: [
+          'Datumsfilter zeigen jetzt jedes wiederkehrende Rechnungs- und Einzahlungsvorkommen innerhalb des ausgewählten Zeitraums an',
+          'Wöchentliche, zweiwöchentliche, monatliche, vierteljährliche, jährliche und benutzerdefinierte Zeitpläne werden ab dem nächsten Fälligkeitsdatum hochgerechnet',
+          'Die Zähler in der Seitenleiste berücksichtigen hochgerechnete Termine, während Bearbeitungs- und Zahlungsaktionen mit dem zugrunde liegenden wiederkehrenden Eintrag verknüpft bleiben',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.11.0',
     date: '2026-08-24',
     title: 'Deterministische Abhängigkeiten',

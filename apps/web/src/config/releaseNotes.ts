@@ -50,6 +50,21 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.12.0',
+    date: '2026-08-26',
+    title: 'Complete Upcoming Schedules',
+    sections: [
+      {
+        heading: 'Upcoming Bills',
+        items: [
+          'Upcoming date filters now show every recurring bill and deposit occurrence inside the selected window',
+          'Weekly, biweekly, monthly, quarterly, yearly, and custom schedules are projected from their next due date',
+          'Sidebar counts include projected occurrences while edit and payment actions remain tied to the underlying recurring entry',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.11.0',
     date: '2026-08-24',
     title: 'Deterministic Dependencies',

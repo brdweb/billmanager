@@ -10,15 +10,15 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.11.0
+## 🎉 What's New in v4.12.0
 
-**Deterministic Dependencies** - Application builds now use an exact, reviewable Python dependency lock.
+**Complete Upcoming Schedules** - Upcoming views now show every planned recurring bill and deposit occurrence in the selected window.
 
 ### Highlights
 
-- **Reproducible Backend Builds** - The server, CI, audits, and container image install the same exact Python dependency graph
-- **Lockfile Enforcement** - CI verifies that the committed lockfile matches the declared requirements
-- **Automated Maintenance** - Grouped Dependabot updates cover npm, Python, Docker, and GitHub Actions dependencies
+- **Complete Projections** - Weekly, bi-weekly, monthly, and other recurring schedules appear as many times as they occur in the selected period
+- **Accurate Counts** - Upcoming sidebar totals include every projected bill and deposit occurrence
+- **Safe Actions** - Editing or recording a payment still targets the original recurring entry rather than a projected display row
 
 ---
 

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { projectUpcomingBills } from './utils/upcomingBills';
 import { Stack, Loader, Center, Divider, Text, Anchor } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -201,13 +202,7 @@ function App() {
             endDate = new Date(today.getTime() + 365 * oneDay);
         }
 
-        result = result.filter((bill) => {
-          // Parse date directly to avoid timezone issues
-          const [year, month, day] = bill.next_due.split('-').map(Number);
-          const dueDate = new Date(year, month - 1, day);
-          dueDate.setHours(0, 0, 0, 0);
-          return dueDate >= startDate && dueDate < endDate;
-        });
+        result = projectUpcomingBills(result, startDate, endDate);
       }
     }
 
@@ -290,13 +285,17 @@ function App() {
     openBillModal();
   };
 
+  const resolveStoredBill = (bill: Bill) => bills.find((storedBill) => (
+    storedBill.id === bill.id && storedBill.database_id === bill.database_id
+  )) ?? bill;
+
   const handleEditBill = (bill: Bill) => {
-    setCurrentBill(bill);
+    setCurrentBill(resolveStoredBill(bill));
     openBillModal();
   };
 
   const handlePayBill = (bill: Bill) => {
-    setCurrentBill(bill);
+    setCurrentBill(resolveStoredBill(bill));
     openPayModal();
   };
 
