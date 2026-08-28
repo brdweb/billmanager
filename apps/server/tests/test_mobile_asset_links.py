@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import app as server_app
+
 
 ASSET_LINKS_PATH = (
     Path(__file__).resolve().parents[2]
@@ -30,3 +32,28 @@ def test_android_asset_links_trusts_release_signing_certificate():
             },
         }
     ]
+
+
+def test_association_routes_use_built_frontend_files(monkeypatch, tmp_path):
+    dist_dir = tmp_path / "dist"
+    well_known_dir = dist_dir / ".well-known"
+    well_known_dir.mkdir(parents=True)
+    asset_links = [{"source": "built-frontend"}]
+    (well_known_dir / "assetlinks.json").write_text(
+        json.dumps(asset_links), encoding="utf-8"
+    )
+    (well_known_dir / "apple-app-site-association").write_text(
+        json.dumps({"source": "built-frontend"}), encoding="utf-8"
+    )
+    monkeypatch.setattr(server_app, "get_client_dir", lambda: str(dist_dir))
+
+    with server_app.app.test_request_context():
+        android_response = server_app.android_asset_links()
+        ios_response = server_app.apple_app_site_association()
+        android_response.direct_passthrough = False
+        ios_response.direct_passthrough = False
+
+    assert android_response.status_code == 200
+    assert android_response.get_json() == asset_links
+    assert ios_response.status_code == 200
+    assert ios_response.get_json() == {"source": "built-frontend"}

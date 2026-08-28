@@ -21,6 +21,8 @@ Thumbs.db
 .vscode/
 .claude/
 .opencode/
+/.omo/
+/opencode.json
 CLAUDE.md
 
 # Data and backup directories

@@ -50,6 +50,21 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.12.1',
+    date: '2026-08-27',
+    title: 'Reliable Mobile Passkeys',
+    sections: [
+      {
+        heading: 'Bug Fixes',
+        items: [
+          'Android Digital Asset Links are now served from the production frontend build used by the container image',
+          'Apple app-site association files use the same production-safe path resolution',
+          'Passkey verification failures now identify common configuration and credential problems more clearly',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.12.0',
     date: '2026-08-26',
     title: 'Complete Upcoming Schedules',
