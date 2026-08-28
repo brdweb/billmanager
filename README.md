@@ -10,15 +10,15 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.12.0
+## 🎉 What's New in v4.12.1
 
-**Complete Upcoming Schedules** - Upcoming views now show every planned recurring bill and deposit occurrence in the selected window.
+**Reliable Mobile Passkeys** - Android and iOS association files are now served from the production frontend build, matching the paths packaged into the container image.
 
 ### Highlights
 
-- **Complete Projections** - Weekly, bi-weekly, monthly, and other recurring schedules appear as many times as they occur in the selected period
-- **Accurate Counts** - Upcoming sidebar totals include every projected bill and deposit occurrence
-- **Safe Actions** - Editing or recording a payment still targets the original recurring entry rather than a projected display row
+- **Android Association** - The Digital Asset Links endpoint is available from the production container for Credential Manager verification
+- **iOS Association** - The Apple association endpoint uses the same production-safe path resolution
+- **Clear Diagnostics** - Passkey failures distinguish origin, RP ID, challenge, signature, sign-count, and payload problems
 
 ---
 

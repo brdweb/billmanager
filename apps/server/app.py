@@ -7735,11 +7735,29 @@ def twofa_verify():
             verified = True
         except Exception as e:
             logger.error(f"Passkey verification failed: {e}")
+            error_text = str(e).lower()
+            if "origin" in error_text:
+                message = "Passkey origin mismatch. Check WEBAUTHN_ORIGIN and WEBAUTHN_ANDROID_ORIGINS."
+            elif "rp id" in error_text or "rp_id" in error_text:
+                message = "Passkey RP ID mismatch. Check WEBAUTHN_RP_ID."
+            elif "challenge" in error_text:
+                message = "Passkey challenge expired. Please try again."
+            elif "signature" in error_text:
+                message = "Passkey signature verification failed. Try re-registering your passkey."
+            elif "sign count" in error_text:
+                message = "Passkey sign count check failed. Try re-registering your passkey."
+            elif (
+                "malformed" in error_text
+                or "validation" in error_text
+                or "field required" in error_text
+                or "invalid credential payload" in error_text
+            ):
+                message = "Passkey payload was invalid. Try updating your app or password manager and retry."
+            else:
+                message = "Passkey verification failed"
             challenge.attempts += 1
             db.session.commit()
-            return jsonify(
-                {"success": False, "error": "Passkey verification failed"}
-            ), 400
+            return jsonify({"success": False, "error": message}), 400
 
     elif method == "recovery":
         recovery_code = data.get("recovery_code")
@@ -9943,6 +9961,16 @@ def get_client_dir():
     return os.path.join(os.path.dirname(__file__), "..", "web")
 
 
+def get_well_known_dir():
+    """Return built association files in production, or their source in development."""
+    built_dir = os.path.join(get_client_dir(), ".well-known")
+    if os.path.isdir(built_dir):
+        return built_dir
+    return os.path.join(
+        os.path.dirname(__file__), "..", "web", "public", ".well-known"
+    )
+
+
 @spa_bp.route("/", methods=["GET"])
 def index():
     return send_from_directory(get_client_dir(), "index.html")
@@ -9951,20 +9979,14 @@ def index():
 @spa_bp.route("/.well-known/assetlinks.json", methods=["GET"])
 def android_asset_links():
     """Publish the signed Android app association for links and passkeys."""
-    asset_links_dir = os.path.join(
-        os.path.dirname(__file__), "..", "web", "public", ".well-known"
-    )
-    return send_from_directory(asset_links_dir, "assetlinks.json")
+    return send_from_directory(get_well_known_dir(), "assetlinks.json")
 
 
 @spa_bp.route("/.well-known/apple-app-site-association", methods=["GET"])
 def apple_app_site_association():
     """Publish the signed iOS association for universal links and passkeys."""
-    association_dir = os.path.join(
-        os.path.dirname(__file__), "..", "web", "public", ".well-known"
-    )
     return send_from_directory(
-        association_dir,
+        get_well_known_dir(),
         "apple-app-site-association",
         mimetype="application/json",
     )

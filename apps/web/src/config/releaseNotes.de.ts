@@ -2,6 +2,21 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.12.1',
+    date: '2026-08-27',
+    title: 'Zuverlässige mobile Passkeys',
+    sections: [
+      {
+        heading: 'Fehlerbehebungen',
+        items: [
+          'Android Digital Asset Links werden jetzt aus dem im Container verwendeten Produktions-Frontend-Build bereitgestellt',
+          'Apple-App-Site-Zuordnungen verwenden dieselbe produktionssichere Pfadauflösung',
+          'Fehler bei der Passkey-Überprüfung benennen häufige Konfigurations- und Anmeldeinformationsprobleme jetzt klarer',
+        ],
+      },
+    ],
+  },
+  {
     version: '4.12.0',
     date: '2026-08-26',
     title: 'Vollständige Übersicht anstehender Termine',
