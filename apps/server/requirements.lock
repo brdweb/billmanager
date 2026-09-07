@@ -156,7 +156,7 @@ requests==2.34.2
     #   resend
     #   responses
     #   stripe
-resend==2.42.0
+resend==2.43.0
     # via -r apps/server/requirements.txt
 responses==0.26.3
     # via -r apps/server/requirements.txt
