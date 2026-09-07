@@ -2246,9 +2246,7 @@ def stripe_webhook():
                         )
 
                     db.session.commit()
-                    logger.info(
-                        f"Subscription updated: {subscription_id} -> {status}, tier: {subscription.tier}"
-                    )
+                    logger.info("Subscription update processed")
 
     except Exception as e:
         logger.error(f"Webhook processing error: {e}")
