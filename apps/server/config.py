@@ -120,7 +120,9 @@ REQUIRE_EMAIL_VERIFICATION = (
     is_saas() or os.environ.get("REQUIRE_EMAIL_VERIFICATION", "false").lower() == "true"
 )
 
-# Billing: only enabled for SaaS when Stripe is configured
+# Trial provisioning reflects billing intent, not temporary checkout readiness.
+# Preserve trials during incomplete Stripe configuration; never use this flag
+# to authorize payment operations or advertise a ready billing capability.
 ENABLE_BILLING = is_saas() and bool(os.environ.get("STRIPE_SECRET_KEY"))
 
 # Registration: enabled for SaaS, disabled by default for self-hosted
@@ -345,10 +347,16 @@ WEBAUTHN_EXPECTED_ORIGINS = [WEBAUTHN_ORIGIN, *WEBAUTHN_ANDROID_ORIGINS]
 
 def get_public_config():
     """Return configuration safe to expose to the frontend."""
+    from services.stripe_service import get_billing_readiness
+    billing_readiness = get_billing_readiness()
     enabled_providers = get_enabled_oauth_providers()
     return {
         "deployment_mode": DEPLOYMENT_MODE,
-        "billing_enabled": ENABLE_BILLING,
+        "billing_enabled": billing_readiness["billing_enabled"],
+        "billing_readiness": {
+            "ready": billing_readiness["ready"],
+            "reason": billing_readiness["reason"],
+        },
         "registration_enabled": ENABLE_REGISTRATION,
         "email_enabled": EMAIL_ENABLED,
         "email_verification_required": REQUIRE_EMAIL_VERIFICATION,
@@ -388,6 +396,8 @@ def get_mobile_capabilities(enabled_providers=None):
     """Return the pre-auth compatibility and feature envelope for mobile apps."""
     if enabled_providers is None:
         enabled_providers = get_enabled_oauth_providers()
+    from services.stripe_service import get_billing_readiness
+    billing_enabled = get_billing_readiness()["billing_enabled"]
 
     return {
         "mobile_contract_version": MOBILE_CONTRACT_VERSION,
@@ -404,7 +414,7 @@ def get_mobile_capabilities(enabled_providers=None):
             "oauth": bool(enabled_providers),
             "email_otp": ENABLE_2FA,
             "passkeys": ENABLE_PASSKEYS,
-            "billing": ENABLE_BILLING,
+            "billing": billing_enabled,
             "administration": True,
             "sharing": True,
             "settlements": True,

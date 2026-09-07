@@ -148,7 +148,7 @@ def test_stripe_updated_uses_exact_configured_price(client, db_session, admin_us
     db_session.add(sub)
     db_session.commit()
     monkeypatch.setattr(config, 'STRIPE_PRICES', {'basic': {'monthly': 'price_opaque123'}})
-    monkeypatch.setattr(server, 'construct_webhook_event', lambda *args: {'type': 'customer.subscription.updated', 'data': {'object': {
+    monkeypatch.setattr(server, 'construct_webhook_event', lambda *args: {'id': 'evt_security', 'created': 1, 'type': 'customer.subscription.updated', 'data': {'object': {
         'id': 'sub_security', 'status': 'active', 'items': {'data': [{'price': {'id': price, 'recurring': {'interval': 'month'}}}]}}}})
     assert client.post('/api/v2/webhooks/stripe', headers={'Stripe-Signature': 'test'}, data='{}').status_code == 200
     db_session.refresh(sub)

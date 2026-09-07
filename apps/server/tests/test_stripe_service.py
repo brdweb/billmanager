@@ -36,6 +36,7 @@ def test_checkout_does_not_fall_back_to_legacy_price(monkeypatch):
     monkeypatch.setattr(stripe_service, "STRIPE_AVAILABLE", True)
     monkeypatch.setattr(stripe_service, "STRIPE_SECRET_KEY", "sk_test")
     monkeypatch.setattr(stripe_service, "STRIPE_PRICE_ID", "price_legacy")
+    monkeypatch.setattr(stripe_service, "get_billing_readiness", lambda: {"billing_enabled": True})
     monkeypatch.setattr(stripe_service, "get_stripe_price_id", lambda tier, interval: None)
 
     result = stripe_service.create_checkout_session(

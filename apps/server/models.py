@@ -454,6 +454,7 @@ class Subscription(db.Model):
 
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=lambda: datetime.now(timezone.utc))
+    stripe_last_event_created = db.Column(db.Integer, nullable=True)
 
     # Relationship
     user = db.relationship('User', backref=db.backref('subscription', uselist=False))
@@ -526,6 +527,15 @@ class Subscription(db.Model):
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         period_end = self.current_period_end.replace(tzinfo=None) if self.current_period_end.tzinfo else self.current_period_end
         return now < period_end
+
+
+class StripeWebhookEvent(db.Model):
+    """Durable idempotency ledger for successfully handled Stripe events."""
+    __tablename__ = 'stripe_webhook_events'
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.String(255), unique=True, nullable=False)
+    event_created = db.Column(db.Integer, nullable=True)
+    processed_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
 class TelemetryLog(db.Model):

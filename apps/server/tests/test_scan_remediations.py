@@ -291,6 +291,8 @@ def test_stripe_webhook_derives_entitlement_from_paid_price(
         app_module,
         "construct_webhook_event",
         lambda payload, signature: {
+            "id": "evt_checkout_entitlement",
+            "created": 1,
             "type": "checkout.session.completed",
             "data": {
                 "object": {

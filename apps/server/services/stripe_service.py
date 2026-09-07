@@ -3,6 +3,7 @@ Stripe billing service for subscription management.
 """
 import os
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,45 @@ try:
 except ImportError:
     get_stripe_price_id = lambda t, i: None
     STRIPE_PRICES = {}
+
+_last_readiness_log = 0.0
+
+
+def get_billing_readiness():
+    """Return sanitized, shared Stripe readiness and capability state."""
+    from config import DEPLOYMENT_MODE
+
+    missing = get_missing_billing_configuration()
+    ready = not missing
+    if DEPLOYMENT_MODE == "self-hosted":
+        return {"ready": ready, "billing_enabled": False, "reason": "self_hosted"}
+    return {"ready": ready, "billing_enabled": ready, "reason": "ready" if ready else "incomplete"}
+
+
+def get_missing_billing_configuration():
+    """Return non-secret configuration names for operator logs only."""
+    missing = []
+    if not STRIPE_AVAILABLE:
+        missing.append("sdk")
+    if not STRIPE_SECRET_KEY:
+        missing.append("api_key")
+    if not STRIPE_WEBHOOK_SECRET:
+        missing.append("webhook_secret")
+    for tier in ("basic", "plus"):
+        for interval in ("monthly", "annual"):
+            if not STRIPE_PRICES.get(tier, {}).get(interval):
+                missing.append(f"{tier}.{interval}")
+    return missing
+
+
+def log_missing_billing_configuration():
+    """Rate-limit sanitized missing-configuration logs for operators."""
+    global _last_readiness_log
+    missing = get_missing_billing_configuration()
+    now = time.monotonic()
+    if missing and now - _last_readiness_log >= 60:
+        logger.warning("Stripe webhook unavailable; missing configuration: %s", ", ".join(missing))
+        _last_readiness_log = now
 
 
 def init_stripe():
@@ -56,10 +96,8 @@ def create_checkout_session(
 
     Returns dict with 'url' for redirect or 'error' on failure.
     """
-    if not STRIPE_AVAILABLE or not STRIPE_SECRET_KEY:
+    if not get_billing_readiness()["billing_enabled"]:
         return {'error': 'Stripe not configured'}
-
-    # Get the price ID for the selected tier and interval
     price_id = get_stripe_price_id(tier, interval)
 
     if not price_id:
@@ -142,7 +180,7 @@ def construct_webhook_event(payload: bytes, sig_header: str) -> dict:
     Returns the event object or dict with 'error'.
     """
     if not STRIPE_AVAILABLE or not STRIPE_WEBHOOK_SECRET:
-        return {'error': 'Webhook secret not configured'}
+        return {'error': 'Webhook secret not configured', 'error_code': 'configuration'}
 
     stripe.api_key = STRIPE_SECRET_KEY
 
@@ -151,12 +189,12 @@ def construct_webhook_event(payload: bytes, sig_header: str) -> dict:
             payload, sig_header, STRIPE_WEBHOOK_SECRET
         )
         return event
-    except ValueError as e:
-        logger.error(f"Invalid webhook payload: {e}")
-        return {'error': 'Invalid payload'}
-    except stripe.error.SignatureVerificationError as e:
-        logger.error(f"Invalid webhook signature: {e}")
-        return {'error': 'Invalid signature'}
+    except ValueError:
+        logger.error("Invalid webhook payload received")
+        return {'error': 'Invalid payload', 'error_code': 'invalid_payload'}
+    except stripe.error.SignatureVerificationError:
+        logger.error("Invalid webhook signature received")
+        return {'error': 'Invalid signature', 'error_code': 'invalid_signature'}
 
 
 def get_subscription(subscription_id: str) -> dict:
@@ -180,8 +218,8 @@ def get_subscription(subscription_id: str) -> dict:
             'canceled_at': subscription.canceled_at,
             'price_id': price_id,
         }
-    except stripe.error.StripeError as e:
-        logger.error(f"Stripe subscription error: {e}")
+    except stripe.error.StripeError:
+        logger.error("Stripe subscription retrieval failed")
         return {'error': 'Unable to retrieve subscription details.'}
 
 

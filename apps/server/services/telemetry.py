@@ -148,7 +148,8 @@ class TelemetryCollector:
 
     def collect_metrics(self) -> Dict[str, Any]:
         """Collect all anonymous usage metrics."""
-        from config import DEPLOYMENT_MODE, ENABLE_BILLING
+        from config import DEPLOYMENT_MODE
+        from services.stripe_service import get_billing_readiness
 
         try:
             if not self.instance_id:
@@ -175,7 +176,7 @@ class TelemetryCollector:
             }
 
             # Add subscription metrics only for SaaS deployments
-            if ENABLE_BILLING and DEPLOYMENT_MODE == 'saas':
+            if get_billing_readiness()["billing_enabled"] and DEPLOYMENT_MODE == 'saas':
                 metrics["metrics"]["subscriptions"] = self._get_subscription_metrics()
 
             # Deployment identifiers are only used to alert the operator about
