@@ -1,5 +1,7 @@
 import axios, { AxiosInstance, AxiosError, Method } from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import * as Crypto from 'expo-crypto';
+import { requestSecurityConfirmation } from '../services/securityConfirmation';
 import { ApiResponse, LoginResponse, Bill, Payment, SyncResponse, SyncPushRequest, SyncPushResponse, DeviceInfo, MonthlyStats, DatabaseInfo, AdminUser, Invitation, DatabaseWithAccess, User, SubscriptionStatus, BillingUsage, BillShare, SharedBill, PendingShare, UserSearchResult, SettlementsResponse } from '../types';
 import {
   PersistedServerProfile,
@@ -236,6 +238,45 @@ export class BillManagerApi {
         const requestProfileId = originalRequest?._serverProfileId as string | undefined;
         const requestRefreshToken = originalRequest?._refreshToken as string | null | undefined;
         const requestSessionGeneration = originalRequest?._sessionGeneration as number | undefined;
+        const confirmation = (error.response?.data as { security_confirmation?: { method: 'password' | 'email' | 'oidc'; purpose: string } })?.security_confirmation;
+        if (error.response?.status === 428 && confirmation && originalRequest && !originalRequest._confirmed) {
+          originalRequest._confirmed = true;
+          const isCurrent = () => requestProfileId === this.activeProfile.id && requestSessionGeneration === sessionGeneration(this.activeProfile.id);
+          if (!isCurrent()) throw new Error('The active account changed');
+          const binding = await this.authenticationBinding();
+          const config = this.authenticationRequestConfig(binding);
+          let challenge: string | undefined;
+          if (confirmation.method === 'email') {
+            const sent = await this.client.post('/auth/security-confirmation/send-code', { purpose: confirmation.purpose }, config);
+            challenge = sent.data.data.challenge;
+          }
+          const value = await requestSecurityConfirmation(confirmation.method, confirmation.purpose, async () => {
+            const { expoOAuthBrowserAdapter, resolveOAuthRedirectUri } = await import('../features/auth/oauthBrowser');
+            const verifier = Array.from(Crypto.getRandomBytes(32), byte => byte.toString(16).padStart(2, '0')).join('');
+            const challenge = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier);
+            const requestedUri = expoOAuthBrowserAdapter.createRedirectUri('oidc', originalRequest.baseURL);
+            const started = await this.client.get('/auth/oauth/oidc/authorize', { ...config, params: {
+              flow: 'confirm', purpose: confirmation.purpose, client_challenge: challenge, redirect_uri: requestedUri,
+            } });
+            const authorization = started.data.data;
+            const redirectUri = resolveOAuthRedirectUri(requestedUri, authorization.redirect_uri);
+            if (!redirectUri || !isCurrent()) throw new Error('The sign-in session changed');
+            const result = await expoOAuthBrowserAdapter.authorize(authorization.auth_url, authorization.state, redirectUri);
+            if (result.status !== 'success' || !isCurrent()) throw new Error('Sign-in cancelled');
+            const proof = await this.client.post('/auth/oauth/oidc/callback', {
+              code: result.code, state: result.state, redirect_uri: redirectUri, client_verifier: verifier,
+            }, config);
+            return proof.data.data.confirmation_token;
+          });
+          if (!value || !isCurrent()) throw new Error('Confirmation cancelled');
+          const proof = confirmation.method === 'oidc' ? { data: { data: { confirmation_token: value } } } : await this.client.post('/auth/security-confirmation', {
+            purpose: confirmation.purpose,
+            ...(confirmation.method === 'password' ? { password: value } : { code: value, challenge }),
+          }, config);
+          if (!isCurrent()) throw new Error('The active account changed');
+          originalRequest.headers['X-Security-Confirmation'] = proof.data.data.confirmation_token;
+          return this.client.request(originalRequest);
+        }
         if (
           error.response?.status === 401
           && !originalRequest?._retry
@@ -273,7 +314,15 @@ export class BillManagerApi {
             originalRequest.headers.Authorization = `Bearer ${refreshedTokens.accessToken}`;
             originalRequest._refreshToken = refreshedTokens.refreshToken;
             originalRequest._sessionGeneration = sessionGeneration(requestProfileId);
-            return axios.request(originalRequest);
+            originalRequest._authenticationBinding = {
+              profile,
+              scope: { serverProfileId: requestProfileId, databaseId: originalRequest._databaseId ?? null },
+              ...refreshedTokens,
+              sessionGeneration: sessionGeneration(requestProfileId),
+            } satisfies AuthenticationRequestBinding;
+            // Keep the original profile while retaining confirmation handling
+            // when an expired access token is followed by a 428 challenge.
+            return this.client.request(originalRequest);
           } catch {
             const cleared = await this.invalidateAndClearTokensIfCurrent(
               requestProfileId,
@@ -976,12 +1025,15 @@ export class BillManagerApi {
   ): Promise<ApiResponse<OAuthAuthorization>> {
     try {
       const binding = await this.authenticationBinding(requestedScope);
+      const clientVerifier = Array.from(Crypto.getRandomBytes(32), (byte) => byte.toString(16).padStart(2, '0')).join('');
+      const clientChallenge = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, clientVerifier);
       const response = await this.client.get<ApiResponse<OAuthAuthorization>>(
         `/auth/oauth/${encodeURIComponent(provider)}/authorize`,
         {
           ...this.authenticationRequestConfig(binding),
           params: {
             flow,
+            client_challenge: clientChallenge,
             ...(redirectUri ? { redirect_uri: redirectUri } : {}),
           },
         },
@@ -992,6 +1044,7 @@ export class BillManagerApi {
           provider,
           flow,
           redirectUri: response.data.data.redirect_uri ?? redirectUri,
+          clientVerifier,
         });
       }
       return response.data;
@@ -1175,6 +1228,7 @@ export class BillManagerApi {
         {
           code: input.code,
           state: input.state,
+          ...(transaction?.clientVerifier ? { client_verifier: transaction.clientVerifier } : {}),
           ...(redirectUri ? { redirect_uri: redirectUri } : {}),
         },
         this.authenticationRequestConfig(binding),
@@ -1249,7 +1303,7 @@ export class BillManagerApi {
 
   async regenerateRecoveryCodes(): Promise<ApiResponse<RecoveryCodesResult>> {
     try {
-      const response = await this.client.get<ApiResponse<RecoveryCodesResult>>(
+      const response = await this.client.post<ApiResponse<RecoveryCodesResult>>(
         '/auth/2fa/recovery-codes',
       );
       return response.data;

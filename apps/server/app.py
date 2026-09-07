@@ -50,6 +50,7 @@ from models import (
     WebAuthnCredential,
     ClientMutation,
     TelemetrySettings,
+    SecurityConfirmation,
     user_database_access,
 )
 from migration import migrate_sqlite_to_pg
@@ -2225,11 +2226,8 @@ def stripe_webhook():
                     items = data.get("items", {}).get("data", [])
                     if items:
                         price_id = items[0].get("price", {}).get("id", "")
-                        # Determine tier from price ID
-                        if "plus" in price_id.lower():
-                            subscription.tier = "plus"
-                        elif "basic" in price_id.lower():
-                            subscription.tier = "basic"
+                        trusted_plan = get_plan_for_stripe_price_id(price_id)
+                        subscription.tier = trusted_plan[0] if trusted_plan else "free"
                         # Update billing interval
                         interval = (
                             items[0]
@@ -2237,7 +2235,7 @@ def stripe_webhook():
                             .get("recurring", {})
                             .get("interval", "month")
                         )
-                        subscription.billing_interval = (
+                        subscription.billing_interval = trusted_plan[1] if trusted_plan else (
                             "annual" if interval == "year" else "monthly"
                         )
 
@@ -2334,8 +2332,12 @@ def jwt_delete_account():
             return jsonify({"success": False, "error": "Password is required"}), 400
         if not current_user.check_password(password):
             return jsonify({"success": False, "error": "Invalid password"}), 401
-    elif confirm is not True:
-        return jsonify({"success": False, "error": "Confirmation required"}), 400
+    else:
+        if confirm is not True:
+            return jsonify({"success": False, "error": "Confirmation required"}), 400
+        confirmation_error = _require_security_confirmation(current_user, "delete_account")
+        if confirmation_error:
+            return confirmation_error
 
     # Lock the owner first, then discover and lock every generation of managed
     # users. Locking each parent before querying its children prevents a new
@@ -4076,6 +4078,25 @@ def jwt_get_shared_bills():
     return jsonify({"success": True, "data": result})
 
 
+def _share_recipient_filter(user):
+    bound = BillShare.shared_with_user_id == user.id
+    if user.email and user.email_verified_at:
+        return db.or_(bound, db.and_(
+            BillShare.shared_with_user_id.is_(None),
+            BillShare.identifier_type == "email",
+            db.func.lower(BillShare.shared_with_identifier) == user.email.strip().lower(),
+        ))
+    return bound
+
+
+def _is_share_recipient(share, user):
+    if share.shared_with_user_id is not None:
+        return share.shared_with_user_id == user.id
+    return bool(user.email_verified_at and user.email and share.identifier_type == "email"
+                and share.shared_with_identifier
+                and user.email.strip().lower() == share.shared_with_identifier.strip().lower())
+
+
 @api_v2_bp.route("/shared-bills/pending", methods=["GET"])
 @limiter.limit("60 per minute")
 @jwt_required
@@ -4090,7 +4111,7 @@ def jwt_get_pending_shares():
 
     shares = (
         BillShare.query.filter(
-            BillShare.shared_with_user_id == current_user.id,
+            _share_recipient_filter(current_user),
             BillShare.status == "pending",
         )
         .filter(
@@ -4132,21 +4153,8 @@ def jwt_accept_share(share_id):
     data = request.get_json(silent=True) or {}
     share = _get_share_for_mutation(share_id)
 
-    # Verify the current user can accept this share
-    current_user = db.session.get(User, g.jwt_user_id)
-
-    # Strict verification based on identifier type
-    if share.identifier_type == "username":
-        # For username-based shares, must match the intended recipient (strict check)
-        if not share.shared_with_user_id or share.shared_with_user_id != g.jwt_user_id:
-            return jsonify({"success": False, "error": "Access denied"}), 403
-    elif share.identifier_type == "email":
-        # For email-based shares, check email match
-        if (
-            not current_user.email
-            or share.shared_with_identifier.lower() != current_user.email.lower()
-        ):
-            return jsonify({"success": False, "error": "Access denied"}), 403
+    if not _is_share_recipient(share, db.session.get(User, g.jwt_user_id)):
+        return jsonify({"success": False, "error": "Access denied; use the invitation link"}), 403
 
     mutation, mutation_response = _prepare_client_mutation(
         data, share.bill.database_id, f"shares.accept:{share_id}"
@@ -4210,21 +4218,8 @@ def jwt_decline_share(share_id):
     data = request.get_json(silent=True) or {}
     share = _get_share_for_mutation(share_id)
 
-    # Verify the current user can decline this share
-    current_user = db.session.get(User, g.jwt_user_id)
-
-    # Strict verification based on identifier type
-    if share.identifier_type == "username":
-        # For username-based shares, must match the intended recipient (strict check)
-        if not share.shared_with_user_id or share.shared_with_user_id != g.jwt_user_id:
-            return jsonify({"success": False, "error": "Access denied"}), 403
-    elif share.identifier_type == "email":
-        # For email-based shares, check email match
-        if (
-            not current_user.email
-            or share.shared_with_identifier.lower() != current_user.email.lower()
-        ):
-            return jsonify({"success": False, "error": "Access denied"}), 403
+    if not _is_share_recipient(share, db.session.get(User, g.jwt_user_id)):
+        return jsonify({"success": False, "error": "Access denied"}), 403
 
     mutation, mutation_response = _prepare_client_mutation(
         data, share.bill.database_id, f"shares.decline:{share_id}"
@@ -4342,6 +4337,8 @@ def jwt_accept_share_by_token():
 
     # Verify the current user matches the invitation
     current_user = db.session.get(User, g.jwt_user_id)
+    if share.shared_with_user_id is not None and share.shared_with_user_id != current_user.id:
+        return jsonify({"success": False, "error": "Access denied"}), 403
 
     # For email-based shares, verify email match
     if share.identifier_type == "email":
@@ -5617,6 +5614,120 @@ def jwt_change_password():
     return _set_refresh_cookie(response, refresh_token)
 
 
+_SECURITY_PURPOSES = {"oauth_link", "passkey_add", "recovery_codes", "delete_account"}
+
+
+def _security_identity(user):
+    return hashlib.sha256(json.dumps([user.password_hash, user.email, str(user.email_verified_at)]).encode()).hexdigest()
+
+
+def _security_confirmation_method(user):
+    if user.password_hash:
+        return "password"
+    if "oidc" in get_enabled_oauth_providers() and OAuthAccount.query.filter_by(user_id=user.id, provider="oidc").first():
+        return "oidc"
+    return "email"
+
+
+def _issue_security_confirmation(user, purpose):
+    token = secrets.token_urlsafe(32)
+    db.session.query(SecurityConfirmation).filter(
+        SecurityConfirmation.user_id == user.id,
+        SecurityConfirmation.expires_at <= _naive_utcnow(),
+    ).delete(synchronize_session=False)
+    db.session.add(SecurityConfirmation(user_id=user.id, purpose=purpose,
+        token_hash=hashlib.sha256(token.encode()).hexdigest(), identity_hash=_security_identity(user),
+        expires_at=_naive_utcnow() + timedelta(minutes=5)))
+    db.session.commit()
+    return jsonify({"success": True, "data": {"confirmation_token": token}})
+
+
+def _require_security_confirmation(user, purpose):
+    token = request.headers.get("X-Security-Confirmation", "")
+    now = _naive_utcnow()
+    consumed = db.session.execute(
+        db.update(SecurityConfirmation).where(
+            SecurityConfirmation.user_id == user.id,
+            SecurityConfirmation.purpose == purpose,
+            SecurityConfirmation.token_hash == hashlib.sha256(token.encode()).hexdigest(),
+            SecurityConfirmation.identity_hash == _security_identity(user),
+            SecurityConfirmation.code_hash.is_(None),
+            SecurityConfirmation.used.is_(False),
+            SecurityConfirmation.expires_at > now,
+        ).values(used=True).returning(SecurityConfirmation.id)
+    ).scalar_one_or_none() if token else None
+    if consumed is not None:
+        db.session.commit()
+        return None
+    return jsonify({"success": False, "error": "Confirm your identity to continue", "security_confirmation": {
+        "purpose": purpose, "method": _security_confirmation_method(user),
+    }}), 428
+
+
+@api_v2_bp.route("/auth/security-confirmation/send-code", methods=["POST"])
+@jwt_required
+@limiter.limit("5 per minute;15 per hour")
+def security_confirmation_send_code():
+    user = db.session.get(User, g.jwt_user_id)
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict) or not isinstance(data.get("purpose"), str):
+        return jsonify({"success": False, "error": "Invalid confirmation request"}), 400
+    purpose = data.get("purpose")
+    if purpose not in _SECURITY_PURPOSES or user.password_hash or not user.email or not user.email_verified_at:
+        return jsonify({"success": False, "error": "A verified email is required for confirmation"}), 400
+    code = str(secrets.randbelow(900000) + 100000)
+    token = secrets.token_urlsafe(32)
+    db.session.query(SecurityConfirmation).filter(
+        SecurityConfirmation.user_id == user.id,
+        SecurityConfirmation.purpose == purpose,
+        SecurityConfirmation.code_hash.isnot(None),
+    ).delete(synchronize_session=False)
+    db.session.add(SecurityConfirmation(user_id=user.id, purpose=purpose,
+        token_hash=hashlib.sha256(token.encode()).hexdigest(), code_hash=generate_password_hash(code),
+        identity_hash=_security_identity(user), expires_at=_naive_utcnow() + timedelta(minutes=5)))
+    db.session.commit()
+    from services.email import send_2fa_code_email
+    if not send_2fa_code_email(user.email, code, user.username):
+        return jsonify({"success": False, "error": "Confirmation email could not be sent"}), 502
+    return jsonify({"success": True, "data": {"challenge": token}})
+
+
+@api_v2_bp.route("/auth/security-confirmation", methods=["POST"])
+@jwt_required
+@limiter.limit("10 per minute;30 per hour")
+def security_confirmation():
+    user = db.session.get(User, g.jwt_user_id)
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict) or not isinstance(data.get("purpose"), str):
+        return jsonify({"success": False, "error": "Invalid confirmation request"}), 400
+    purpose = data.get("purpose")
+    if purpose not in _SECURITY_PURPOSES:
+        return jsonify({"success": False, "error": "Invalid confirmation purpose"}), 400
+    if user.password_hash:
+        password = data.get("password")
+        if not isinstance(password, str) or not user.check_password(password):
+            return jsonify({"success": False, "error": "Password is incorrect"}), 400
+    else:
+        token = data.get("challenge", "")
+        code = data.get("code", "")
+        if not isinstance(token, str) or not isinstance(code, str):
+            return jsonify({"success": False, "error": "Invalid confirmation"}), 400
+        challenge = db.session.execute(db.select(SecurityConfirmation).where(
+            SecurityConfirmation.token_hash == hashlib.sha256(token.encode()).hexdigest(),
+            SecurityConfirmation.user_id == user.id,
+            SecurityConfirmation.purpose == purpose,
+        ).with_for_update()).scalar_one_or_none()
+        if (not challenge or challenge.used or not challenge.code_hash or challenge.attempts >= 5
+                or challenge.expires_at <= _naive_utcnow() or challenge.identity_hash != _security_identity(user)):
+            return jsonify({"success": False, "error": "Confirmation expired"}), 400
+        challenge.attempts += 1
+        if not check_password_hash(challenge.code_hash, code):
+            db.session.commit()
+            return jsonify({"success": False, "error": "Confirmation code is incorrect"}), 400
+        challenge.used = True
+    return _issue_security_confirmation(user, purpose)
+
+
 @api_v2_bp.route("/auth/reauthenticate", methods=["POST"])
 @limiter.limit("10 per minute;30 per hour")
 @jwt_required
@@ -5709,6 +5820,9 @@ def _generate_oauth_state(
     link_user_id=None,
     redirect_uri=None,
     channel="browser",
+    client_challenge=None,
+    confirmation_purpose=None,
+    confirmation_identity=None,
 ):
     """Create server-side OAuth state and return an opaque signed handle."""
     state_nonce = secrets.token_urlsafe(32)
@@ -5733,6 +5847,10 @@ def _generate_oauth_state(
         + datetime.timedelta(minutes=5),
         "iat": datetime.datetime.now(datetime.timezone.utc),
         "type": "oauth_state",
+        "security_version": 2,
+        "client_challenge": client_challenge,
+        "confirmation_purpose": confirmation_purpose,
+        "confirmation_identity": confirmation_identity,
     }
     return jwt.encode(state_payload, JWT_SECRET_KEY, algorithm="HS256")
 
@@ -5779,6 +5897,11 @@ def _decode_oauth_state(state_token):
             "link_user_id": transaction.link_user_id,
             "redirect_uri": transaction.redirect_uri,
             "channel": transaction.channel,
+            "security_version": payload.get("security_version"),
+            "client_challenge": payload.get("client_challenge"),
+            "confirmation_purpose": payload.get("confirmation_purpose"),
+            "confirmation_identity": payload.get("confirmation_identity"),
+            "issued_at": payload.get("iat"),
         }
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
@@ -6093,6 +6216,19 @@ def _complete_oauth_identity(
         return jsonify({"success": False, "error": "No subject in ID token"}), 502
 
     flow = state_payload.get("flow", "login")
+    if flow == "confirm":
+        user = db.session.get(User, state_payload.get("link_user_id"))
+        identity = OAuthAccount.query.filter_by(provider=provider, provider_user_id=provider_user_id).first()
+        auth_time = claims.get("auth_time")
+        issued_at = state_payload.get("issued_at")
+        purpose = state_payload.get("confirmation_purpose")
+        if (provider != "oidc" or not user or not identity or identity.user_id != user.id
+                or purpose not in _SECURITY_PURPOSES
+                or state_payload.get("confirmation_identity") != _security_identity(user)
+                or type(auth_time) not in (int, float) or type(issued_at) not in (int, float)
+                or not issued_at - 30 <= auth_time <= datetime.datetime.now(datetime.timezone.utc).timestamp() + 30):
+            return jsonify({"success": False, "error": "Fresh sign-in to the existing linked account is required"}), 400
+        return _issue_security_confirmation(user, purpose)
     if flow not in ("login", "link"):
         return jsonify({"success": False, "error": "Invalid OAuth flow"}), 400
 
@@ -6288,7 +6424,7 @@ def oauth_list_providers():
     return jsonify({"success": True, "data": providers})
 
 
-def _oauth_link_user_from_bearer():
+def _oauth_link_user_from_bearer(require_confirmation=True):
     """Resolve the authenticated user for an OAuth account-link operation."""
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -6308,6 +6444,11 @@ def _oauth_link_user_from_bearer():
             jsonify({"success": False, "error": "Invalid or expired token"}),
             401,
         )
+    if require_confirmation:
+        user = db.session.get(User, payload["user_id"])
+        error = _require_security_confirmation(user, "oauth_link")
+        if error:
+            return None, error
     return payload["user_id"], None
 
 
@@ -6321,7 +6462,7 @@ def oauth_authorize(provider):
         ), 400
 
     flow = request.args.get("flow", "login")
-    if flow not in ("login", "link"):
+    if flow not in ("login", "link", "confirm"):
         return jsonify({"success": False, "error": "Invalid OAuth flow"}), 400
     link_user_id = None
     if flow == "link":
@@ -6329,11 +6470,30 @@ def oauth_authorize(provider):
         if link_error:
             return link_error
 
+    confirmation_purpose = None
+    confirmation_identity = None
+    if flow == "confirm":
+        link_user_id, link_error = _oauth_link_user_from_bearer(require_confirmation=False)
+        if link_error:
+            return link_error
+        confirmation_purpose = request.args.get("purpose")
+        user = db.session.get(User, link_user_id)
+        if (provider != "oidc" or confirmation_purpose not in _SECURITY_PURPOSES
+                or not OAuthAccount.query.filter_by(user_id=link_user_id, provider=provider).first()):
+            return jsonify({"success": False, "error": "Invalid confirmation provider or purpose"}), 400
+        confirmation_identity = _security_identity(user)
+
     redirect_uri, redirect_error = _resolve_oauth_redirect_uri(
         request.args.get("redirect_uri")
     )
     if redirect_error:
         return redirect_error
+
+    client_challenge = request.args.get("client_challenge")
+    if client_challenge is not None and not re.fullmatch(r"[0-9a-f]{64}", client_challenge):
+        return jsonify({"success": False, "error": "Invalid client challenge"}), 400
+    if not redirect_uri.startswith(("https://", "http://")) and not client_challenge:
+        return jsonify({"success": False, "error": "This callback requires an app-held verifier; update your mobile app"}), 400
 
     cfg = get_oauth_provider_config(provider)
     if not cfg:
@@ -6364,6 +6524,9 @@ def oauth_authorize(provider):
         flow=flow,
         link_user_id=link_user_id,
         redirect_uri=redirect_uri,
+        client_challenge=client_challenge,
+        confirmation_purpose=confirmation_purpose,
+        confirmation_identity=confirmation_identity,
     )
 
     # Build authorization URL
@@ -6389,6 +6552,8 @@ def oauth_authorize(provider):
     # Apple requires form_post when requesting email/name scopes.
     if provider == "apple":
         params["response_mode"] = "form_post"
+    if flow == "confirm":
+        params.update(prompt="login", max_age="0")
 
     auth_url = f"{auth_endpoint}?{urlencode(params)}"
     return jsonify(
@@ -6488,7 +6653,9 @@ def oauth_google_native_callback():
     if flow not in ("login", "link"):
         return jsonify({"success": False, "error": "Invalid OAuth flow"}), 400
     if flow == "link":
-        authenticated_user_id, link_error = _oauth_link_user_from_bearer()
+        if state_payload.get("security_version") != 2:
+            return jsonify({"success": False, "error": "Restart account linking"}), 400
+        authenticated_user_id, link_error = _oauth_link_user_from_bearer(require_confirmation=False)
         if link_error:
             return link_error
         if authenticated_user_id != state_payload.get("link_user_id"):
@@ -6557,10 +6724,12 @@ def oauth_callback(provider):
         return jsonify({"success": False, "error": "State channel mismatch"}), 400
 
     flow = state_payload.get("flow")
-    if flow not in ("login", "link"):
+    if flow not in ("login", "link", "confirm"):
         return jsonify({"success": False, "error": "Invalid OAuth flow"}), 400
-    if flow == "link":
-        authenticated_user_id, link_error = _oauth_link_user_from_bearer()
+    if flow in ("link", "confirm"):
+        if state_payload.get("security_version") != 2:
+            return jsonify({"success": False, "error": "Restart account linking"}), 400
+        authenticated_user_id, link_error = _oauth_link_user_from_bearer(require_confirmation=False)
         if link_error:
             return link_error
         if authenticated_user_id != state_payload.get("link_user_id"):
@@ -6577,6 +6746,13 @@ def oauth_callback(provider):
             {"success": False, "error": "Redirect URI does not match authorization request"}
         ), 400
 
+    client_challenge = state_payload.get("client_challenge")
+    if client_challenge or not redirect_uri.startswith(("https://", "http://")):
+        verifier = data.get("client_verifier")
+        if (not client_challenge or not isinstance(verifier, str)
+                or not re.fullmatch(r"[A-Za-z0-9_-]{43,128}", verifier)
+                or not secrets.compare_digest(hashlib.sha256(verifier.encode()).hexdigest(), client_challenge)):
+            return jsonify({"success": False, "error": "OAuth client proof is required"}), 400
 
     if not _consume_oauth_state(state_payload):
         return jsonify({"success": False, "error": "Invalid or expired state"}), 400
@@ -6663,6 +6839,10 @@ def oauth_callback(provider):
     )
     if verification_error:
         return verification_error
+
+    # Confirmation relies only on signed ID-token claims, never userinfo.
+    if flow == "confirm":
+        return _complete_oauth_identity(provider, claims, state_payload, data, issue_link_session=False)
 
     # For generic OIDC: use configurable claim names
     if provider == "oidc":
@@ -7002,10 +7182,13 @@ def _generate_recovery_codes(twofa_config, count=10):
     return codes
 
 
-@api_v2_bp.route("/auth/2fa/recovery-codes", methods=["GET"])
+@api_v2_bp.route("/auth/2fa/recovery-codes", methods=["POST"])
 @jwt_required
 def twofa_get_recovery_codes():
     """Regenerate recovery codes. Old codes are invalidated."""
+    error = _require_security_confirmation(db.session.get(User, g.jwt_user_id), "recovery_codes")
+    if error:
+        return error
     config = TwoFAConfig.query.filter_by(user_id=g.jwt_user_id).first()
     if not config or not config.is_enabled:
         return jsonify({"success": False, "error": "2FA is not enabled"}), 400
@@ -7020,6 +7203,9 @@ def twofa_passkey_registration_options():
     """Get WebAuthn registration options for adding a passkey."""
     if not ENABLE_PASSKEYS:
         return jsonify({"success": False, "error": "Passkeys are not enabled"}), 400
+    error = _require_security_confirmation(db.session.get(User, g.jwt_user_id), "passkey_add")
+    if error:
+        return error
 
     from webauthn import generate_registration_options, options_to_json
     from webauthn.helpers.structs import (
@@ -7067,7 +7253,7 @@ def twofa_passkey_registration_options():
     twofa_challenge = TwoFAChallenge(
         user_id=user.id,
         token_hash=session_hash,
-        challenge_type="passkey_registration",
+        challenge_type="passkey_enroll_v2",
         otp_code_hash=challenge_b64,  # Store the challenge for verification
         expires_at=_naive_utcnow() + datetime.timedelta(minutes=5),
     )
@@ -7115,7 +7301,7 @@ def twofa_passkey_register():
 
     if (
         challenge.user_id != g.jwt_user_id
-        or challenge.challenge_type != "passkey_registration"
+        or challenge.challenge_type != "passkey_enroll_v2"
     ):
         return jsonify({"success": False, "error": "Invalid registration session"}), 403
 
@@ -8010,14 +8196,13 @@ def jwt_update_user(target_user_id):
             ), 400
         user.role = new_role
     if "email" in data:
-        new_email = data["email"].strip() if data["email"] else None
-        if new_email and new_email != user.email:
-            existing = User.query.filter(
-                User.email == new_email, User.id != target_user_id
-            ).first()
-            if existing:
-                return jsonify({"success": False, "error": "Email already in use"}), 400
-        user.email = new_email
+        raw_email = data["email"]
+        if raw_email is not None and not isinstance(raw_email, str):
+            return jsonify({"success": False, "error": "Invalid email"}), 400
+        new_email = raw_email.strip().lower() if raw_email else None
+        if new_email != (user.email.strip().lower() if user.email else None):
+            # Administrative authority is not proof of mailbox ownership.
+            return jsonify({"success": False, "error": "Login email cannot be changed through user administration"}), 403
     db.session.commit()
     return jsonify(
         {
@@ -8230,16 +8415,14 @@ def jwt_create_invitation():
             }
         ), 403
 
-    if is_saas():
-        for db_id in database_ids:
-            d = db.session.get(Database, db_id)
-            if d and d.owner_id != current_user_id:
-                return jsonify(
-                    {
-                        "success": False,
-                        "error": "Cannot grant access to databases you do not own",
-                    }
-                ), 403
+    if not isinstance(database_ids, list) or any(type(value) is not int or value <= 0 for value in database_ids):
+        return jsonify({"success": False, "error": "Invalid database IDs"}), 400
+    for db_id in database_ids:
+        d = db.session.get(Database, db_id)
+        if not d or (is_saas() and d.owner_id != current_user_id):
+            return jsonify({"success": False, "error": "Invalid database grant"}), 403
+    if role not in ("admin", "user"):
+        return jsonify({"success": False, "error": "Invalid role"}), 400
 
     invite = UserInvite(
         email=email,
@@ -8332,6 +8515,17 @@ def jwt_accept_invitation():
     if User.query.filter_by(username=username).first():
         return jsonify({"success": False, "error": "Username is already taken"}), 400
 
+    granted_databases = []
+    for value in invite.database_ids.split(",") if invite.database_ids else []:
+        if not value.isdecimal():
+            return jsonify({"success": False, "error": "Invalid invitation database grant"}), 400
+        database = db.session.execute(
+            db.select(Database).where(Database.id == int(value)).with_for_update()
+        ).scalar_one_or_none()
+        if not database or (is_saas() and database.owner_id != invite.invited_by_id):
+            return jsonify({"success": False, "error": "Invitation database access is no longer valid"}), 403
+        granted_databases.append(database)
+
     new_user = User(
         username=username,
         email=invite.email,
@@ -8343,14 +8537,7 @@ def jwt_accept_invitation():
     new_user.set_password(password)
     db.session.add(new_user)
 
-    if invite.database_ids:
-        for db_id_str in invite.database_ids.split(","):
-            try:
-                database = db.session.get(Database, int(db_id_str))
-            except ValueError:
-                continue
-            if database:
-                new_user.accessible_databases.append(database)
+    new_user.accessible_databases.extend(granted_databases)
 
     invite.accepted_at = datetime.datetime.now(datetime.timezone.utc)
     db.session.commit()
@@ -8920,19 +9107,12 @@ def api_docs():
 <html>
 <head>
     <title>BillManager API - Documentation</title>
-    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+    <link rel="stylesheet" href="/docs/swagger-ui.css">
 </head>
 <body>
     <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-    <script>
-        SwaggerUIBundle({
-            url: "/api/v2/openapi.yaml",
-            dom_id: '#swagger-ui',
-            presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
-            layout: "BaseLayout"
-        });
-    </script>
+    <script src="/docs/swagger-ui-bundle.js"></script>
+    <script src="/docs/init.js"></script>
 </body>
 </html>""",
         200,
@@ -10087,16 +10267,12 @@ def create_app():
                 "default-src": "'self'",
                 "script-src": [
                     "'self'",
-                    "'unsafe-inline'",
-                    "unpkg.com",
-                    "analytics.billmanager.app",
-                ],  # Swagger UI + Umami
-                "style-src": ["'self'", "'unsafe-inline'", "unpkg.com"],
+                ],
+                "style-src": ["'self'", "'unsafe-inline'"],
                 "img-src": ["'self'", "data:", "billmanager.app"],
                 "connect-src": [
                     "'self'",
-                    "analytics.billmanager.app",
-                ],  # Umami analytics
+                ],
                 "frame-ancestors": "'none'",  # Prevent clickjacking
                 "form-action": "'self'",  # Prevent form hijacking
                 "base-uri": "'self'",  # Prevent base tag injection

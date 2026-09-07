@@ -27,6 +27,7 @@ telemetry_receiver_bp = Blueprint('telemetry_receiver', __name__)
 
 # Security controls
 TELEMETRY_RECEIVER_API_KEY = os.environ.get('TELEMETRY_RECEIVER_API_KEY')
+TELEMETRY_STATS_API_KEY = os.environ.get('TELEMETRY_STATS_API_KEY')
 TELEMETRY_MAX_PAYLOAD_BYTES = int(os.environ.get('TELEMETRY_MAX_PAYLOAD_BYTES', '16384'))
 TELEMETRY_INGEST_RATE_PER_MINUTE = int(os.environ.get('TELEMETRY_INGEST_RATE_PER_MINUTE', '60'))
 TELEMETRY_STATS_RATE_PER_MINUTE = int(os.environ.get('TELEMETRY_STATS_RATE_PER_MINUTE', '30'))
@@ -155,10 +156,21 @@ def _is_valid_api_key() -> bool:
     return secrets.compare_digest(supplied, TELEMETRY_RECEIVER_API_KEY)
 
 
-def _require_receiver_auth(required: bool = True):
+def _require_receiver_auth(required: bool = True, *, operator_only: bool = False):
     """Return (response, status) tuple when auth fails, else None."""
     if not required:
         return None
+
+    if operator_only:
+        supplied = request.headers.get('X-Telemetry-Api-Key', '')
+        admin_key_valid = bool(
+            TELEMETRY_STATS_API_KEY
+            and TELEMETRY_STATS_API_KEY != TELEMETRY_RECEIVER_API_KEY
+            and secrets.compare_digest(supplied, TELEMETRY_STATS_API_KEY)
+        )
+        if admin_key_valid or _is_admin_jwt():
+            return None
+        return jsonify({'error': 'Operator authentication required'}), 401
 
     if not TELEMETRY_RECEIVER_API_KEY and not request.headers.get('Authorization'):
         logger.error("Telemetry receiver auth is enabled but no API key/JWT was provided")
@@ -277,7 +289,7 @@ def receive_telemetry():
         is_new_instance = existing is None
 
         # Check if this is a new SaaS deployment (alert-worthy)
-        is_new_saas = is_new_instance and deployment_mode == 'saas'
+        is_new_saas = is_new_instance and deployment_mode == 'saas' and _is_admin_jwt()
 
         # Don't alert for your own production instance
         production_instance_id = os.environ.get('PRODUCTION_INSTANCE_ID')
@@ -387,7 +399,7 @@ def get_telemetry_stats():
 
         # Aggregated stats and recent instance identifiers are never public,
         # even when anonymous ingestion is enabled.
-        auth_error = _require_receiver_auth(required=True)
+        auth_error = _require_receiver_auth(required=True, operator_only=True)
         if auth_error:
             return auth_error
 

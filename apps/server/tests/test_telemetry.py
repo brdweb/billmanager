@@ -493,7 +493,7 @@ def test_public_ingest_does_not_make_stats_public(app, monkeypatch):
     with app.test_request_context("/api/telemetry/stats", method="GET"):
         _, status = _response_status(telemetry_receiver.get_telemetry_stats())
 
-    assert status == 503
+    assert status == 401
 
 
 def test_notice_honors_global_disable(client, admin_auth_headers, monkeypatch):

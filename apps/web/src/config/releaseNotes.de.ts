@@ -2,6 +2,18 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.12.2',
+    date: '2026-09-06',
+    title: 'Konto- und Mandantensicherheit',
+    sections: [{ heading: 'Sicherheit', items: [
+      'Eigentums- und Empfängerprüfungen für Einladungen und Rechnungsfreigaben verstärkt',
+      'Sensible Änderungen und das Löschen passwortloser Konten erfordern eine erneute Identitätsbestätigung',
+      'Anmeldeadressen vor administrativem Austausch geschützt und Tarifabgleich korrigiert',
+      'Mobile OAuth-Rückrufe an die initiierende App gebunden und Dokumentationsskripte lokal eingebunden',
+      'Telemetrie-Eingang von Betreiberstatistiken und vertrauenswürdigen Bereitstellungswarnungen getrennt',
+    ] }],
+  },
+  {
     version: '4.12.1',
     date: '2026-08-27',
     title: 'Zuverlässige mobile Passkeys',

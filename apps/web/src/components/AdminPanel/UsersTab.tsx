@@ -600,6 +600,8 @@ export function UsersTab({ isActive }: UsersTabProps) {
                 label={t('admin.users.columns.email')}
                 placeholder={t('admin.users.emailPlaceholder')}
                 value={userEmail}
+                readOnly
+                description="Login email is protected from administrative changes."
                 onChange={(e) => setUserEmail(e.currentTarget.value)}
               />
 

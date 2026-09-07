@@ -82,6 +82,7 @@ export interface AuthSessionScope {
 }
 
 export interface OAuthTransaction {
+  clientVerifier?: string;
   scope: AuthSessionScope;
   provider: string;
   flow: 'login' | 'link';

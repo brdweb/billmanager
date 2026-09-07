@@ -64,6 +64,7 @@ export class SecureOAuthScopeStore implements OAuthScopeStore {
         },
         provider: value.provider,
         flow: value.flow,
+        ...(value.clientVerifier ? { clientVerifier: value.clientVerifier } : {}),
         ...(value.redirectUri ? { redirectUri: value.redirectUri } : {}),
       };
     } catch {

@@ -168,6 +168,7 @@ def _mock_oauth_dependencies(
         metadata.update(metadata_overrides)
 
     state_payload = {
+        "security_version": 2,
         "provider": provider,
         "code_verifier": "test-code-verifier",
         "id_token_nonce": "nonce-123",
@@ -205,6 +206,53 @@ def _mock_oauth_dependencies(
         patch("authlib.jose.jwt.decode", return_value=FakeClaims(claims)),
     ):
         yield {"post": post_mock, "get": get_mock}
+
+
+@pytest.mark.parametrize('invalid', [None, 'stale', 'missing_time', 'different_identity', 'changed_account', 'wrong_user'])
+def test_oidc_confirmation_without_mail_requires_fresh_existing_identity(client, db_session, admin_user, regular_user, admin_auth_headers, user_auth_headers, monkeypatch, invalid):
+    monkeypatch.setattr(app_module, 'ENABLE_PASSKEYS', True)
+    client_id = _set_provider_config(monkeypatch, 'oidc')
+    _link_account(db_session, admin_user, 'oidc', 'existing-subject')
+    admin_user.password_hash = None
+    admin_user.email = None
+    db_session.commit()
+    now = int(time.time())
+    state = {'flow': 'confirm', 'link_user_id': admin_user.id, 'issued_at': now,
+             'confirmation_purpose': 'passkey_add', 'confirmation_identity': app_module._security_identity(admin_user)}
+    claims = {'sub': 'existing-subject', 'iss': 'https://issuer.example/oidc',
+              'aud': client_id, 'nonce': 'nonce-123', 'auth_time': now}
+    if invalid == 'stale': claims['auth_time'] = now - 600
+    if invalid == 'missing_time': claims.pop('auth_time')
+    if invalid == 'different_identity': claims['sub'] = 'attacker-subject'
+    if invalid == 'changed_account': state['confirmation_identity'] = 'outdated'
+    with _mock_oauth_dependencies('oidc', client_id, claims, state_overrides=state) as mocks:
+        result = client.post('/api/v2/auth/oauth/oidc/callback',
+            headers=user_auth_headers if invalid == 'wrong_user' else admin_auth_headers,
+            json={'code': 'provider-code', 'state': 'state-token'})
+        mocks['get'].assert_not_called()
+    if invalid:
+        assert result.status_code in (400, 401)
+    else:
+        assert result.status_code == 200
+        assert 'access_token' not in result.json['data']
+        headers = {**admin_auth_headers, 'X-Security-Confirmation': result.json['data']['confirmation_token']}
+        assert client.post('/api/v2/auth/2fa/setup/passkey/options', headers=headers, json={}).status_code == 200
+        assert client.post('/api/v2/auth/2fa/setup/passkey/options', headers=headers, json={}).status_code == 428
+
+
+def test_oidc_confirmation_start_is_user_bound_and_requests_fresh_login(client, db_session, admin_user, admin_auth_headers, monkeypatch):
+    _set_provider_config(monkeypatch, 'oidc')
+    _link_account(db_session, admin_user, 'oidc', 'existing-subject')
+    with patch('app._get_oidc_metadata', return_value={'authorization_endpoint': 'https://issuer.example/authorize'}):
+        response = client.get('/api/v2/auth/oauth/oidc/authorize?flow=confirm&purpose=oauth_link', headers=admin_auth_headers)
+    assert response.status_code == 200
+    params = parse_qs(urlparse(response.json['data']['auth_url']).query)
+    assert params['prompt'] == ['login']
+    assert params['max_age'] == ['0']
+    state = app_module._decode_oauth_state(response.json['data']['state'])
+    assert state['link_user_id'] == admin_user.id
+    assert state['confirmation_purpose'] == 'oauth_link'
+    assert state['confirmation_identity'] == app_module._security_identity(admin_user)
 
 
 def _call_callback(client, provider):
@@ -480,6 +528,9 @@ class TestNativeGoogleOAuth:
         client_id = _set_provider_config(monkeypatch, "google")
         access_token = app_module.create_access_token(admin_user.id, admin_user.role)
         headers = {"Authorization": f"Bearer {access_token}"}
+        proof = client.post('/api/v2/auth/security-confirmation', headers=headers,
+                            json={'purpose': 'oauth_link', 'password': 'testpassword123'})
+        headers['X-Security-Confirmation'] = proof.json['data']['confirmation_token']
         start = client.post(
             "/api/v2/auth/oauth/google/native/start",
             json={"flow": "link"},
@@ -513,6 +564,9 @@ class TestNativeGoogleOAuth:
         client_id = _set_provider_config(monkeypatch, "google")
         access_token = app_module.create_access_token(admin_user.id, admin_user.role)
         headers = {"Authorization": f"Bearer {access_token}"}
+        proof = client.post('/api/v2/auth/security-confirmation', headers=headers,
+                            json={'purpose': 'oauth_link', 'password': 'testpassword123'})
+        headers['X-Security-Confirmation'] = proof.json['data']['confirmation_token']
         start = client.post(
             "/api/v2/auth/oauth/google/native/start",
             json={"flow": "link"},
@@ -1063,8 +1117,48 @@ class TestUserinfoFetch:
         assert response.get_json()["success"] is True
         assert account is not None
         assert account.provider_email is None
+
         mocks["get"].assert_called_once()
 
+@pytest.mark.parametrize('channel', ['browser', 'native'])
+def test_link_start_rejects_bearer_without_confirmation(client, db_session, admin_user, monkeypatch, channel):
+    _set_provider_config(monkeypatch, 'google')
+    headers = {'Authorization': f'Bearer {app_module.create_access_token(admin_user.id, admin_user.role)}'}
+    if channel == 'browser':
+        response = client.get('/api/v2/auth/oauth/google/authorize?flow=link', headers=headers)
+    else:
+        response = client.post('/api/v2/auth/oauth/google/native/start', json={'flow': 'link'}, headers=headers)
+    assert response.status_code == 428
+    assert OAuthStateUse.query.count() == 0
+
+
+def test_private_callback_requires_initiating_app_proof(client, db_session, admin_user, monkeypatch):
+    import hashlib
+    provider = 'google'
+    client_id = _set_provider_config(monkeypatch, provider)
+    _link_account(db_session, admin_user, provider, 'private-user')
+    redirect = 'billmanager://auth/callback'
+    monkeypatch.setattr(app_module, 'get_oauth_redirect_uris', lambda: (redirect,))
+    verifier = 'a' * 64
+    state = {'redirect_uri': redirect, 'client_challenge': hashlib.sha256(verifier.encode()).hexdigest()}
+    claims = {'iss': 'https://accounts.google.com', 'aud': client_id, 'nonce': 'nonce-123',
+              'sub': 'private-user', 'email': 'admin@test.com', 'email_verified': True}
+    for supplied in (None, 'b' * 64, verifier):
+        with _mock_oauth_dependencies(provider, client_id, claims, state_overrides=state):
+            body = {'code': 'provider-code', 'state': 'opaque-state', 'redirect_uri': redirect}
+            if supplied:
+                body['client_verifier'] = supplied
+            response = client.post('/api/v2/auth/oauth/google/callback', json=body)
+        assert response.status_code == (200 if supplied == verifier else 400)
+
+
+def test_private_callback_start_requires_challenge(client, db_session, monkeypatch):
+    _set_provider_config(monkeypatch, 'google')
+    monkeypatch.setattr(app_module, 'get_oauth_redirect_uris', lambda: ('billmanager://auth/callback',))
+    response = client.get('/api/v2/auth/oauth/google/authorize', query_string={'redirect_uri': 'billmanager://auth/callback'})
+    assert response.status_code == 400
+    assert OAuthStateUse.query.count() == 0
+class TestUserinfoNoEndpoint:
     def test_no_userinfo_endpoint_graceful(
         self, client, db_session, admin_user, monkeypatch
     ):

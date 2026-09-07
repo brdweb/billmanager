@@ -14,6 +14,7 @@ import {
   resolveDateLocale,
 } from './i18n/dateLocale';
 import { theme } from './theme';
+import { SecurityConfirmation } from './components/SecurityConfirmation';
 
 export function LocalizedApp() {
   const { i18n } = useTranslation();
@@ -60,6 +61,7 @@ export function LocalizedApp() {
         cssVariablesResolver={v8CssVariablesResolver}
       >
         <Notifications position="top-right" pauseResetOnHover="notification" />
+        <SecurityConfirmation />
         <BrowserRouter>
           <ConfigProvider>
             <AuthProvider>
