@@ -1076,6 +1076,26 @@ def migrate_20260815_01_expand_oauth_state_transactions(db):
     db.session.commit()
 
 
+def migrate_20260907_01_stripe_webhook_reliability(db):
+    """Add Stripe webhook idempotency and ordering columns."""
+    inspector = inspect(db.engine)
+    if 'stripe_webhook_events' not in inspector.get_table_names():
+        db.session.execute(text('''
+            CREATE TABLE stripe_webhook_events (
+                id SERIAL PRIMARY KEY,
+                event_id VARCHAR(255) UNIQUE NOT NULL,
+                event_created INTEGER,
+                processed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        '''))
+    columns = {column['name'] for column in inspect(db.engine).get_columns('subscriptions')}
+    if 'stripe_last_event_created' not in columns:
+        db.session.execute(text(
+            'ALTER TABLE subscriptions ADD COLUMN stripe_last_event_created INTEGER'
+        ))
+    db.session.commit()
+
+
 # List of all migrations in order
 # Format: (version, description, function)
 MIGRATIONS = [
@@ -1111,6 +1131,7 @@ MIGRATIONS = [
     ('20260724_01', 'Add persisted per-user currency preference', migrate_20260724_01_add_user_currency),
     ('20260812_01', 'Create durable OAuth state replay ledger', migrate_20260812_01_create_oauth_state_uses),
     ('20260815_01', 'Store OAuth transactions server-side', migrate_20260815_01_expand_oauth_state_transactions),
+    ('20260907_01', 'Add Stripe webhook idempotency and ordering', migrate_20260907_01_stripe_webhook_reliability),
 ]
 
 

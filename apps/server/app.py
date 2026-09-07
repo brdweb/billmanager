@@ -27,7 +27,7 @@ from flask_migrate import Migrate
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
-from sqlalchemy import func, extract, desc, or_
+from sqlalchemy import func, extract, desc, or_, text
 from sqlalchemy.exc import IntegrityError
 
 from models import (
@@ -38,6 +38,7 @@ from models import (
     Payment,
     RefreshToken,
     Subscription,
+    StripeWebhookEvent,
     UserInvite,
     UserDevice,
     BillShare,
@@ -69,6 +70,8 @@ from services.stripe_service import (
     cancel_subscription,
     update_subscription,
     STRIPE_PUBLISHABLE_KEY,
+    get_billing_readiness,
+    log_missing_billing_configuration,
 )
 from services.telemetry import telemetry
 from services.scheduler import scheduler
@@ -1589,8 +1592,10 @@ def register():
         # Generate email verification token
         token = user.generate_email_verification_token()
 
+    # Trial provisioning must survive temporary payment configuration outages.
+    billing_enabled = ENABLE_BILLING
     # Set trial only in SaaS mode with billing
-    if ENABLE_BILLING:
+    if billing_enabled:
         user.trial_ends_at = datetime.datetime.now(datetime.timezone.utc) + timedelta(
             days=14
         )
@@ -1614,7 +1619,7 @@ def register():
     user.accessible_databases.append(default_db)
 
     # Create subscription only in SaaS mode with billing
-    if ENABLE_BILLING:
+    if billing_enabled:
         subscription = Subscription(
             user_id=user.id, status="trialing", trial_ends_at=user.trial_ends_at
         )
@@ -1870,6 +1875,10 @@ def billing_usage():
 @jwt_required
 def create_checkout():
     """Create a Stripe Checkout session for subscription."""
+    readiness = get_billing_readiness()
+    if not readiness["billing_enabled"]:
+        log_missing_billing_configuration()
+        return jsonify({"success": False, "error": "Billing is not ready"}), 503
     user = db.session.get(User, g.jwt_user_id)
     if not user:
         return jsonify({"success": False, "error": "User not found"}), 404
@@ -2088,173 +2097,173 @@ def billing_status():
 
 @api_v2_bp.route("/webhooks/stripe", methods=["POST"])
 def stripe_webhook():
-    """Handle Stripe webhook events."""
+    """Handle verified Stripe events transactionally and in order."""
     payload = request.get_data()
     sig_header = request.headers.get("Stripe-Signature")
-
     if not sig_header:
         return jsonify({"error": "Missing signature"}), 400
 
     event = construct_webhook_event(payload, sig_header)
-
     if isinstance(event, dict) and "error" in event:
+        if event.get("error_code") == "configuration" or event.get("error") == "Webhook secret not configured":
+            log_missing_billing_configuration()
+            return jsonify({"error": "Webhook secret not configured"}), 503
         return jsonify({"error": event["error"]}), 400
+
+    supported = {
+        "checkout.session.completed", "invoice.paid", "invoice.payment_failed",
+        "customer.subscription.deleted", "customer.subscription.updated",
+    }
+    event_id = event.get("id")
+    event_created = event.get("created")
+    if event.get("type") in supported and (
+        not isinstance(event_id, str) or not event_id.strip()
+        or isinstance(event_created, bool) or not isinstance(event_created, int)
+        or event_created < 0
+    ):
+        return jsonify({"error": "Invalid webhook event"}), 400
 
     event_type = event.get("type")
     data = event.get("data", {}).get("object", {})
-
-    logger.info(f"Stripe webhook received: {event_type}")
+    subscription_id = data.get("subscription") if event_type in {
+        "checkout.session.completed", "invoice.paid", "invoice.payment_failed"
+    } else data.get("id")
+    if event_type in supported and (
+        (subscription_id is not None and (not isinstance(subscription_id, str) or not subscription_id.strip()))
+        or (event_type not in {"invoice.paid", "invoice.payment_failed"} and not subscription_id)
+    ):
+        return jsonify({"error": "Invalid webhook subscription identity"}), 400
 
     try:
         if event_type == "checkout.session.completed":
-            # Payment successful, activate subscription
+            user_id = data.get("metadata", {}).get("user_id")
+            if user_id:
+                # Different checkout sessions may concern the same local user.
+                db.session.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                    {"lock_key": f"stripe-user:{int(user_id)}"},
+                )
+        if subscription_id:
+            db.session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                {"lock_key": f"stripe-subscription:{subscription_id}"},
+            )
+
+        db.session.add(StripeWebhookEvent(event_id=event_id, event_created=event_created))
+        db.session.flush()
+        if event_type not in supported:
+            db.session.commit()
+            return jsonify({"received": True}), 200
+
+        # Stripe also emits invoice events for one-off, non-subscription invoices.
+        if event_type in {"invoice.paid", "invoice.payment_failed"} and not subscription_id:
+            db.session.commit()
+            return jsonify({"received": True}), 200
+
+        subscription = None
+        if subscription_id:
+            subscription = Subscription.query.filter_by(
+                stripe_subscription_id=subscription_id
+            ).first()
+        if event_type != "checkout.session.completed" and subscription_id and not subscription:
+            raise RuntimeError("Stripe subscription is not present locally yet")
+        if subscription and subscription.stripe_last_event_created is not None:
+            if event_created < subscription.stripe_last_event_created:
+                db.session.commit()
+                return jsonify({"received": True, "stale": True}), 200
+            if event_created == subscription.stripe_last_event_created:
+                # Stripe timestamps have second precision, not a total event order.
+                # Reconcile ties from the provider rather than retrying forever or
+                # choosing arbitrarily between two valid events in the same second.
+                details = get_subscription(subscription_id)
+                if "error" in details or not details.get("status"):
+                    raise RuntimeError("Unable to reconcile simultaneous Stripe events")
+                trusted_plan = get_plan_for_stripe_price_id(details.get("price_id"))
+                if not trusted_plan:
+                    raise RuntimeError("Unable to reconcile Stripe subscription price")
+                subscription.status = details["status"]
+                subscription.tier, subscription.billing_interval = trusted_plan
+                subscription.plan = "_".join(trusted_plan)
+                subscription.current_period_start = datetime.datetime.fromtimestamp(details["current_period_start"])
+                subscription.current_period_end = datetime.datetime.fromtimestamp(details["current_period_end"])
+                canceled_at = details.get("canceled_at")
+                subscription.canceled_at = datetime.datetime.fromtimestamp(canceled_at) if canceled_at else (
+                    datetime.datetime.now(datetime.timezone.utc) if details.get("cancel_at_period_end") else None
+                )
+                db.session.commit()
+                return jsonify({"received": True}), 200
+
+        if event_type == "checkout.session.completed":
             metadata = data.get("metadata", {})
             user_id = metadata.get("user_id")
-            customer_id = data.get("customer")
-            subscription_id = data.get("subscription")
-
             if user_id:
                 user = db.session.get(User, int(user_id))
                 if user:
-                    sub_details = get_subscription(subscription_id)
-                    trusted_plan = get_plan_for_stripe_price_id(
-                        sub_details.get("price_id") if "error" not in sub_details else None
-                    )
+                    if user.subscription and user.subscription.stripe_subscription_id not in (None, subscription_id):
+                        # Do not orphan an existing paid subscription. Replacement
+                        # needs an explicit operator reconciliation policy.
+                        raise RuntimeError("Conflicting Stripe subscription association")
+                    details = get_subscription(subscription_id)
+                    trusted_plan = get_plan_for_stripe_price_id(details.get("price_id"))
                     if not trusted_plan:
-                        raise ValueError("Stripe subscription uses an unknown price ID")
+                        raise RuntimeError("Unable to reconcile Stripe subscription")
                     tier, interval = trusted_plan
-
-                    if not user.subscription:
-                        subscription = Subscription(user_id=user.id)
+                    subscription = user.subscription or Subscription(user_id=user.id)
+                    if subscription not in db.session:
                         db.session.add(subscription)
-                    else:
-                        subscription = user.subscription
-
-                    subscription.stripe_customer_id = customer_id
+                    subscription.stripe_customer_id = data.get("customer")
                     subscription.stripe_subscription_id = subscription_id
                     subscription.status = "active"
                     subscription.tier = tier
                     subscription.billing_interval = interval
-                    subscription.plan = f"{tier}_{interval}"  # e.g., "basic_monthly"
-
-                    if "error" not in sub_details:
-                        subscription.current_period_start = (
-                            datetime.datetime.fromtimestamp(
-                                sub_details["current_period_start"]
-                            )
-                        )
-                        subscription.current_period_end = (
-                            datetime.datetime.fromtimestamp(
-                                sub_details["current_period_end"]
-                            )
-                        )
-
-                    db.session.commit()
-                    logger.info(
-                        f"Subscription activated for user {user_id}: {tier}/{interval}"
-                    )
-
+                    subscription.plan = f"{tier}_{interval}"
+                    if "error" not in details:
+                        subscription.current_period_start = datetime.datetime.fromtimestamp(details["current_period_start"])
+                        subscription.current_period_end = datetime.datetime.fromtimestamp(details["current_period_end"])
         elif event_type == "invoice.paid":
-            # Recurring payment successful
-            subscription_id = data.get("subscription")
-            if subscription_id:
-                subscription = Subscription.query.filter_by(
-                    stripe_subscription_id=subscription_id
-                ).first()
-                if subscription:
-                    subscription.status = "active"
-                    sub_details = get_subscription(subscription_id)
-                    if "error" not in sub_details:
-                        subscription.current_period_start = (
-                            datetime.datetime.fromtimestamp(
-                                sub_details["current_period_start"]
-                            )
-                        )
-                        subscription.current_period_end = (
-                            datetime.datetime.fromtimestamp(
-                                sub_details["current_period_end"]
-                            )
-                        )
-                    db.session.commit()
-                    logger.info(
-                        f"Subscription renewed for subscription {subscription_id}"
-                    )
-
+            subscription.status = "active"
+            details = get_subscription(subscription_id)
+            if "error" in details:
+                raise RuntimeError("Unable to reconcile Stripe subscription")
+            subscription.current_period_start = datetime.datetime.fromtimestamp(details["current_period_start"])
+            subscription.current_period_end = datetime.datetime.fromtimestamp(details["current_period_end"])
         elif event_type == "invoice.payment_failed":
-            # Payment failed
-            subscription_id = data.get("subscription")
-            if subscription_id:
-                subscription = Subscription.query.filter_by(
-                    stripe_subscription_id=subscription_id
-                ).first()
-                if subscription:
-                    subscription.status = "past_due"
-                    db.session.commit()
-                    logger.warning(f"Payment failed for subscription {subscription_id}")
-
+            subscription.status = "past_due"
         elif event_type == "customer.subscription.deleted":
-            # Subscription canceled
-            subscription_id = data.get("id")
-            if subscription_id:
-                subscription = Subscription.query.filter_by(
-                    stripe_subscription_id=subscription_id
-                ).first()
-                if subscription:
-                    subscription.status = "canceled"
-                    subscription.canceled_at = datetime.datetime.now(
-                        datetime.timezone.utc
-                    )
-                    db.session.commit()
-                    logger.info(f"Subscription canceled: {subscription_id}")
-
+            subscription.status = "canceled"
+            subscription.canceled_at = datetime.datetime.now(datetime.timezone.utc)
         elif event_type == "customer.subscription.updated":
-            # Subscription updated (status change, plan change, etc.)
-            subscription_id = data.get("id")
-            status = data.get("status")
-            if subscription_id:
-                subscription = Subscription.query.filter_by(
-                    stripe_subscription_id=subscription_id
-                ).first()
-                if subscription:
-                    subscription.status = status
-                    if data.get("cancel_at_period_end"):
-                        subscription.canceled_at = datetime.datetime.now(
-                            datetime.timezone.utc
-                        )
+            subscription.status = data.get("status")
+            if data.get("cancel_at_period_end"):
+                subscription.canceled_at = datetime.datetime.now(datetime.timezone.utc)
+            elif data.get("cancel_at_period_end") is False and subscription.status != "canceled":
+                subscription.canceled_at = None
+            items = data.get("items", {}).get("data", [])
+            if items:
+                price = items[0].get("price", {})
+                trusted_plan = get_plan_for_stripe_price_id(price.get("id"))
+                if trusted_plan:
+                    subscription.tier, subscription.billing_interval = trusted_plan
+                else:
+                    subscription.tier = "free"
+                    subscription.billing_interval = "monthly"
+            if data.get("current_period_end"):
+                subscription.current_period_end = datetime.datetime.fromtimestamp(data["current_period_end"])
 
-                    # Update tier from current subscription items (handles scheduled downgrades)
-                    items = data.get("items", {}).get("data", [])
-                    if items:
-                        price_id = items[0].get("price", {}).get("id", "")
-                        trusted_plan = get_plan_for_stripe_price_id(price_id)
-                        subscription.tier = trusted_plan[0] if trusted_plan else "free"
-                        # Update billing interval
-                        interval = (
-                            items[0]
-                            .get("price", {})
-                            .get("recurring", {})
-                            .get("interval", "month")
-                        )
-                        subscription.billing_interval = trusted_plan[1] if trusted_plan else (
-                            "annual" if interval == "year" else "monthly"
-                        )
-
-                    # Update period end
-                    if data.get("current_period_end"):
-                        subscription.current_period_end = (
-                            datetime.datetime.fromtimestamp(data["current_period_end"])
-                        )
-
-                    db.session.commit()
-                    logger.info("Subscription update processed")
-
-    except Exception as e:
-        logger.error(f"Webhook processing error: {e}")
-        # Return 200 anyway to prevent Stripe retries
-        # Don't expose internal error details to external callers
+        if subscription:
+            subscription.stripe_last_event_created = event_created
+        db.session.commit()
         return jsonify({"received": True}), 200
-
-    return jsonify({"received": True}), 200
+    except IntegrityError:
+        db.session.rollback()
+        if event_id and StripeWebhookEvent.query.filter_by(event_id=event_id).first():
+            return jsonify({"received": True, "duplicate": True}), 200
+        logger.error("Stripe webhook transaction failed")
+        return jsonify({"error": "Webhook processing failed; Stripe may retry"}), 500
+    except Exception:
+        db.session.rollback()
+        logger.error("Stripe webhook transaction failed")
+        return jsonify({"error": "Webhook processing failed; Stripe may retry"}), 500
 
 
 @api_v2_bp.route("/me", methods=["GET", "PATCH"])
