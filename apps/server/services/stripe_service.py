@@ -65,7 +65,7 @@ def log_missing_billing_configuration():
     missing = get_missing_billing_configuration()
     now = time.monotonic()
     if missing and now - _last_readiness_log >= 60:
-        logger.warning("Stripe webhook unavailable; missing configuration: %s", ", ".join(missing))
+        logger.warning("Stripe billing unavailable: configuration is incomplete; check the operator runbook")
         _last_readiness_log = now
 
 

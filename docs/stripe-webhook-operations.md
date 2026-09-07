@@ -1,6 +1,6 @@
 # Stripe billing readiness and webhook recovery
 
-SaaS billing is advertised as enabled only when the Stripe SDK, API key, webhook secret, and all four configured prices (Basic/Plus, monthly/annual) are present. The public `/api/v2/config` response includes only generic readiness state; missing component names are logged for operators without exposing configuration details. Self-hosted deployments keep billing disabled even if Stripe variables happen to be present.
+SaaS billing is advertised as enabled only when the Stripe SDK, API key, webhook secret, and all four configured prices (Basic/Plus, monthly/annual) are present. The public `/api/v2/config` response includes only generic readiness state; operator logs use a fixed warning without configuration-derived values. Self-hosted deployments keep billing disabled even if Stripe variables happen to be present.
 
 A SaaS checkout request returns `503` while readiness is incomplete. Correct the operator configuration and restart the server. Trial provisioning retains the existing SaaS/API-key policy independently of payment readiness. A missing webhook secret/configuration also returns `503`. Invalid signatures or malformed payloads return `400`. Both are failed deliveries; do not assume Stripe stops retries solely because a response is `400`.
 
@@ -8,7 +8,7 @@ Webhook event IDs are stored in a durable unique ledger. Retries and concurrent 
 
 ## Recovery
 
-1. Check the sanitized readiness payload from `/api/v2/config` and server logs for the missing component names.
+1. Check the sanitized readiness payload from `/api/v2/config` and the fixed incomplete-configuration warning in server logs. Privately verify the configuration components listed above; do not print credentials.
 2. Correct the relevant environment variables, including every offered price and the endpoint signing secret, then restart the application.
 3. Confirm readiness and monitor the Stripe Dashboard's webhook delivery status.
 4. For a processing failure, inspect application logs and database state, correct the underlying issue, and use Stripe Dashboard's manual **Resend** for the affected event.
