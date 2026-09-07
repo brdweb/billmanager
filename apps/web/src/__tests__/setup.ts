@@ -2,7 +2,7 @@
  * Vitest test setup file.
  * This runs before each test file.
  */
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 import { vi } from 'vitest'
 
 // Mock window.matchMedia for components that use media queries

@@ -172,7 +172,7 @@ sqlalchemy==2.0.52
     #   flask-sqlalchemy
 stevedore==5.9.1
     # via bandit
-stripe==15.6.0
+stripe==15.6.1
     # via -r apps/server/requirements.txt
 tomli==2.4.1
     # via pip-audit
