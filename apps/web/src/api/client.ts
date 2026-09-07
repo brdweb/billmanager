@@ -2,6 +2,7 @@ import axios, { AxiosError } from 'axios';
 import type { AxiosRequestConfig } from 'axios';
 import i18n from '../i18n';
 import { TokenStorage } from '../utils/tokenStorage';
+import { requestSecurityConfirmation } from '../utils/securityConfirmation';
 
 const api = axios.create({
   baseURL: '/api/v2',
@@ -121,7 +122,26 @@ const tryRefreshAccessToken = async (): Promise<string | null> => {
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean; _confirmed?: boolean };
+    const confirmation = (error.response?.data as { security_confirmation?: { method: 'password' | 'email' | 'oidc'; purpose: string } })?.security_confirmation;
+    if (error.response?.status === 428 && confirmation && originalRequest && !originalRequest._confirmed) {
+      originalRequest._confirmed = true;
+      const accessToken = TokenStorage.getAccessToken();
+      let challenge: string | undefined;
+      if (confirmation.method === 'email') {
+        const sent = await api.post('/auth/security-confirmation/send-code', { purpose: confirmation.purpose });
+        challenge = sent.data.data.challenge;
+      }
+      const value = await requestSecurityConfirmation(confirmation.method, confirmation.purpose, () => confirmWithOidc(confirmation.purpose));
+      if (!value || accessToken !== TokenStorage.getAccessToken()) throw new Error('Confirmation cancelled; try again');
+      const proof = confirmation.method === 'oidc' ? { data: { data: { confirmation_token: value } } } : await api.post('/auth/security-confirmation', {
+        purpose: confirmation.purpose,
+        ...(confirmation.method === 'password' ? { password: value } : { code: value, challenge }),
+      });
+      if (accessToken !== TokenStorage.getAccessToken()) throw new Error('Session changed; try again');
+      originalRequest.headers = { ...originalRequest.headers, 'X-Security-Confirmation': proof.data.data.confirmation_token };
+      return api(originalRequest);
+    }
     const url = originalRequest?.url || '';
     const isAuthRequest = url.includes('/auth/login') || url.includes('/auth/refresh');
 
@@ -153,6 +173,42 @@ api.interceptors.response.use(
     return Promise.reject(new ApiError(message, statusCode, error));
   }
 );
+
+async function confirmWithOidc(purpose: string): Promise<string> {
+  // Open from the explicit button gesture, before any asynchronous work.
+  const popup = window.open('about:blank', '_blank', 'popup,width=520,height=720');
+  if (!popup) throw new Error('Allow the sign-in popup to continue');
+  const accessToken = TokenStorage.getAccessToken();
+  try {
+    const verifier = Array.from(crypto.getRandomValues(new Uint8Array(32)), value => value.toString(16).padStart(2, '0')).join('');
+    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+    const challenge = Array.from(new Uint8Array(hash), value => value.toString(16).padStart(2, '0')).join('');
+    const started = await api.get('/auth/oauth/oidc/authorize', { params: { flow: 'confirm', purpose, client_challenge: challenge } });
+    const { auth_url: authUrl, state, redirect_uri: redirectUri } = started.data.data;
+    const expected = new URL(redirectUri);
+    if (expected.origin !== window.location.origin) throw new Error('The web callback must use this application origin');
+    popup.location.href = authUrl;
+    const code = await new Promise<string>((resolve, reject) => {
+      const deadline = Date.now() + 300_000;
+      const timer = window.setInterval(() => {
+        if (popup.closed || Date.now() > deadline || accessToken !== TokenStorage.getAccessToken()) {
+          window.clearInterval(timer); reject(new Error('Sign-in cancelled or expired')); return;
+        }
+        try {
+          const returned = new URL(popup.location.href);
+          if (returned.origin !== expected.origin || returned.pathname !== expected.pathname) return;
+          if (returned.searchParams.get('state') !== state) return;
+          window.clearInterval(timer);
+          const code = returned.searchParams.get('code');
+          if (code) resolve(code); else reject(new Error('Sign-in was not completed'));
+        } catch { /* The provider page is cross-origin until it redirects back. */ }
+      }, 200);
+    });
+    if (accessToken !== TokenStorage.getAccessToken()) throw new Error('Session changed');
+    const proof = await api.post('/auth/oauth/oidc/callback', { code, state, redirect_uri: redirectUri, client_verifier: verifier });
+    return proof.data.data.confirmation_token;
+  } finally { popup.close(); }
+}
 
 // Generic API response wrapper for v2 endpoints
 export interface ApiResponse<T> {
@@ -1024,7 +1080,7 @@ export const confirm2FAEmail = (setup_token: string, code: string) =>
   unwrap(api.post<ApiResponse<{ message: string; recovery_codes: string[] | null }>>('/auth/2fa/setup/email/confirm', { setup_token, code }));
 
 export const getRecoveryCodes = () =>
-  unwrap(api.get<ApiResponse<{ recovery_codes: string[] }>>('/auth/2fa/recovery-codes'));
+  unwrap(api.post<ApiResponse<{ recovery_codes: string[] }>>('/auth/2fa/recovery-codes'));
 
 export const getPasskeyRegistrationOptions = () =>
   unwrap(api.post<ApiResponse<{ options: Record<string, unknown>; registration_token: string }>>('/auth/2fa/setup/passkey/options'));

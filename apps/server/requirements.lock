@@ -1,4 +1,4 @@
-alembic==1.19.1
+alembic==1.19.2
     # via flask-migrate
 apscheduler==3.11.3
     # via -r apps/server/requirements.txt

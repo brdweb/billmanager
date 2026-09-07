@@ -50,6 +50,18 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.12.2',
+    date: '2026-09-06',
+    title: 'Account and Tenant Security',
+    sections: [{ heading: 'Security', items: [
+      'Strengthened invitation ownership and bill-share recipient checks',
+      'Sensitive credential changes and passwordless account deletion now require fresh identity confirmation',
+      'Protected login email addresses from administrative replacement and corrected paid-plan reconciliation',
+      'Bound mobile OAuth callbacks to the initiating app and bundled API documentation scripts locally',
+      'Separated telemetry ingestion from operator statistics and trusted deployment alerts',
+    ] }],
+  },
+  {
     version: '4.12.1',
     date: '2026-08-27',
     title: 'Reliable Mobile Passkeys',

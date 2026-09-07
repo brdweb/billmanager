@@ -44,6 +44,20 @@ user_database_access = db.Table('user_database_access',
     db.Column('database_id', db.Integer, db.ForeignKey('databases.id'), primary_key=True)
 )
 
+class SecurityConfirmation(db.Model):
+    """Isolated, single-use proof for a sensitive action (never a login token)."""
+    __tablename__ = 'security_confirmations'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False)
+    purpose = db.Column(db.String(40), nullable=False)
+    code_hash = db.Column(db.String(256), nullable=True)
+    identity_hash = db.Column(db.String(64), nullable=False)
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used = db.Column(db.Boolean, nullable=False, default=False)
+
+
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)

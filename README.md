@@ -10,15 +10,16 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.12.1
+## 🎉 What's New in v4.12.2
 
-**Reliable Mobile Passkeys** - Android and iOS association files are now served from the production frontend build, matching the paths packaged into the container image.
+**Account and Tenant Security** - Stronger invitation and share authorization, fresh confirmation for sensitive account actions, and safer OAuth, billing, and telemetry boundaries.
 
 ### Highlights
 
-- **Android Association** - The Digital Asset Links endpoint is available from the production container for Credential Manager verification
-- **iOS Association** - The Apple association endpoint uses the same production-safe path resolution
-- **Clear Diagnostics** - Passkey failures distinguish origin, RP ID, challenge, signature, sign-count, and payload problems
+- **Account confirmation** - OAuth linking, adding passkeys, regenerating recovery codes, and passwordless deletion require a fresh password, verified-email code, or fresh sign-in to the existing OIDC identity. OIDC confirmation requires the provider to honor `prompt=login`, `max_age=0`, and return a signed `auth_time`; no email service is needed for this path.
+- **Data isolation** - Invitation grants are checked again at acceptance; bill shares retain their intended recipient. Login email addresses are read-only in user administration.
+- **Deployment changes** - API documentation scripts are bundled locally, telemetry statistics use `TELEMETRY_STATS_API_KEY` or an operator JWT, and ingestion keys cannot trigger trusted deployment alerts.
+- **Client compatibility** - Recovery-code regeneration uses POST. Native custom-scheme OAuth requires the updated mobile client with an app-held verifier. Existing in-progress linking/enrollment flows must be restarted after upgrading. The new confirmation table is created automatically at startup.
 
 ---
 

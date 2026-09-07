@@ -94,6 +94,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/security-confirmation/send-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a purpose-bound confirmation code to the verified account email */
+        post: operations["sendSecurityConfirmationCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/security-confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify password or email code and issue a single-use sensitive-action grant
+         * @description Send the confirmation_token in X-Security-Confirmation when retrying the operation that returned HTTP 428. Grants expire after five minutes and are bound to the user and purpose.
+         */
+        post: operations["createSecurityConfirmation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/reauthenticate": {
         parameters: {
             query?: never;
@@ -869,10 +906,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Regenerate recovery codes */
-        get: operations["regenerateRecoveryCodes"];
+        get?: never;
         put?: never;
-        post?: never;
+        /** Regenerate recovery codes */
+        post: operations["regenerateRecoveryCodes"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1979,15 +2016,16 @@ export interface components {
         };
         AccountDeleteInput: {
             /** Format: password */
-            password: string;
-            /** @enum {string} */
-            confirmation: "DELETE";
+            password?: string;
+            /** @description Passwordless accounts also require a delete_account confirmation grant */
+            confirm?: boolean;
         };
         OAuthCallbackInput: {
             code: string;
             state: string;
             /** Format: uri */
             redirect_uri?: string;
+            client_verifier?: string;
         };
         GoogleNativeOAuthStartInput: {
             /**
@@ -2863,6 +2901,69 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    sendSecurityConfirmationCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    purpose: "oauth_link" | "passkey_add" | "recovery_codes" | "delete_account";
+                };
+            };
+        };
+        responses: {
+            /** @description Confirmation challenge sent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObjectDataResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    createSecurityConfirmation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    purpose: "oauth_link" | "passkey_add" | "recovery_codes" | "delete_account";
+                    password?: string;
+                    challenge?: string;
+                    code?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Single-use confirmation token */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObjectDataResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
         };
     };
     reauthenticateCurrentUser: {
@@ -4308,9 +4409,14 @@ export interface operations {
     authorizeOAuthProvider: {
         parameters: {
             query?: {
-                flow?: "login" | "link";
+                /** @description Link requires fresh confirmation; confirm requires bearer authentication and an existing OIDC link and returns a purpose-bound confirmation token after fresh provider authentication. */
+                flow?: "login" | "link" | "confirm";
+                /** @description Required for the OIDC confirm flow */
+                purpose?: "oauth_link" | "passkey_add" | "recovery_codes" | "delete_account";
                 /** @description Exact allowlisted callback URI; defaults to the existing web callback */
                 redirect_uri?: string;
+                /** @description SHA-256 hex digest of an app-held random verifier; required for private-use callback schemes */
+                client_challenge?: string;
             };
             header?: never;
             path: {

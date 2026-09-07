@@ -51,6 +51,7 @@ vi.mock('expo-crypto', () => ({
   CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
   digestStringAsync: vi.fn(async (_algorithm: string, value: string) => `digest-${value}`),
   getRandomBytesAsync: vi.fn(),
+  getRandomBytes: vi.fn(() => new Uint8Array(32).fill(7)),
   randomUUID: vi.fn(() => 'generated-id'),
 }));
 
@@ -457,7 +458,7 @@ describe('BillManagerApi security behavior', () => {
         data: { access_token: 'cloud-access-2', refresh_token: 'cloud-refresh-2' },
       },
     });
-    testMocks.axiosMock.request.mockResolvedValueOnce({ data: { success: true } });
+    testMocks.mockClient.request.mockResolvedValueOnce({ data: { success: true } });
 
     await expect(testMocks.state.responseErrorHandler!({
       response: { status: 401 },
@@ -469,7 +470,7 @@ describe('BillManagerApi security behavior', () => {
       refreshToken: 'cloud-refresh-2',
     });
     expect((api as unknown as { accessToken: string | null }).accessToken).toBe('home-access');
-    expect(testMocks.axiosMock.request).toHaveBeenCalledWith(expect.objectContaining({
+    expect(testMocks.mockClient.request).toHaveBeenCalledWith(expect.objectContaining({
       baseURL: 'https://app.billmanager.app/api/v2',
       _serverProfileId: 'billmanager-cloud',
       headers: expect.objectContaining({
@@ -1236,6 +1237,7 @@ describe('BillManagerApi security behavior', () => {
 
     await expect(api.getOAuthAuthorization('oidc')).resolves.toMatchObject({ success: true });
     expect(oauthScopeStore.save).toHaveBeenCalledWith('oauth-state-a', {
+      clientVerifier: '07'.repeat(32),
       scope: {
         serverProfileId: 'billmanager-cloud',
         databaseId: null,

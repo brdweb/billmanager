@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import './src/i18n';
 import { BiometricGate } from './src/components/BiometricGate';
+import { SecurityConfirmation } from './src/components/SecurityConfirmation';
 import { AppLockProvider } from './src/context/AppLockContext';
 import { AuthProvider } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
@@ -36,6 +37,7 @@ function AppContent() {
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppNavigator />
+      <SecurityConfirmation />
     </>
   );
 }

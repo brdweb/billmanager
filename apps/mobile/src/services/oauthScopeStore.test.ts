@@ -24,11 +24,14 @@ describe('SecureOAuthScopeStore', () => {
       provider: 'google',
       flow: 'login' as const,
       redirectUri: 'https://app.billmanager.app/auth/callback',
+      clientVerifier: 'app-held-verifier',
     };
 
     await store.save('oauth-state-a', transaction);
 
     await expect(store.load('oauth-state-a')).resolves.toEqual(transaction);
+    const restartedStore = new SecureOAuthScopeStore(storage, () => 1001);
+    await expect(restartedStore.load('oauth-state-a')).resolves.toEqual(transaction);
     await expect(store.load('oauth-state-a')).resolves.toEqual(transaction);
     await expect(store.consume('oauth-state-a')).resolves.toEqual(transaction);
     await expect(store.consume('oauth-state-a')).resolves.toBeNull();

@@ -13,8 +13,14 @@ info:
     4. Use `/api/v2/auth/refresh` to get new access tokens when expired
 
     Access tokens expire after 15 minutes. Refresh tokens expire after 7 days.
+    Sensitive operations return HTTP 428 with security_confirmation.method and
+    security_confirmation.purpose. Obtain a single-use grant from
+    /auth/security-confirmation and retry with X-Security-Confirmation.
+    For method oidc, use the authenticated OIDC authorize flow=confirm with the
+    requested purpose. Its callback returns the grant only after fresh sign-in
+    to the already-linked identity with a signed auth_time claim.
 
-  version: 4.12.1
+  version: 4.12.2
   license:
     name: O'Saasy License
     url: https://osaasy.dev/
@@ -243,6 +249,60 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
 
+  /auth/security-confirmation/send-code:
+    post:
+      tags: [Authentication]
+      summary: Send a purpose-bound confirmation code to the verified account email
+      operationId: sendSecurityConfirmationCode
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose]
+              properties:
+                purpose: {type: string, enum: [oauth_link, passkey_add, recovery_codes, delete_account]}
+      responses:
+        '200':
+          description: Confirmation challenge sent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ObjectDataResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /auth/security-confirmation:
+    post:
+      tags: [Authentication]
+      summary: Verify password or email code and issue a single-use sensitive-action grant
+      description: Send the confirmation_token in X-Security-Confirmation when retrying the operation that returned HTTP 428. Grants expire after five minutes and are bound to the user and purpose.
+      operationId: createSecurityConfirmation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose]
+              properties:
+                purpose: {type: string, enum: [oauth_link, passkey_add, recovery_codes, delete_account]}
+                password: {type: string, writeOnly: true}
+                challenge: {type: string, writeOnly: true}
+                code: {type: string, writeOnly: true}
+      responses:
+        '200':
+          description: Single-use confirmation token
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ObjectDataResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/RateLimited'}
   /auth/reauthenticate:
     post:
       tags: [Authentication]
@@ -1633,14 +1693,25 @@ paths:
           in: query
           schema:
             type: string
-            enum: [login, link]
+            enum: [login, link, confirm]
             default: login
+          description: Link requires fresh confirmation; confirm requires bearer authentication and an existing OIDC link and returns a purpose-bound confirmation token after fresh provider authentication.
+        - name: purpose
+          in: query
+          description: Required for the OIDC confirm flow
+          schema:
+            type: string
+            enum: [oauth_link, passkey_add, recovery_codes, delete_account]
         - name: redirect_uri
           in: query
           schema:
             type: string
             example: billmanager://auth/callback
           description: Exact allowlisted callback URI; defaults to the existing web callback
+        - name: client_challenge
+          in: query
+          description: SHA-256 hex digest of an app-held random verifier; required for private-use callback schemes
+          schema: {type: string, pattern: '^[0-9a-f]{64}$'}
       responses:
         '200':
           description: Authorization URL and state
@@ -1832,7 +1903,7 @@ paths:
         '429': {$ref: '#/components/responses/RateLimited'}
 
   /auth/2fa/recovery-codes:
-    get:
+    post:
       tags: [Authentication]
       summary: Regenerate recovery codes
       operationId: regenerateRecoveryCodes
@@ -3526,10 +3597,9 @@ components:
 
     AccountDeleteInput:
       type: object
-      required: [password, confirmation]
       properties:
         password: {type: string, format: password}
-        confirmation: {type: string, enum: [DELETE]}
+        confirm: {type: boolean, description: Passwordless accounts also require a delete_account confirmation grant}
 
     OAuthCallbackInput:
       type: object
@@ -3538,6 +3608,7 @@ components:
         code: {type: string}
         state: {type: string}
         redirect_uri: {type: string, format: uri}
+        client_verifier: {type: string, writeOnly: true, minLength: 43, maxLength: 128}
 
     GoogleNativeOAuthStartInput:
       type: object

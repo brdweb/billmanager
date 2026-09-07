@@ -78,14 +78,18 @@ environment:
 
 ### For Telemetry Receiver Operators
 
-The ingestion endpoint accepts anonymous submissions by default, with payload
-size, schema, and per-IP rate limits. The statistics endpoint always requires
-an admin JWT or `TELEMETRY_RECEIVER_API_KEY`.
+The ingestion endpoint requires authentication by default, with payload
+size, schema, and per-IP rate limits. The statistics endpoint requires
+an instance-operator JWT or a separate `TELEMETRY_STATS_API_KEY`.
+Ingestion credentials cannot read statistics. New-deployment alerts are emitted
+only for submissions authenticated with an instance-operator JWT; sender-provided
+deployment labels alone are not trusted operational events.
 
 ```bash
-# Optional: require the shared key on ingestion as well as statistics
+# Require the shared ingestion key (default)
 TELEMETRY_INGEST_REQUIRE_AUTH=true
 TELEMETRY_RECEIVER_API_KEY=change-this-to-a-long-random-string
+TELEMETRY_STATS_API_KEY=change-this-to-a-different-long-random-string
 
 # Set the same key on each explicitly provisioned sender
 TELEMETRY_API_KEY=change-this-to-a-long-random-string

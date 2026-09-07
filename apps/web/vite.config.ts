@@ -1,10 +1,24 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    {
+      name: 'local-api-documentation-assets',
+      generateBundle() {
+        for (const name of ['swagger-ui-bundle.js', 'swagger-ui.css']) {
+          // Only fixed build-owned package assets are read; no request input is involved.
+          // eslint-disable-next-line security/detect-non-literal-fs-filename
+          this.emitFile({ type: 'asset', fileName: `docs/${name}`, source: readFileSync(require.resolve(`swagger-ui-dist/${name}`)) })
+        }
+      },
+    },
   ],
   server: {
     port: 5173,

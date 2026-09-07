@@ -56,7 +56,7 @@ test: test-backend test-web test-mobile
 verify: test security-checks
 
 test-backend:
-	@DATABASE_URL="$(BACKEND_TEST_DB_URL)" ./scripts/test-backend.sh
+	@DATABASE_URL="$(BACKEND_TEST_DB_URL)" bash ./scripts/test-backend.sh
 
 test-web:
 	cd apps/web && npm test

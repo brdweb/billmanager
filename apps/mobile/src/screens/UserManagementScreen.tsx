@@ -378,6 +378,7 @@ export default function UserManagementScreen({ navigation }: Props) {
                 color: colors.text,
               }]}
               value={editEmail}
+              editable={false}
               onChangeText={setEditEmail}
               placeholder={t('admin.users.emailPlaceholder')}
               placeholderTextColor={colors.textMuted}
