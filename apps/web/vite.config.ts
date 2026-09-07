@@ -82,10 +82,6 @@ export default defineConfig({
             return 'vendor-sanitize';
           }
 
-          if (id.includes('@simplewebauthn')) {
-            return 'vendor-webauthn';
-          }
-
           return 'vendor';
         },
       },

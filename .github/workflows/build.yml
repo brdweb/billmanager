@@ -101,10 +101,10 @@ jobs:
           cd apps/web
           npm ci
 
-      - name: Run vitest
+      - name: Run vitest with coverage
         run: |
           cd apps/web
-          npm run test
+          npm run test:coverage
 
       - name: Run ESLint
         run: |
