@@ -5,7 +5,6 @@ PYTHON ?= python3
 VENV ?= .venv
 COMPOSE_FILE ?= docker-compose.dev.yml
 BACKEND_TEST_DB_CONTAINER ?= billmanager-test-db
-BACKEND_TEST_DB_URL ?= postgresql://billsuser:billspass@localhost:5432/bills_test
 PIP_AUDIT_TIMEOUT ?= 120
 
 .PHONY: help bootstrap install install-backend install-web install-mobile \
@@ -56,7 +55,7 @@ test: test-backend test-web test-mobile
 verify: test security-checks
 
 test-backend:
-	@BACKEND_TEST_DB_URL="$(BACKEND_TEST_DB_URL)" bash ./scripts/test-backend.sh
+	@bash ./scripts/test-backend.sh
 
 test-web:
 	cd apps/web && npm test
