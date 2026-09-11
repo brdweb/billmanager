@@ -31,13 +31,13 @@ bootstrap: install
 install: install-backend install-web install-mobile
 
 install-backend:
-	@./scripts/bootstrap-dev.sh backend
+	@bash ./scripts/bootstrap-dev.sh backend
 
 install-web:
-	@./scripts/bootstrap-dev.sh web
+	@bash ./scripts/bootstrap-dev.sh web
 
 install-mobile:
-	@./scripts/bootstrap-dev.sh mobile
+	@bash ./scripts/bootstrap-dev.sh mobile
 
 dev-up:
 	docker compose -f $(COMPOSE_FILE) up -d --build
@@ -56,7 +56,7 @@ test: test-backend test-web test-mobile
 verify: test security-checks
 
 test-backend:
-	@DATABASE_URL="$(BACKEND_TEST_DB_URL)" bash ./scripts/test-backend.sh
+	@BACKEND_TEST_DB_URL="$(BACKEND_TEST_DB_URL)" bash ./scripts/test-backend.sh
 
 test-web:
 	cd apps/web && npm test
@@ -73,7 +73,7 @@ pip-audit:
 	timeout $(PIP_AUDIT_TIMEOUT) bash -lc 'source $(VENV)/bin/activate && pip-audit -r apps/server/requirements.lock'
 
 test-db-up:
-	@./scripts/test-backend.sh --db-only
+	@bash ./scripts/test-backend.sh --db-only
 
 test-db-down:
 	@docker rm -f $(BACKEND_TEST_DB_CONTAINER) >/dev/null 2>&1 || true

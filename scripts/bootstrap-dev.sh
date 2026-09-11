@@ -8,7 +8,7 @@ DEFAULT_TARGETS=(backend web mobile)
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/bootstrap-dev.sh [backend] [web] [mobile]
+Usage: bash ./scripts/bootstrap-dev.sh [backend] [web] [mobile]
 
 Installs local development dependencies for the selected workspaces.
 If no targets are provided, installs all of them.

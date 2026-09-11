@@ -9,7 +9,12 @@ DB_USER="${BACKEND_TEST_DB_USER:-billsuser}"
 DB_PASSWORD="${BACKEND_TEST_DB_PASSWORD:-billspass}"
 DB_NAME="${BACKEND_TEST_DB_NAME:-bills_test}"
 DB_PORT="${BACKEND_TEST_DB_PORT:-5432}"
-DATABASE_URL="${DATABASE_URL:-postgresql://${DB_USER}:${DB_PASSWORD}@localhost:${DB_PORT}/${DB_NAME}}"
+BACKEND_TEST_DB_EXTERNAL="${BACKEND_TEST_DB_EXTERNAL:-0}"
+if [[ "${BACKEND_TEST_DB_EXTERNAL}" == "1" ]]; then
+  DATABASE_URL="${BACKEND_TEST_DB_URL:?BACKEND_TEST_DB_URL is required when BACKEND_TEST_DB_EXTERNAL=1}"
+else
+  DATABASE_URL="${BACKEND_TEST_DB_URL:-postgresql://${DB_USER}:${DB_PASSWORD}@localhost:${DB_PORT}/${DB_NAME}}"
+fi
 DB_IMAGE="${BACKEND_TEST_DB_IMAGE:-postgres:17-alpine}"
 DB_ONLY=0
 
@@ -52,6 +57,54 @@ ensure_test_db() {
   exit 1
 }
 
+validate_external_test_db() {
+  if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
+    printf 'Missing virtualenv test dependencies. Run `make bootstrap` first.\n' >&2
+    exit 1
+  fi
+
+  DATABASE_URL="${DATABASE_URL}" "${VENV_DIR}/bin/python" - <<'PY'
+import os
+
+import psycopg
+from psycopg.conninfo import conninfo_to_dict
+
+url = os.environ["DATABASE_URL"]
+try:
+    info = conninfo_to_dict(url)
+except psycopg.Error:
+    raise SystemExit("External test database configuration is invalid") from None
+approved_identity = {
+    "host": "192.168.40.113",
+    "port": "5432",
+    "dbname": "bills_test",
+    "user": "billsuser",
+}
+if any(info.get(key, "") != value for key, value in approved_identity.items()):
+    raise SystemExit("Refusing external database: target is not the approved test database")
+if info.get("hostaddr", "") not in ("", approved_identity["host"]):
+    raise SystemExit("Refusing external database: target is not the approved test database")
+
+try:
+    with psycopg.connect(
+        host=approved_identity["host"],
+        hostaddr=approved_identity["host"],
+        port=approved_identity["port"],
+        dbname=approved_identity["dbname"],
+        user=approved_identity["user"],
+        password=info.get("password", ""),
+        connect_timeout=5,
+    ) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            if cursor.fetchone() != (1,):
+                raise SystemExit("External test database validation failed")
+except psycopg.Error:
+    raise SystemExit("External test database connection failed") from None
+PY
+  printf 'External test database identity and connectivity validated\n'
+}
+
 run_tests() {
   if [[ ! -x "${VENV_DIR}/bin/pytest" ]]; then
     printf 'Missing virtualenv test dependencies. Run `make bootstrap` first.\n' >&2
@@ -80,11 +133,22 @@ run_tests() {
 }
 
 main() {
-  require_cmd docker
-  ensure_test_db
+  case "${BACKEND_TEST_DB_EXTERNAL}" in
+    0)
+      require_cmd docker
+      ensure_test_db
+      ;;
+    1)
+      validate_external_test_db
+      ;;
+    *)
+      printf 'BACKEND_TEST_DB_EXTERNAL must be 0 or 1\n' >&2
+      exit 1
+      ;;
+  esac
 
   if [[ "${DB_ONLY}" -eq 1 ]]; then
-    printf 'Test database ready at %s\n' "${DATABASE_URL}"
+    printf 'Test database is ready\n'
     exit 0
   fi
 
