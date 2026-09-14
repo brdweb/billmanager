@@ -6,6 +6,8 @@ flask-limiter==4.1.1
 flask-talisman==1.1.0
 gunicorn==26.2.0
 flask-sqlalchemy==3.1.1
+# greenlet 3.5.6 lacks an ARM64 Python 3.14 distribution.
+greenlet==3.5.5
 psycopg[binary]>=3.3.5
 flask-migrate==4.1.0
 PyJWT==2.14.0
