@@ -9,11 +9,13 @@
     "@babel/core": "^7.29.6",
     "lodash": "^4.18.1",
     "markdown-it": "^14.1.0",
+    "query-string": "9.5.1",
     "tmp": "^0.2.6",
     "uuid": "^11.1.1",
     "undici": "^7.18.2"
   },
   "scripts": {
+    "postinstall": "patch-package",
     "start": "expo start --dev-client",
     "start:clear": "expo start --dev-client --clear",
     "i18n:sync": "node scripts/sync-web-translations.mjs",
@@ -102,6 +104,7 @@
     "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.12.0",
+    "patch-package": "8.0.1",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.69.0",
     "vitest": "^5.0.0",

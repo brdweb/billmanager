@@ -1,0 +1,28 @@
+diff --git a/node_modules/@react-navigation/core/lib/module/getPathFromState.js b/node_modules/@react-navigation/core/lib/module/getPathFromState.js
+index b34b8b0..b05a3fc 100644
+--- a/node_modules/@react-navigation/core/lib/module/getPathFromState.js
++++ b/node_modules/@react-navigation/core/lib/module/getPathFromState.js
+@@ -3 +3 @@
+-import * as queryString from 'query-string';
++import queryString from 'query-string';
+diff --git a/node_modules/@react-navigation/core/lib/module/getStateFromPath.js b/node_modules/@react-navigation/core/lib/module/getStateFromPath.js
+index 927ab33..0190958 100644
+--- a/node_modules/@react-navigation/core/lib/module/getStateFromPath.js
++++ b/node_modules/@react-navigation/core/lib/module/getStateFromPath.js
+@@ -4 +4 @@
+-import * as queryString from 'query-string';
++import queryString from 'query-string';
+diff --git a/node_modules/@react-navigation/core/src/getPathFromState.tsx b/node_modules/@react-navigation/core/src/getPathFromState.tsx
+index 8dc7bfb..37de977 100644
+--- a/node_modules/@react-navigation/core/src/getPathFromState.tsx
++++ b/node_modules/@react-navigation/core/src/getPathFromState.tsx
+@@ -2 +2 @@
+-import * as queryString from 'query-string';
++import queryString from 'query-string';
+diff --git a/node_modules/@react-navigation/core/src/getStateFromPath.tsx b/node_modules/@react-navigation/core/src/getStateFromPath.tsx
+index ff4e556..bf38dda 100644
+--- a/node_modules/@react-navigation/core/src/getStateFromPath.tsx
++++ b/node_modules/@react-navigation/core/src/getStateFromPath.tsx
+@@ -8 +8 @@
+-import * as queryString from 'query-string';
++import queryString from 'query-string';
