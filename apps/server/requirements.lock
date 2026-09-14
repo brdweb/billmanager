@@ -22,7 +22,7 @@ charset-normalizer==3.5.1
     # via requests
 click==8.5.0
     # via flask
-coverage==7.16.0
+coverage==7.16.1
     # via pytest-cov
 cryptography==50.0.1
     # via
