@@ -131,7 +131,7 @@ pygments==2.21.0
     # via
     #   pytest
     #   rich
-pyjwt==2.13.0
+pyjwt==2.14.0
     # via -r apps/server/requirements.txt
 pyopenssl==26.4.0
     # via webauthn
@@ -156,7 +156,7 @@ requests==2.34.2
     #   resend
     #   responses
     #   stripe
-resend==2.43.0
+resend==2.44.0
     # via -r apps/server/requirements.txt
 responses==0.26.3
     # via -r apps/server/requirements.txt
