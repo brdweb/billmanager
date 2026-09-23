@@ -1,0 +1,119 @@
+name: Web and Server Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish_latest:
+        description: Publish the latest image tag
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: web-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  publish:
+    name: Publish Web and Server Image
+    runs-on: ubuntu-latest
+    environment: web-production
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+
+      - name: Validate release ref and version
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+
+          version="$(node -p "require('./apps/web/package.json').version")"
+          IFS='.' read -r major minor _ <<< "$version"
+          if [[ -z "$major" || -z "$minor" ]]; then
+            echo "apps/web/package.json has an invalid version: $version" >&2
+            exit 1
+          fi
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$REF" != "refs/heads/main" && ! "$REF" =~ ^refs/tags/v[^/]+$ ]]; then
+            echo "Manual releases must run from main or a v* tag." >&2
+            exit 1
+          fi
+
+          if [[ "$REF_TYPE" == "tag" ]]; then
+            git fetch --no-tags origin main:refs/remotes/origin/main
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+              echo "Release tag must reference a commit on origin/main." >&2
+              exit 1
+            fi
+
+            expected_tag="v$version"
+            if [[ "$REF_NAME" != "$expected_tag" ]]; then
+              echo "Release tag must be $expected_tag; received $REF_NAME." >&2
+              exit 1
+            fi
+          fi
+
+          {
+            echo "version=$version"
+            echo "major_minor=$major.$minor"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ steps.release.outputs.version }}
+            type=raw,value=${{ steps.release.outputs.major_minor }}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' || inputs.publish_latest == true }}
+            type=sha
+
+      - name: Build and push multi-platform image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

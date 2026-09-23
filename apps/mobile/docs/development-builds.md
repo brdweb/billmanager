@@ -6,7 +6,7 @@ BillManager Mobile requires an Expo development build. Expo Go cannot load the S
 
 - Node.js 24.19.0 and npm
 - an Expo account with access to the existing `brdweb/billmanager-mobile` EAS project
-- EAS CLI 16.28.0 or newer, or `npx eas-cli`
+- EAS CLI 16.28.0 (use `npx eas-cli@16.28.0`)
 - Android Studio, Android SDK, an emulator or Android device, and a compatible JDK for local Android builds
 - macOS with Xcode for local iOS builds, widget/passkey work, signing diagnosis, and final App Store checks
 
@@ -60,25 +60,25 @@ Generated translation and API changes are real source changes. Review and commit
 Authenticate once:
 
 ```bash
-npx eas-cli login
+npx eas-cli@16.28.0 login
 ```
 
 Android internal development client:
 
 ```bash
-npx eas-cli build --platform android --profile development
+npx eas-cli@16.28.0 build --platform android --profile development
 ```
 
 iOS simulator client:
 
 ```bash
-npx eas-cli build --platform ios --profile development
+npx eas-cli@16.28.0 build --platform ios --profile development
 ```
 
 iOS physical-device internal client:
 
 ```bash
-npx eas-cli build --platform ios --profile development:device
+npx eas-cli@16.28.0 build --platform ios --profile development:device
 ```
 
 After installing the matching development client, start Metro:
@@ -140,7 +140,7 @@ only by the Windows user running the build:
 - `%LOCALAPPDATA%\BillManager\android-signing\credentials.json`
 - `%LOCALAPPDATA%\BillManager\android-signing\keystore.jks`
 
-Download the existing Android keystore through `npx eas-cli credentials
+Download the existing Android keystore through `npx eas-cli@16.28.0 credentials
 --platform android`; do not generate a replacement key and never copy either
 credential file into the repository. The script also expects the preview
 profile's pinned Windows Node.js version and the Android 36 SDK, Build Tools,
@@ -185,15 +185,55 @@ Before reporting a native issue, reproduce it from a clean `npm ci` and clean pr
 
 Only `development` and `development:device` set `BILLMANAGER_DEVELOPMENT_BUILD=true`; `preview`, `preview:ios`, and `production` explicitly set it to `false`, and the app configuration defaults to HTTPS-only when the flag is absent. `npm run config:validate` checks these generated policies in CI. The final transport-security gate must still be tested against a production-profile binary rather than inferred from configuration alone.
 
-Routine cloud builds and submissions use EAS:
+## Release candidates through GitHub Actions
+
+The canonical cloud release path uses separate platform workflows, not routine
+direct EAS commands:
+
+| Platform | Workflow | Candidate destination |
+|---|---|---|
+| iOS | [`release-ios.yml`](../../../.github/workflows/release-ios.yml) | App Store Connect / TestFlight |
+| Android | [`release-android.yml`](../../../.github/workflows/release-android.yml) | Draft internal testing |
+
+Both workflows trigger when a `mobile-v*` tag is pushed and also support
+`workflow_dispatch`. A common tag builds candidates for both platforms only; it
+never submits either candidate. The tag must be exactly
+`mobile-v<package version>` or `mobile-v<package version>-build<N>`, and it
+must point to a commit contained in `main`; the package version is the mobile
+package version and `<N>` is a build number.
+
+For a manual run, choose either workflow independently and dispatch it only
+from `main` or a valid `mobile-v*` tag. The dispatch input `action` is a choice
+of `build` or `submit`; `build_id` is optional for a build but a submission
+requires the recorded EAS build ID. Each workflow has distinct `validate`,
+`build`, and `submit` jobs, and the `validate` job must succeed before either
+of the latter jobs proceeds. To submit, dispatch the relevant platform workflow
+with `action=submit` and the explicit `build_id`, then approve its protected
+production environment: `ios-production` for iOS or `android-production` for
+Android.
+
+`EXPO_TOKEN` is environment-scoped in the corresponding protected production
+environment. Store credentials remain EAS-managed; do not replace identifiers,
+credentials, or the EAS project to bypass a signing problem. Each build produces
+a JSON build-metadata artifact and records the EAS build ID in the job summary.
+Save that ID before requesting a submission.
+
+An iOS submission creates an App Store Connect/TestFlight candidate; an Android
+submission creates a draft internal-testing candidate. Neither action makes a
+public release. Public promotion and the device/release gates remain manual.
+
+### Local/manual EAS fallback
+
+The following commands are a local or manual-recovery fallback, not a release
+authorization or the canonical CI path. A production build or upload still
+requires the same release approval, protected environment, recorded build ID,
+EAS-managed store credentials, and manual public-promotion gates:
 
 ```bash
-npx eas-cli build --platform all --profile production
-npx eas-cli submit --platform ios --profile production
-npx eas-cli submit --platform android --profile production
+npx eas-cli@16.28.0 build --platform all --profile production
+npx eas-cli@16.28.0 submit --platform ios --id <EAS_BUILD_ID>
+npx eas-cli@16.28.0 submit --platform android --id <EAS_BUILD_ID>
 ```
-
-These commands are documentation, not authorization to publish. Do not run a production submission until both stores pass the release gates in [implementation-status.md](implementation-status.md) and a release owner explicitly approves publication.
 
 ## Mac and Xcode responsibilities
 
