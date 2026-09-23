@@ -27,6 +27,7 @@ jobs:
     environment: web-production
     permissions:
       contents: read
+      checks: read
       packages: write
     steps:
       - name: Checkout repository
@@ -79,6 +80,33 @@ jobs:
             echo "version=$version"
             echo "major_minor=$major.$minor"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Require successful CI checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          required_checks=(
+            "Backend Tests & Security"
+            "Frontend Tests & Security"
+            "Mobile Contract, Tests & SDK Compatibility"
+            "Secrets Scan"
+          )
+
+          for check_name in "${required_checks[@]}"; do
+            conclusion="$(
+              gh api --method GET \
+                "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs" \
+                -f per_page=100 \
+                -f check_name="$check_name" \
+                --jq '.check_runs | sort_by(.completed_at) | last | .conclusion // ""'
+            )"
+            if [[ "$conclusion" != "success" ]]; then
+              echo "Required CI check '$check_name' is not successful for $GITHUB_SHA (conclusion: ${conclusion:-missing})." >&2
+              exit 1
+            fi
+          done
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
