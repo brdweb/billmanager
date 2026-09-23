@@ -1,0 +1,212 @@
+name: iOS Release
+
+on:
+  push:
+    tags:
+      - 'mobile-v*'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Release action to perform
+        required: true
+        default: build
+        type: choice
+        options:
+          - build
+          - submit
+      build_id:
+        description: Existing EAS build ID to submit
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate iOS Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Restrict manual release ref
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          case "$REF" in
+            refs/heads/main | refs/tags/mobile-v*)
+              ;;
+            *)
+              echo "::error::Manual iOS releases must run from main or a mobile-v* tag."
+              exit 1
+              ;;
+          esac
+
+      - name: Verify mobile release tag is on main
+        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'mobile-v')
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::Mobile release tags must point to a commit on origin/main."
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Validate mobile release tag
+        if: github.ref_type == 'tag'
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          expected="mobile-v${version}"
+
+          case "$TAG_NAME" in
+            "$expected")
+              ;;
+            "$expected"-build*)
+              build_number="${TAG_NAME#"$expected"-build}"
+              if [[ ! "$build_number" =~ ^[0-9]+$ ]]; then
+                echo "::error::Tag must be ${expected} or ${expected}-build<N>."
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::Tag must be ${expected} or ${expected}-build<N>."
+              exit 1
+              ;;
+          esac
+
+      - name: Install mobile dependencies
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Run mobile release checks
+        working-directory: apps/mobile
+        run: npm run check
+
+  build:
+    name: Build iOS Release
+    if: github.event_name == 'push' || inputs.action == 'build'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: ios-production
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Build iOS with EAS
+        working-directory: apps/mobile
+        run: npx --yes eas-cli@16.28.0 build --platform ios --profile production --non-interactive --wait --json > eas-ios-build.json
+
+      - name: Extract EAS build ID
+        id: build-metadata
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          build_id="$(jq -er '
+            if type == "array" and length > 0 and (.[0].id | type == "string") and (.[0].id | length > 0)
+            then .[0].id
+            else error("EAS build output does not contain a first build ID")
+            end
+          ' eas-ios-build.json)"
+          printf 'build_id=%s\n' "$build_id" >> "$GITHUB_OUTPUT"
+
+      - name: Upload EAS build metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-eas-build-metadata
+          path: apps/mobile/eas-ios-build.json
+          retention-days: 90
+
+      - name: Write build summary
+        env:
+          BUILD_ID: ${{ steps.build-metadata.outputs.build_id }}
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+        run: |
+          {
+            echo "## iOS EAS build"
+            echo
+            echo "- Build ID: \`$BUILD_ID\`"
+            echo "- Commit: \`$SHA\`"
+            echo "- Ref: \`$REF\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  submit:
+    name: Submit iOS Release
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'submit'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: ios-production
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      BUILD_ID: ${{ inputs.build_id }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Require EAS build ID
+        run: |
+          if [[ -z "${BUILD_ID//[[:space:]]/}" ]]; then
+            echo "::error::A build ID is required for submission."
+            exit 1
+          fi
+
+      - name: Install mobile dependencies
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Submit iOS build with EAS
+        working-directory: apps/mobile
+        run: npx --yes eas-cli@16.28.0 submit --platform ios --profile production --id "$BUILD_ID" --non-interactive
+
+      - name: Write submission summary
+        env:
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+        run: |
+          {
+            echo "## iOS EAS submission"
+            echo
+            echo "- Build ID: \`$BUILD_ID\`"
+            echo "- Commit: \`$SHA\`"
+            echo "- Ref: \`$REF\`"
+          } >> "$GITHUB_STEP_SUMMARY"

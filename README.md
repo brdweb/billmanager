@@ -68,6 +68,12 @@ What these commands do:
 
 Mobile development uses an Expo development client rather than Expo Go. See the [mobile build and release-readiness guide](apps/mobile/README.md).
 
+### Release workflows
+
+Continuous integration in [`build.yml`](.github/workflows/build.yml) is deliberately non-publishing: backend, web, mobile, and security checks run on pushes and pull requests to `main`, while Docker image validation is pull-request-only. It does not publish images or create a release.
+
+Web and server containers are released only by [`release-web.yml`](.github/workflows/release-web.yml). Create an exact `v<apps/web package version>` tag on a commit contained in `main` to release that version, or use its protected manual dispatch from `main`. Before publishing, the workflow requires that commit's backend, frontend, mobile, and secrets checks to have completed successfully. The `web-production` environment must be protected before either path is used. The workflow publishes the GHCR container outputs, including the ARM64 image; publishing an image neither deploys it to a running environment nor promotes it publicly.
+
 ### Add a Language
 
 Add one complete `<code>.json` catalog to [`apps/web/src/i18n/locales`](apps/web/src/i18n/locales), using a lowercase two- or three-letter language code. Copy `en.json`, translate every value, keep the same keys, and set a non-empty `_meta.languageName` for the language picker. The web app discovers the new file automatically. For the existing mobile sync and code-generation steps, see [Add a shared locale](apps/mobile/README.md#add-a-shared-locale).
