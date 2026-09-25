@@ -80,3 +80,6 @@ AGENTS.md
 
 # Root package-lock (monorepo uses per-app locks)
 /package-lock.json
+
+# Local Hermes workspace state
+.hermes/
