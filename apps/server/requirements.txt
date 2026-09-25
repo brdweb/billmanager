@@ -1,3 +1,7 @@
+# CI validates committed pins; it does not require the newest releases.
+# Validate without upgrading: python scripts/check-python-lock.py
+# Deliberate dependency updates: regenerate the lock, review the full diff,
+# then run backend tests in both deployment modes and dependency/security gates.
 # Regenerate requirements.lock after edits:
 # uv pip compile apps/server/requirements.txt --python-version 3.14 --upgrade --no-header --output-file apps/server/requirements.lock
 flask==3.1.3
