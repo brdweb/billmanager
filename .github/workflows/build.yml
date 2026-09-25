@@ -52,8 +52,8 @@ jobs:
 
       - name: Verify Python dependency lock
         run: |
-          uv pip compile apps/server/requirements.txt --python-version 3.14 --no-header --output-file /tmp/requirements.lock
-          diff -u apps/server/requirements.lock /tmp/requirements.lock
+          python -m unittest discover -s scripts -p 'test_check_python_lock.py'
+          python scripts/check-python-lock.py
 
       - name: Install Python dependencies
         run: |
