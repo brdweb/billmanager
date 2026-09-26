@@ -24,9 +24,10 @@ APP_URL = os.environ.get('APP_URL', 'http://localhost:5000')
 
 # Import tier pricing from config
 try:
-    from config import get_stripe_price_id, STRIPE_PRICES
+    from config import get_stripe_price_id, get_plan_for_stripe_price_id, STRIPE_PRICES
 except ImportError:
     get_stripe_price_id = lambda t, i: None
+    get_plan_for_stripe_price_id = lambda p: None
     STRIPE_PRICES = {}
 
 _last_readiness_log = 0.0
@@ -102,6 +103,13 @@ def create_checkout_session(
 
     if not price_id:
         return {'error': 'Stripe price ID not configured for the selected plan'}
+
+    # Resolve metadata through the same price-to-plan mapping as entitlement.
+    # Request labels can disagree with a configured price (including aliases).
+    plan = get_plan_for_stripe_price_id(price_id)
+    if not plan:
+        return {'error': 'Stripe price ID is not recognized'}
+    tier, interval = plan
 
     stripe.api_key = STRIPE_SECRET_KEY
 
@@ -237,6 +245,13 @@ def update_subscription(subscription_id: str, new_price_id: str, prorate: bool =
     if not STRIPE_AVAILABLE or not STRIPE_SECRET_KEY:
         return {'error': 'Stripe not configured'}
 
+    plan = get_plan_for_stripe_price_id(new_price_id)
+    if not plan:
+        return {'error': 'Stripe price ID is not recognized'}
+    tier, interval = plan
+    # Stripe merges these keys, preserving user_id and other metadata.
+    metadata = {'tier': tier, 'interval': interval}
+
     stripe.api_key = STRIPE_SECRET_KEY
 
     try:
@@ -255,6 +270,7 @@ def update_subscription(subscription_id: str, new_price_id: str, prorate: bool =
                     'id': item_id,
                     'price': new_price_id,
                 }],
+                metadata=metadata,
                 proration_behavior='create_prorations'
             )
         else:
@@ -265,6 +281,7 @@ def update_subscription(subscription_id: str, new_price_id: str, prorate: bool =
                     'id': item_id,
                     'price': new_price_id,
                 }],
+                metadata=metadata,
                 proration_behavior='none',
                 billing_cycle_anchor='unchanged'
             )
