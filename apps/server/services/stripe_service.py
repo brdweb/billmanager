@@ -52,7 +52,7 @@ def get_missing_billing_configuration():
         missing.append("api_key")
     if not STRIPE_WEBHOOK_SECRET:
         missing.append("webhook_secret")
-    for tier in ("basic", "plus"):
+    for tier in ("pro",):
         for interval in ("monthly", "annual"):
             if not STRIPE_PRICES.get(tier, {}).get(interval):
                 missing.append(f"{tier}.{interval}")
@@ -81,7 +81,7 @@ def create_checkout_session(
     user_id: int,
     user_email: str,
     customer_id: str = None,
-    tier: str = 'basic',
+    tier: str = 'pro',
     interval: str = 'monthly'
 ) -> dict:
     """
@@ -91,7 +91,7 @@ def create_checkout_session(
         user_id: The user's ID
         user_email: The user's email
         customer_id: Existing Stripe customer ID (optional)
-        tier: Subscription tier ('basic' or 'plus')
+        tier: Subscription tier ('pro')
         interval: Billing interval ('monthly' or 'annual')
 
     Returns dict with 'url' for redirect or 'error' on failure.

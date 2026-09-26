@@ -9,13 +9,9 @@ import { useMobileRuntime } from '../../context/MobileRuntimeContext';
 import { useServerProfiles } from '../../context/ServerProfileContext';
 import { formatDate, getFormattingConfig } from '../../i18n/format';
 import BillingScreen from './BillingScreen';
-import type { BillingPlanItem, SubscriptionState } from './models';
+import type { SubscriptionState } from './models';
+import { proPlans } from './pricing';
 import { useTranslation } from 'react-i18next';
-
-const prices = {
-  basic: { month: 5, year: 50 },
-  plus: { month: 7.5, year: 75 },
-};
 
 export default function BillingContainer() {
   const { t } = useTranslation();
@@ -40,22 +36,10 @@ export default function BillingContainer() {
     : subscription?.is_trialing
       ? 'trialing'
       : subscription?.status ?? (subscription?.has_subscription ? 'active' : 'free');
-  const plans: BillingPlanItem[] = (['basic', 'plus'] as const).flatMap((id) => (['month', 'year'] as const).map((interval) => ({
-    id: `${id}-${interval}`,
-    name: id === 'basic' ? t('billingPage.basicPlan') : t('billingPage.plusPlan'),
-    description: id === 'basic' ? t('mobileParity.billing.basicDescription') : t('mobileParity.billing.plusDescription'),
-    amount: prices[id][interval],
-    interval,
-    currency: 'USD',
-    features: id === 'basic'
-      ? [t('billingPage.basicFeature1'), t('billingPage.basicFeature2'), t('billingPage.basicFeature3'), t('billingPage.basicFeature4')]
-      : [t('billingPage.plusFeature1'), t('billingPage.plusFeature2'), t('billingPage.plusFeature3'), t('billingPage.plusFeature4')],
-    current: tier === id && subscription?.billing_interval === (interval === 'month' ? 'monthly' : 'annual'),
-    recommended: id === 'plus' && interval === 'year',
-  })));
+  const plans = proPlans(t, tier, subscription?.billing_interval);
 
   const openCheckout = async (planId: string) => {
-    const [tierName, interval] = planId.split('-') as ['basic' | 'plus', 'month' | 'year'];
+    const [tierName, interval] = planId.split('-') as ['pro', 'month' | 'year'];
     const response = await api.createCheckoutSession(tierName, interval === 'month' ? 'monthly' : 'annual');
     if (response.success && response.data?.url) await Linking.openURL(response.data.url);
     else Alert.alert(t('mobileParity.billing.unavailableTitle'), response.error ?? t('mobileParity.billing.checkoutFailed'));
@@ -80,7 +64,7 @@ export default function BillingContainer() {
         currency: formatting.currency,
         subscription: {
           state,
-          planName: selfHosted ? t('mobileParity.billing.selfHostedUnlimited') : tier === 'basic' ? t('billingPage.basicPlan') : tier === 'plus' ? t('billingPage.plusPlan') : t('billingPage.tierFree'),
+          planName: selfHosted ? t('mobileParity.billing.selfHostedUnlimited') : tier !== 'free' ? t('billingPage.proPlan') : t('billingPage.tierFree'),
           renewalLabel: subscription?.current_period_end ? t('mobileParity.billing.renews', { date: formatDate(subscription.current_period_end) }) : undefined,
           cancelAtLabel: subscription?.cancel_at_period_end && subscription.current_period_end ? t('mobileParity.billing.cancels', { date: formatDate(subscription.current_period_end) }) : undefined,
           trialDaysRemaining: subscription?.trial_days_remaining,

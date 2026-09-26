@@ -23,8 +23,7 @@ def test_saas_readiness_requires_all_stripe_inputs(monkeypatch):
         stripe_service,
         "STRIPE_PRICES",
         {
-            "basic": {"monthly": "price_bm", "annual": "price_ba"},
-            "plus": {"monthly": "price_pm", "annual": None},
+            "pro": {"monthly": "price_pm", "annual": None},
         },
     )
     monkeypatch.setattr(config, "DEPLOYMENT_MODE", "saas")
@@ -43,7 +42,7 @@ def test_self_hosted_billing_remains_disabled_even_when_stripe_is_ready(monkeypa
     monkeypatch.setattr(
         stripe_service,
         "STRIPE_PRICES",
-        {tier: {interval: "price" for interval in ("monthly", "annual")} for tier in ("basic", "plus")},
+        {tier: {interval: "price" for interval in ("monthly", "annual")} for tier in ("pro",)},
     )
     monkeypatch.setattr(config, "DEPLOYMENT_MODE", "self-hosted")
 

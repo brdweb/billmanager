@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { proPlans } from '../features/billing/pricing';
 
 function source(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), 'utf8');
@@ -47,9 +48,9 @@ describe('mobile money input consumers', () => {
 
   it('keeps SaaS plan pricing explicitly in USD', () => {
     // Given / When
-    const billing = source('../features/billing/BillingContainer.tsx');
+    const plans = proPlans((key) => key, 'free');
 
     // Then
-    expect(billing).toContain("currency: 'USD'");
+    expect(plans.map((plan) => plan.currency)).toEqual(['USD', 'USD']);
   });
 });
