@@ -136,6 +136,10 @@ export function ShareBillModal({ opened, onClose, bill }: ShareBillModalProps) {
         split_value: splitValue,
       });
 
+      window.umami?.track('bill_shared', {
+        source: 'bill',
+        split_mode: splitType ?? 'full_amount',
+      });
       setSuccess(result.message);
       setIdentifier('');
       setSplitType(null);
