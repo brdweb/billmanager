@@ -1918,8 +1918,9 @@ def create_checkout():
     if "error" in result:
         return jsonify({"success": False, "error": result["error"]}), 400
 
-    # Save customer ID if new
+    # Save customer ID if new, using the plan resolved from the checkout price.
     if result.get("customer_id") and not customer_id:
+        tier, interval = result["tier"], result["interval"]
         if not user.subscription:
             subscription = Subscription(
                 user_id=user.id, status="pending", tier=tier, billing_interval=interval
