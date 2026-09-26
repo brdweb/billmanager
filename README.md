@@ -74,6 +74,46 @@ Continuous integration in [`build.yml`](.github/workflows/build.yml) is delibera
 
 Web and server containers are released only by [`release-web.yml`](.github/workflows/release-web.yml). Create an exact `v<apps/web package version>` tag on a commit contained in `main` to release that version, or use its protected manual dispatch from `main`. Before publishing, the workflow requires that commit's backend, frontend, mobile, and secrets checks to have completed successfully. The `web-production` environment must be protected before either path is used. The workflow publishes the GHCR container outputs, including the ARM64 image; publishing an image neither deploys it to a running environment nor promotes it publicly.
 
+### Optional product analytics
+
+Product event tracking is disabled by default, including in the public container
+image. To opt in, build a deployment-specific image with both
+`VITE_UMAMI_SCRIPT_URL` (an absolute HTTPS script URL) and
+`VITE_UMAMI_WEBSITE_ID` (your Umami website UUID). The source Compose file forwards
+these values from your private `.env` to Docker build arguments. Rebuild to change
+or remove tracking; container runtime variables alone cannot enable the tracker.
+Never publish a SaaS-configured image as the public self-hosted image.
+
+For a direct web build, set both variables in `apps/web/.env.local` or the build
+environment before `npm run build`. Set `UMAMI_SCRIPT_URL` to the same script URL
+when starting Flask so production CSP permits that origin for scripts and event
+requests. Docker sets this server default from the build argument automatically.
+Only that HTTPS origin is added; the remaining CSP restrictions stay in place.
+Missing one build value or an invalid value fails the build.
+
+For BillManager SaaS, the intended destination is the separate `app.billmanager.app`
+website in the existing Umami dashboard at `https://analytics.billmanager.app`,
+using `https://analytics.billmanager.app/script.js`. The marketing website UUID
+must not be reused. Enablement awaits the operator's website setup, review of
+consent/opt-out policy, and deployment approval; this configuration does not
+establish a legal basis for tracking. Self-hosted operators may use their own
+Umami instance or leave both values empty. This is separate from server telemetry.
+
+The tracker is deferred, requests Do Not Track support, and excludes URL query
+strings and fragments (requires Umami 2.17+). Existing events include
+`checkout_started` (tier, interval) and `bill_created` (expense/deposit type).
+No new event properties are added. An unavailable or blocked tracker leaves these
+optional event calls inactive. There is no in-app consent or opt-out control in
+this change; policy and any required UI must be settled before SaaS enablement.
+
+After an approved rollout, verify the production CSP allows the configured
+origin, `window.umami.track` exists, and a permitted test-account checkout and
+bill creation appear under the product website in Umami. Check actual event
+properties and that no query/fragment values are sent. Use an approved test
+account and payment test mode; do not run automated suites against production.
+For rollback, clear both build values and rebuild/redeploy the previous
+untracked configuration. No database migration or existing-row changes occur.
+
 ### Add a Language
 
 Add one complete `<code>.json` catalog to [`apps/web/src/i18n/locales`](apps/web/src/i18n/locales), using a lowercase two- or three-letter language code. Copy `en.json`, translate every value, keep the same keys, and set a non-empty `_meta.languageName` for the language picker. The web app discovers the new file automatically. For the existing mobile sync and code-generation steps, see [Add a shared locale](apps/mobile/README.md#add-a-shared-locale).

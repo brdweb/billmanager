@@ -1,4 +1,5 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
+import { umamiPlugin } from './build/umami.ts'
 import react from '@vitejs/plugin-react'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -6,9 +7,10 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
+    umamiPlugin(loadEnv(mode, process.cwd(), 'VITE_UMAMI_')),
     {
       name: 'local-api-documentation-assets',
       generateBundle() {
@@ -87,4 +89,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))
