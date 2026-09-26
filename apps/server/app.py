@@ -1028,13 +1028,13 @@ def jwt_operator_required(f):
 def get_user_effective_tier(user):
     """
     Get the effective tier for a user based on their subscription status.
-    Returns 'free', 'basic', or 'plus'.
+    Returns 'free' or 'pro'.
     """
     from config import is_saas
 
-    # Self-hosted mode: everyone gets unlimited (plus tier)
+    # Self-hosted mode: everyone gets unlimited (Pro tier)
     if not is_saas():
-        return "plus"
+        return "pro"
 
     if not user.subscription:
         return "free"
@@ -1143,7 +1143,7 @@ def subscription_required(feature: str = None, min_tier: str = None):
 
     Args:
         feature: Feature to check limit for (e.g., 'bills', 'export')
-        min_tier: Minimum tier required ('basic' or 'plus')
+        min_tier: Minimum tier required ('pro'; legacy names remain aliases)
     """
 
     def decorator(f):
@@ -1163,7 +1163,7 @@ def subscription_required(feature: str = None, min_tier: str = None):
 
             # Check minimum tier if specified
             if min_tier:
-                tier_order = {"free": 0, "basic": 1, "plus": 2}
+                tier_order = {"free": 0, "basic": 1, "plus": 1, "pro": 1}
                 if tier_order.get(tier, 0) < tier_order.get(min_tier, 0):
                     return jsonify(
                         {
@@ -1598,7 +1598,7 @@ def register():
     # Set trial only in SaaS mode with billing
     if billing_enabled:
         user.trial_ends_at = datetime.datetime.now(datetime.timezone.utc) + timedelta(
-            days=14
+            days=30
         )
 
     db.session.add(user)
@@ -1896,13 +1896,15 @@ def create_checkout():
 
     # Get tier and interval from request
     data = request.get_json() or {}
-    tier = data.get("tier", "basic")
+    from config import normalize_paid_tier
+
+    tier = normalize_paid_tier(data.get("tier", "pro"))
     interval = data.get("interval", "monthly")
 
     # Validate tier and interval
-    if tier not in ("basic", "plus"):
+    if tier != "pro":
         return jsonify(
-            {"success": False, "error": "Invalid tier. Must be basic or plus"}
+            {"success": False, "error": "Invalid tier. Must be pro"}
         ), 400
     if interval not in ("monthly", "annual"):
         return jsonify(
@@ -1964,7 +1966,7 @@ def billing_portal():
 @jwt_required
 def change_plan():
     """Change subscription plan (upgrade or downgrade)."""
-    from config import get_stripe_price_id
+    from config import get_stripe_price_id, normalize_paid_tier
 
     user = db.session.get(User, g.jwt_user_id)
     if not user:
@@ -1982,12 +1984,12 @@ def change_plan():
         ), 400
 
     data = request.get_json() or {}
-    new_tier = data.get("tier")
+    new_tier = normalize_paid_tier(data.get("tier"))
     new_interval = data.get("interval")
 
-    if not new_tier or new_tier not in ("basic", "plus"):
+    if new_tier != "pro":
         return jsonify(
-            {"success": False, "error": "Invalid tier. Must be basic or plus"}
+            {"success": False, "error": "Invalid tier. Must be pro"}
         ), 400
     if not new_interval or new_interval not in ("monthly", "annual"):
         return jsonify(
@@ -2002,8 +2004,8 @@ def change_plan():
         ), 400
 
     # Determine if upgrade or downgrade based on tier/price
-    current_tier = user.subscription.tier or "basic"
-    tier_order = {"basic": 1, "plus": 2}
+    current_tier = user.subscription.tier or "pro"
+    tier_order = {"basic": 1, "plus": 1, "pro": 1}
     is_upgrade = tier_order.get(new_tier, 1) > tier_order.get(current_tier, 1)
 
     # Upgrades: immediate with proration. Downgrades: at end of billing period

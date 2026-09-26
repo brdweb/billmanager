@@ -1989,7 +1989,7 @@ export class BillManagerApi {
     }
   }
 
-  async createCheckoutSession(tier: 'basic' | 'plus', interval: 'monthly' | 'annual'): Promise<ApiResponse<{ url: string }>> {
+  async createCheckoutSession(tier: 'pro' | 'basic' | 'plus', interval: 'monthly' | 'annual'): Promise<ApiResponse<{ url: string }>> {
     try {
       const response = await this.client.post<ApiResponse<{ url: string }>>('/billing/create-checkout', {
         tier,
