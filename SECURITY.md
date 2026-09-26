@@ -1,5 +1,7 @@
 # Security Policy
 
+> **DRAFT — awaiting board approval before publication.**
+
 BillManager handles personal financial data, so security reports are welcome and appreciated.
 
 ## Supported Versions
@@ -10,7 +12,10 @@ Security fixes are provided for the latest release and the current `main` branch
 
 Please do not open a public issue for a suspected vulnerability.
 
-Use GitHub's private vulnerability reporting for this repository when available. If private reporting is not available, open a public issue asking for a private contact method, but do not include exploit details, secrets, personal data, database dumps, or live instance URLs.
+Use GitHub's private vulnerability reporting for this repository. Do not open a
+public issue or public discussion about a suspected vulnerability, and do not
+post reproduction steps, exploit details, secrets, personal data, database
+dumps, or live instance URLs.
 
 Helpful reports include:
 
@@ -20,7 +25,8 @@ Helpful reports include:
 - Impact and affected component, such as authentication, authorization, data isolation, billing data, mobile API tokens, email flows, or telemetry
 - Any logs or screenshots with secrets and personal data removed
 
-I will acknowledge valid reports as soon as practical and coordinate fixes privately before public disclosure.
+The project will acknowledge valid reports as soon as practical and coordinate
+fixes privately before public disclosure.
 
 ## Operator Guidance
 
