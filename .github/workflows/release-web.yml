@@ -139,6 +139,9 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          build-args: |
+            VITE_UMAMI_SCRIPT_URL=${{ vars.PRODUCT_UMAMI_SCRIPT_URL }}
+            VITE_UMAMI_WEBSITE_ID=${{ vars.PRODUCT_UMAMI_WEBSITE_ID }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
