@@ -1,0 +1,2 @@
+Paperclip GitHub permissions smoke test for BIL-70.
+Created 2026-09-27 on an isolated branch.
