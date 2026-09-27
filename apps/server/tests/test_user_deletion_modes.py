@@ -19,6 +19,13 @@ def _headers_for(user):
     return {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
 
 
+@pytest.fixture(autouse=True)
+def active_owner_subscription(db_session, admin_user):
+    if admin_user.subscription is None:
+        db_session.add(Subscription(user_id=admin_user.id, tier="pro", status="active"))
+        db_session.commit()
+
+
 def _create_user(db_session, username, *, role='user', creator=None):
     user = User(
         username=username,

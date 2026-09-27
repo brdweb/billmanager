@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 import app as server
 import config
+from app import create_access_token
 from models import Subscription, User, UserInvite
 from services import stripe_service, email
 
@@ -98,7 +99,8 @@ def test_registration_creates_30_day_trial_without_payment(client, db_session, m
 def test_pro_allows_sixth_seat_but_rejects_seventh(admin_user, test_database, db_session, monkeypatch):
     monkeypatch.setattr(config, 'DEPLOYMENT_MODE', 'saas')
     test_database.owner_id = admin_user.id
-    db_session.add(Subscription(user_id=admin_user.id, tier='pro', status='active'))
+    if admin_user.subscription is None:
+        db_session.add(Subscription(user_id=admin_user.id, tier='pro', status='active'))
     for i in range(4):
         db_session.add(UserInvite(email=f'invite{i}@example.com', token=f'token{i}',
             invited_by_id=admin_user.id, expires_at=datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=1)))
@@ -110,6 +112,96 @@ def test_pro_allows_sixth_seat_but_rejects_seventh(admin_user, test_database, db
     db_session.commit()
     allowed, info = server.check_tier_limit(admin_user, 'users')
     assert not allowed and info['used'] == 6
+
+
+def _managed_user_headers(user, database):
+    return {
+        "Authorization": f"Bearer {create_access_token(user.id, user.role)}",
+        "Content-Type": "application/json",
+        "X-Database": database.name,
+    }
+
+
+def test_free_downgrade_hides_and_blocks_existing_managed_seat(
+    client, admin_user, regular_user, test_database, test_bill, db_session, monkeypatch
+):
+    monkeypatch.setattr(config, "DEPLOYMENT_MODE", "saas")
+    test_database.owner_id = admin_user.id
+    regular_user.created_by_id = admin_user.id
+    regular_user.accessible_databases.append(test_database)
+    subscription = admin_user.subscription
+    if subscription is None:
+        subscription = Subscription(user_id=admin_user.id, tier="pro", status="active")
+        db_session.add(subscription)
+    db_session.commit()
+
+    owner_headers = _managed_user_headers(admin_user, test_database)
+    managed_headers = _managed_user_headers(regular_user, test_database)
+    assert client.get("/api/v2/bills", headers=managed_headers).status_code == 200
+    assert len(client.get("/api/v2/users", headers=owner_headers).get_json()["data"]) == 2
+
+    subscription.status = "canceled"
+    db_session.commit()
+
+    listed_users = client.get("/api/v2/users", headers=owner_headers)
+    managed_request = client.get("/api/v2/bills", headers=managed_headers)
+    assert [user["id"] for user in listed_users.get_json()["data"]] == [admin_user.id]
+    assert managed_request.status_code == 403
+
+    subscription.status = "active"
+    db_session.commit()
+    assert client.get("/api/v2/bills", headers=managed_headers).status_code == 200
+
+
+def test_free_downgrade_rejects_stale_invitation_without_creating_user_or_grant(
+    client, admin_user, test_database, db_session, monkeypatch
+):
+    monkeypatch.setattr(config, "DEPLOYMENT_MODE", "saas")
+    test_database.owner_id = admin_user.id
+    subscription = admin_user.subscription
+    if subscription is None:
+        subscription = Subscription(user_id=admin_user.id, tier="pro", status="active")
+        db_session.add(subscription)
+    invite = UserInvite(
+        email="stale-invite@example.com",
+        role="user",
+        invited_by_id=admin_user.id,
+        database_ids=str(test_database.id),
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1),
+    )
+    token = invite.set_token()
+    db_session.add(invite)
+    db_session.commit()
+
+    subscription.status = "canceled"
+    db_session.commit()
+    response = client.post("/api/v2/invitations/accept", json={
+        "token": token,
+        "username": "staleinvite",
+        "password": "StrongPassword123!",
+    })
+
+    assert response.status_code == 403
+    assert User.query.filter_by(username="staleinvite").first() is None
+    assert invite.accepted_at is None
+    assert {user.id for user in test_database.users} == {admin_user.id}
+
+
+def test_self_hosted_managed_user_remains_visible_and_authorized(
+    client, admin_user, regular_user, test_database, test_bill, db_session, monkeypatch
+):
+    monkeypatch.setattr(config, "DEPLOYMENT_MODE", "self-hosted")
+    regular_user.created_by_id = admin_user.id
+    regular_user.accessible_databases.append(test_database)
+    db_session.commit()
+
+    owner_headers = _managed_user_headers(admin_user, test_database)
+    managed_headers = _managed_user_headers(regular_user, test_database)
+    listed_ids = {
+        user["id"] for user in client.get("/api/v2/users", headers=owner_headers).get_json()["data"]
+    }
+    assert listed_ids == {admin_user.id, regular_user.id}
+    assert client.get("/api/v2/bills", headers=managed_headers).status_code == 200
 
 
 def test_welcome_email_reports_30_days(monkeypatch):
