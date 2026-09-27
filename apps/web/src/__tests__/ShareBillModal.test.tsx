@@ -90,4 +90,23 @@ describe('ShareBillModal analytics', () => {
     await waitFor(() => expect(mockShareBill).toHaveBeenCalledOnce());
     expect(track).not.toHaveBeenCalled();
   });
+
+  it('keeps a successful share successful when analytics throws', async () => {
+    mockShareBill.mockResolvedValue({ share_id: 7, status: 'pending', message: 'Shared' });
+    track.mockImplementation(() => {
+      throw new Error('Analytics unavailable');
+    });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.type(screen.getByLabelText(/email/i), 'placeholder@example.com');
+    await user.click(screen.getByRole('button', { name: /share bill/i }));
+
+    expect(await screen.findByText('Shared')).toBeInTheDocument();
+    expect(track).toHaveBeenCalledOnce();
+    expect(mockGetBillShares).toHaveBeenCalledTimes(2);
+    expect(screen.getByLabelText(/email/i)).toHaveValue('');
+    consoleError.mockRestore();
+  });
 });
