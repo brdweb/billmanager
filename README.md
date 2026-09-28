@@ -76,13 +76,26 @@ Web and server containers are released only by [`release-web.yml`](.github/workf
 
 ### Optional product analytics
 
-Product event tracking is disabled by default, including in the public container
-image. To opt in, build a deployment-specific image with both
+Product event tracking is disabled by default. Release automation publishes two
+distinct artifacts from the same commit and Dockerfile:
+
+- `ghcr.io/brdweb/billmanager:<version>` (plus the documented public
+  `<major>.<minor>`, `latest`, and `sha-*` tags) is the public self-hosted image.
+  This build never receives the BillManager SaaS analytics build arguments and
+  is always tracker-free.
+- `ghcr.io/brdweb/billmanager-saas:<version>` is the BillManager SaaS image. It
+  is published only when both protected `PRODUCT_UMAMI_*` values are configured
+  and contains the corresponding tracker configuration. If both values are
+  empty, release automation skips this artifact; if only one is set, it fails.
+
+Self-hosters should pull `ghcr.io/brdweb/billmanager:latest` or another public
+tag, never the `billmanager-saas` repository. To opt in from source, build a
+deployment-specific image with both
 `VITE_UMAMI_SCRIPT_URL` (an absolute HTTPS script URL) and
 `VITE_UMAMI_WEBSITE_ID` (your Umami website UUID). The source Compose file forwards
 these values from your private `.env` to Docker build arguments. Rebuild to change
 or remove tracking; container runtime variables alone cannot enable the tracker.
-Never publish a SaaS-configured image as the public self-hosted image.
+Never retag or publish a SaaS-configured image as the public self-hosted image.
 
 For a direct web build, set both variables in `apps/web/.env.local` or the build
 environment before `npm run build`. Set `UMAMI_SCRIPT_URL` to the same script URL
