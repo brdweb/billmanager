@@ -25,6 +25,9 @@ if 'DATABASE_URL' not in os.environ:
 os.environ['FLASK_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 os.environ['FLASK_ENV'] = 'testing'
 os.environ['RATE_LIMIT_ENABLED'] = 'false'
+# Never inherit a deployment's Sentry destination in the test suite.
+# Crash-reporting tests configure a synthetic DSN and replace the network sink.
+os.environ.pop('SENTRY_DSN', None)
 
 import config
 from app import create_app, create_access_token, JWT_SECRET_KEY

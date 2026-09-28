@@ -9,6 +9,7 @@ flask-cors==6.0.5
 flask-limiter==4.1.1
 flask-talisman==1.1.0
 gunicorn==26.2.0
+sentry-sdk[flask]==2.70.0
 flask-sqlalchemy==3.1.1
 greenlet==3.5.6
 psycopg[binary]>=3.3.6
