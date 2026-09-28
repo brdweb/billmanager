@@ -24,6 +24,7 @@ describe('product analytics HTML integration', () => {
   it('leaves a default self-hosted build without any tracker', async () => {
     const doc = await renderIndex();
     expect(doc.querySelector('script[data-website-id]')).toBeNull();
+    expect(doc.querySelectorAll(`script[src="${src}"]`)).toHaveLength(0);
     expect([...doc.scripts].some(s => s.src.startsWith('https:'))).toBe(false);
     expect(doc.documentElement.innerHTML).not.toContain('analytics.billmanager.app');
   });
@@ -32,6 +33,7 @@ describe('product analytics HTML integration', () => {
     const doc = await renderIndex(src, websiteId);
     const scripts = doc.querySelectorAll('script[data-website-id]');
     expect(scripts).toHaveLength(1);
+    expect(doc.querySelectorAll(`script[src="${src}"]`)).toHaveLength(1);
     const script = scripts[0];
     expect(script.parentElement).toBe(doc.head);
     expect(script.getAttribute('src')).toBe(src);
