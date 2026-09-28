@@ -42,8 +42,8 @@ STRIPE_PRICES = {
         "monthly": os.environ.get("STRIPE_PRICE_PRO_MONTHLY"),
         "annual": os.environ.get("STRIPE_PRICE_PRO_ANNUAL"),
         "name": "Pro",
-        "monthly_amount": 299,
-        "annual_amount": 2400,
+        "monthly_amount": 299,  # $2.99 in cents
+        "annual_amount": 2400,  # $24.00 in cents
     },
 }
 
