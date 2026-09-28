@@ -1,0 +1,209 @@
+diff --git a/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/BillManagerSentryPrivacy.java b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/BillManagerSentryPrivacy.java
+new file mode 100644
+index 0000000..7bba7ea
+--- /dev/null
++++ b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/BillManagerSentryPrivacy.java
+@@ -0,0 +1,84 @@
++package io.sentry.react;
++
++import io.sentry.Hint;
++import io.sentry.SentryEvent;
++import io.sentry.protocol.Mechanism;
++import io.sentry.protocol.SentryException;
++import io.sentry.protocol.SentryStackFrame;
++import io.sentry.protocol.SentryStackTrace;
++import io.sentry.protocol.SentryThread;
++import java.util.Collections;
++import java.util.List;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
++
++final class BillManagerSentryPrivacy {
++  private static final String REDACTED_EVENT_VALUE = "[redacted]";
++
++  private BillManagerSentryPrivacy() {}
++
++  static void scrub(final @NotNull SentryEvent event, final @NotNull Hint hint) {
++    event.setMessage(null);
++    event.setLogger(null);
++    event.setRequest(null);
++    event.setUser(null);
++    event.setServerName(null);
++    event.setBreadcrumbs(null);
++    event.setExtras(null);
++    event.setTags(null);
++    event.setTransaction(null);
++    event.setFingerprints(null);
++    event.setThrowable(null);
++    event.setUnknown(null);
++
++    for (final String contextKey : Collections.list(event.getContexts().keys())) {
++      event.getContexts().remove(contextKey);
++    }
++
++    final @Nullable List<SentryException> exceptions = event.getExceptions();
++    if (exceptions != null) {
++      for (final SentryException exception : exceptions) {
++        exception.setValue(REDACTED_EVENT_VALUE);
++        exception.setModule(null);
++        exception.setUnknown(null);
++        scrubStacktrace(exception.getStacktrace());
++        final @Nullable Mechanism mechanism = exception.getMechanism();
++        if (mechanism != null) {
++          mechanism.setDescription(null);
++          mechanism.setHelpLink(null);
++          mechanism.setData(null);
++          mechanism.setUnknown(null);
++        }
++      }
++    }
++
++    final @Nullable List<SentryThread> threads = event.getThreads();
++    if (threads != null) {
++      for (final SentryThread thread : threads) {
++        thread.setName(null);
++        thread.setUnknown(null);
++        scrubStacktrace(thread.getStacktrace());
++      }
++    }
++
++    hint.clearAttachments();
++    hint.setScreenshot(null);
++    hint.setViewHierarchy(null);
++    hint.setThreadDump(null);
++    hint.setReplayRecording(null);
++  }
++
++  private static void scrubStacktrace(final @Nullable SentryStackTrace stacktrace) {
++    if (stacktrace == null || stacktrace.getFrames() == null) return;
++    for (final SentryStackFrame frame : stacktrace.getFrames()) {
++      frame.setFilename(null);
++      frame.setAbsPath(null);
++      frame.setRawFunction(null);
++      frame.setVars(null);
++      frame.setContextLine(null);
++      frame.setPreContext(null);
++      frame.setPostContext(null);
++      frame.setUnknown(null);
++    }
++  }
++}
+diff --git a/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java
+index 11a4b40..ecc6f29 100644
+--- a/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java
++++ b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java
+@@ -361,6 +361,7 @@ public class RNSentryModuleImpl {
+ 
+     options.setBeforeSend(
+         (event, hint) -> {
++          BillManagerSentryPrivacy.scrub(event, hint);
+           setEventOriginTag(event);
+           addPackages(event, options.getSdkVersion());
+ 
+diff --git a/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.h b/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.h
+new file mode 100644
+index 0000000..ce3dbd3
+--- /dev/null
++++ b/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.h
+@@ -0,0 +1,5 @@
++#import <Sentry/SentryEvent.h>
++
++NS_ASSUME_NONNULL_BEGIN
++FOUNDATION_EXPORT void BillManagerSentryScrubEvent(SentryEvent *event);
++NS_ASSUME_NONNULL_END
+diff --git a/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.m b/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.m
+new file mode 100644
+index 0000000..c46144a
+--- /dev/null
++++ b/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.m
+@@ -0,0 +1,45 @@
++#import "BillManagerSentryPrivacy.h"
++
++@import Sentry;
++
++static NSString *const BillManagerRedactedEventValue = @"[redacted]";
++
++static void BillManagerScrubStacktrace(SentryStacktrace *_Nullable stacktrace)
++{
++    for (SentryFrame *frame in stacktrace.frames) {
++        frame.fileName = nil;
++        frame.vars = nil;
++        frame.contextLine = nil;
++        frame.preContext = nil;
++        frame.postContext = nil;
++    }
++}
++
++void BillManagerSentryScrubEvent(SentryEvent *event)
++{
++    event.message = nil;
++    event.error = nil;
++    event.logger = nil;
++    event.serverName = nil;
++    event.transaction = nil;
++    event.tags = nil;
++    event.extra = nil;
++    event.fingerprint = nil;
++    event.user = nil;
++    event.context = nil;
++    event.breadcrumbs = nil;
++    event.request = nil;
++    BillManagerScrubStacktrace(event.stacktrace);
++    for (SentryThread *thread in event.threads) {
++        thread.name = nil;
++        BillManagerScrubStacktrace(thread.stacktrace);
++    }
++    for (SentryException *exception in event.exceptions) {
++        exception.value = BillManagerRedactedEventValue;
++        exception.module = nil;
++        exception.mechanism.desc = nil;
++        exception.mechanism.data = nil;
++        exception.mechanism.helpLink = nil;
++        BillManagerScrubStacktrace(exception.stacktrace);
++    }
++}
+diff --git a/node_modules/@sentry/react-native/ios/RNSentry.mm b/node_modules/@sentry/react-native/ios/RNSentry.mm
+index 3461af8..d73ff74 100644
+--- a/node_modules/@sentry/react-native/ios/RNSentry.mm
++++ b/node_modules/@sentry/react-native/ios/RNSentry.mm
+@@ -52,6 +52,7 @@
+ #endif
+ 
+ #import "RNSentryExperimentalOptions.h"
++#import "BillManagerSentryPrivacy.h"
+ #import "RNSentryVersion.h"
+ #import "SentrySDKWrapper.h"
+ 
+@@ -119,6 +120,7 @@ static bool hasFetchedAppStart;
+             }
+         }
+ 
++        BillManagerSentryScrubEvent(event);
+         [self setEventOriginTag:event];
+         return event;
+     };
+diff --git a/node_modules/@sentry/react-native/ios/SentrySDKWrapper.m b/node_modules/@sentry/react-native/ios/SentrySDKWrapper.m
+index c11782d..887678a 100644
+--- a/node_modules/@sentry/react-native/ios/SentrySDKWrapper.m
++++ b/node_modules/@sentry/react-native/ios/SentrySDKWrapper.m
+@@ -41,6 +41,11 @@
+         return nil;
+     }
+ 
++    sentryOptions.attachScreenshot = NO;
++    sentryOptions.attachViewHierarchy = NO;
++    sentryOptions.maxAttachmentSize = 0;
++    sentryOptions.maxBreadcrumbs = 0;
++
+     // Exclude Dev Server and Sentry Dsn request from Breadcrumbs
+     NSString *devServerUrl = [options valueForKey:@"devServerUrl"];
+     sentryOptions.beforeBreadcrumb
+@@ -53,7 +58,7 @@
+                 || (devServerUrl != nil && [url hasPrefix:devServerUrl]))) {
+             return nil;
+         }
+-        return breadcrumb;
++        return nil;
+     };
+ 
+     if ([options valueForKey:@"enableNativeCrashHandling"] != nil) {

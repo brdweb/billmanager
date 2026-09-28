@@ -6,6 +6,7 @@
   "build": {
     "development": {
       "node": "24.19.0",
+      "environment": "development",
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
@@ -18,6 +19,7 @@
     },
     "development:device": {
       "node": "24.19.0",
+      "environment": "development",
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
@@ -30,6 +32,7 @@
     },
     "preview": {
       "node": "24.19.0",
+      "environment": "preview",
       "distribution": "internal",
       "channel": "preview",
       "env": {
@@ -38,6 +41,7 @@
     },
     "preview:ios": {
       "node": "24.19.0",
+      "environment": "preview",
       "distribution": "internal",
       "channel": "preview",
       "env": {
@@ -49,6 +53,7 @@
     },
     "production": {
       "node": "24.19.0",
+      "environment": "production",
       "autoIncrement": true,
       "channel": "production",
       "env": {
