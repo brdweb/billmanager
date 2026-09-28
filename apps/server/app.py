@@ -75,6 +75,7 @@ from services.stripe_service import (
 )
 from services.telemetry import telemetry
 from services.scheduler import scheduler
+from services.product_analytics import analytics_sources
 from services.logging_config import (
     setup_logging,
     get_logger,
@@ -10265,6 +10266,7 @@ def create_app():
     # Security headers with Talisman (only in production - check for production URL or explicit env var)
     is_production = _is_production_security_mode()
     if is_production:
+        product_analytics_sources = analytics_sources(os.environ.get("UMAMI_SCRIPT_URL", ""))
         Talisman(
             app,
             force_https=True,
@@ -10274,11 +10276,13 @@ def create_app():
                 "default-src": "'self'",
                 "script-src": [
                     "'self'",
+                    *product_analytics_sources,
                 ],
                 "style-src": ["'self'", "'unsafe-inline'"],
                 "img-src": ["'self'", "data:", "billmanager.app"],
                 "connect-src": [
                     "'self'",
+                    *product_analytics_sources,
                 ],
                 "frame-ancestors": "'none'",  # Prevent clickjacking
                 "form-action": "'self'",  # Prevent form hijacking

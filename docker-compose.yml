@@ -3,7 +3,11 @@
 
 services:
   billmanager:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_UMAMI_SCRIPT_URL: ${VITE_UMAMI_SCRIPT_URL:-}
+        VITE_UMAMI_WEBSITE_ID: ${VITE_UMAMI_WEBSITE_ID:-}
     # image: ghcr.io/brdweb/billmanager:latest
     ports:
       - "5000:5000"

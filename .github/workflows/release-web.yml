@@ -19,6 +19,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  SAAS_IMAGE_NAME: ${{ github.repository_owner }}/billmanager-saas
 
 jobs:
   publish:
@@ -134,7 +135,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' || inputs.publish_latest == true }}
             type=sha
 
-      - name: Build and push multi-platform image
+      - name: Build and push public self-hosted image
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -143,5 +144,50 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Validate SaaS analytics configuration
+        id: saas-analytics
+        env:
+          SCRIPT_URL: ${{ vars.PRODUCT_UMAMI_SCRIPT_URL }}
+          WEBSITE_ID: ${{ vars.PRODUCT_UMAMI_WEBSITE_ID }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$SCRIPT_URL" && -z "$WEBSITE_ID" ]]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Product analytics is not configured; skipping the SaaS image."
+          elif [[ -z "$SCRIPT_URL" || -z "$WEBSITE_ID" ]]; then
+            echo "PRODUCT_UMAMI_SCRIPT_URL and PRODUCT_UMAMI_WEBSITE_ID must both be configured." >&2
+            exit 1
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate SaaS Docker metadata
+        if: steps.saas-analytics.outputs.configured == 'true'
+        id: meta-saas
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.SAAS_IMAGE_NAME }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ steps.release.outputs.version }}
+
+      - name: Build and push SaaS image
+        if: steps.saas-analytics.outputs.configured == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: |
+            VITE_UMAMI_SCRIPT_URL=${{ vars.PRODUCT_UMAMI_SCRIPT_URL }}
+            VITE_UMAMI_WEBSITE_ID=${{ vars.PRODUCT_UMAMI_WEBSITE_ID }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-saas.outputs.tags }}
+          labels: ${{ steps.meta-saas.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
