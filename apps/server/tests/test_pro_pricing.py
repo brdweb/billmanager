@@ -187,6 +187,99 @@ def test_free_downgrade_rejects_stale_invitation_without_creating_user_or_grant(
     assert {user.id for user in test_database.users} == {admin_user.id}
 
 
+def test_delayed_checkout_preserves_provider_cancellation_and_free_seat_guards(
+    client, admin_user, regular_user, test_database, test_bill, db_session, monkeypatch
+):
+    """A delayed checkout event must not reactivate a provider-canceled subscription."""
+    monkeypatch.setattr(config, "DEPLOYMENT_MODE", "saas")
+    monkeypatch.setattr(server, "get_billing_readiness", lambda: {"billing_enabled": True})
+    monkeypatch.setattr(config, "STRIPE_PRICES", {
+        "pro": {"monthly": "price_pro_monthly", "annual": "price_pro_annual"}
+    })
+
+    test_database.owner_id = admin_user.id
+    regular_user.created_by_id = admin_user.id
+    regular_user.accessible_databases.append(test_database)
+    subscription = Subscription(
+        user_id=admin_user.id,
+        tier="pro",
+        status="trialing",
+        trial_ends_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1),
+    )
+    invite = UserInvite(
+        email="delayed-checkout-invite@example.com",
+        role="user",
+        invited_by_id=admin_user.id,
+        database_ids=str(test_database.id),
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1),
+    )
+    token = invite.set_token()
+    db_session.add_all((subscription, invite))
+    db_session.commit()
+
+    owner_headers = _managed_user_headers(admin_user, test_database)
+    managed_headers = _managed_user_headers(regular_user, test_database)
+    assert subscription.effective_tier == "free"
+    assert client.get("/api/v2/bills", headers=managed_headers).status_code == 403
+
+    checkout_calls = []
+
+    def create_checkout(user_id, email, customer_id, tier, interval):
+        checkout_calls.append((user_id, email, customer_id, tier, interval))
+        return {
+            "url": "https://checkout.example/session",
+            "session_id": "cs_delayed",
+            "customer_id": "cus_synthetic",
+            "tier": "pro",
+            "interval": "monthly",
+        }
+
+    monkeypatch.setattr(server, "create_checkout_session", create_checkout)
+    checkout = client.post(
+        "/api/v2/billing/create-checkout",
+        json={"tier": "pro", "interval": "monthly"},
+        headers=owner_headers,
+    )
+    assert checkout.status_code == 200
+    assert checkout_calls[0][3:] == ("pro", "monthly")
+    assert subscription.tier == "pro"
+    assert subscription.effective_tier == "free"
+
+    monkeypatch.setattr(server, "construct_webhook_event", lambda *_: {
+        "id": "evt_delayed_checkout", "created": 100,
+        "type": "checkout.session.completed",
+        "data": {"object": {
+            "subscription": "sub_synthetic", "customer": "cus_synthetic",
+            "metadata": {"user_id": str(admin_user.id), "tier": "pro", "interval": "monthly"},
+        }},
+    })
+    monkeypatch.setattr(server, "get_subscription", lambda *_: {
+        "price_id": "price_pro_monthly", "status": "canceled",
+        "current_period_start": 1, "current_period_end": 300,
+    })
+
+    webhook = client.post(
+        "/api/v2/webhooks/stripe", data=b"{}",
+        headers={"Stripe-Signature": "synthetic"},
+    )
+    assert webhook.status_code == 200
+    assert subscription.status == "canceled"
+    assert subscription.effective_tier == "free"
+    assert client.get("/api/v2/bills", headers=managed_headers).status_code == 403
+    assert [
+        user["id"]
+        for user in client.get("/api/v2/users", headers=owner_headers).get_json()["data"]
+    ] == [admin_user.id]
+
+    invite_response = client.post("/api/v2/invitations/accept", json={
+        "token": token, "username": "delayedcheckoutinvite",
+        "password": "StrongPassword123!",
+    })
+    assert invite_response.status_code == 403
+    assert User.query.filter_by(username="delayedcheckoutinvite").first() is None
+    assert invite.accepted_at is None
+
+
 def test_self_hosted_managed_user_remains_visible_and_authorized(
     client, admin_user, regular_user, test_database, test_bill, db_session, monkeypatch
 ):
