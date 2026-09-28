@@ -938,6 +938,9 @@ def jwt_required(f):
                 {"success": False, "error": "User no longer exists"}
             ), 401
 
+        if not _has_managed_seat_entitlement(user):
+            return jsonify({"success": False, "error": "Managed seat requires an active Pro plan"}), 403
+
         g.jwt_user_id = user.id
         g.jwt_role = user.role
 
@@ -985,6 +988,9 @@ def jwt_admin_required(f):
                 {"success": False, "error": "User no longer exists"}
             ), 401
 
+        if not _has_managed_seat_entitlement(user):
+            return jsonify({"success": False, "error": "Managed seat requires an active Pro plan"}), 403
+
         if user.role != "admin":
             return jsonify({"success": False, "error": "Admin access required"}), 403
 
@@ -1026,16 +1032,38 @@ def jwt_operator_required(f):
 # --- Subscription & Tier Helpers ---
 
 
+def _get_account_owner(user):
+    """Resolve a tenant owner through at most the supported six-seat chain."""
+    account_owner = user
+    seen_user_ids = set()
+    for _ in range(6):
+        if account_owner is None or account_owner.id in seen_user_ids:
+            return None
+        seen_user_ids.add(account_owner.id)
+        if account_owner.created_by_id is None:
+            return account_owner
+        account_owner = db.session.get(User, account_owner.created_by_id)
+    return None
+
+
+def _has_managed_seat_entitlement(user):
+    """Return whether a user may use a managed SaaS seat right now."""
+    if not is_saas() or user.created_by_id is None:
+        return True
+    account_owner = _get_account_owner(user)
+    return bool(account_owner and get_user_effective_tier(account_owner) == "pro")
+
+
 def get_user_effective_tier(user):
     """
     Get the effective tier for a user based on their subscription status.
-    Returns 'free', 'basic', or 'plus'.
+    Returns 'free' or 'pro'.
     """
     from config import is_saas
 
-    # Self-hosted mode: everyone gets unlimited (plus tier)
+    # Self-hosted mode: everyone gets unlimited (Pro tier)
     if not is_saas():
-        return "plus"
+        return "pro"
 
     if not user.subscription:
         return "free"
@@ -1144,7 +1172,7 @@ def subscription_required(feature: str = None, min_tier: str = None):
 
     Args:
         feature: Feature to check limit for (e.g., 'bills', 'export')
-        min_tier: Minimum tier required ('basic' or 'plus')
+        min_tier: Minimum tier required ('pro'; legacy names remain aliases)
     """
 
     def decorator(f):
@@ -1164,7 +1192,7 @@ def subscription_required(feature: str = None, min_tier: str = None):
 
             # Check minimum tier if specified
             if min_tier:
-                tier_order = {"free": 0, "basic": 1, "plus": 2}
+                tier_order = {"free": 0, "basic": 1, "plus": 1, "pro": 1}
                 if tier_order.get(tier, 0) < tier_order.get(min_tier, 0):
                     return jsonify(
                         {
@@ -1599,7 +1627,7 @@ def register():
     # Set trial only in SaaS mode with billing
     if billing_enabled:
         user.trial_ends_at = datetime.datetime.now(datetime.timezone.utc) + timedelta(
-            days=14
+            days=30
         )
 
     db.session.add(user)
@@ -1897,13 +1925,15 @@ def create_checkout():
 
     # Get tier and interval from request
     data = request.get_json() or {}
-    tier = data.get("tier", "basic")
+    from config import normalize_paid_tier
+
+    tier = normalize_paid_tier(data.get("tier", "pro"))
     interval = data.get("interval", "monthly")
 
     # Validate tier and interval
-    if tier not in ("basic", "plus"):
+    if tier != "pro":
         return jsonify(
-            {"success": False, "error": "Invalid tier. Must be basic or plus"}
+            {"success": False, "error": "Invalid tier. Must be pro"}
         ), 400
     if interval not in ("monthly", "annual"):
         return jsonify(
@@ -1920,8 +1950,9 @@ def create_checkout():
     if "error" in result:
         return jsonify({"success": False, "error": result["error"]}), 400
 
-    # Save customer ID if new
+    # Save customer ID if new, using the plan resolved from the checkout price.
     if result.get("customer_id") and not customer_id:
+        tier, interval = result["tier"], result["interval"]
         if not user.subscription:
             subscription = Subscription(
                 user_id=user.id, status="pending", tier=tier, billing_interval=interval
@@ -1965,7 +1996,7 @@ def billing_portal():
 @jwt_required
 def change_plan():
     """Change subscription plan (upgrade or downgrade)."""
-    from config import get_stripe_price_id
+    from config import get_stripe_price_id, normalize_paid_tier
 
     user = db.session.get(User, g.jwt_user_id)
     if not user:
@@ -1983,12 +2014,12 @@ def change_plan():
         ), 400
 
     data = request.get_json() or {}
-    new_tier = data.get("tier")
+    new_tier = normalize_paid_tier(data.get("tier"))
     new_interval = data.get("interval")
 
-    if not new_tier or new_tier not in ("basic", "plus"):
+    if new_tier != "pro":
         return jsonify(
-            {"success": False, "error": "Invalid tier. Must be basic or plus"}
+            {"success": False, "error": "Invalid tier. Must be pro"}
         ), 400
     if not new_interval or new_interval not in ("monthly", "annual"):
         return jsonify(
@@ -2003,8 +2034,8 @@ def change_plan():
         ), 400
 
     # Determine if upgrade or downgrade based on tier/price
-    current_tier = user.subscription.tier or "basic"
-    tier_order = {"basic": 1, "plus": 2}
+    current_tier = user.subscription.tier or "pro"
+    tier_order = {"basic": 1, "plus": 1, "pro": 1}
     is_upgrade = tier_order.get(new_tier, 1) > tier_order.get(current_tier, 1)
 
     # Upgrades: immediate with proration. Downgrades: at end of billing period
@@ -8067,9 +8098,12 @@ def jwt_get_users():
     user_id = g.jwt_user_id
     current_user = db.session.get(User, user_id)
     if is_saas():
-        users = User.query.filter(
-            (User.created_by_id == user_id) | (User.id == user_id)
-        ).all()
+        if current_user.is_account_owner and get_user_effective_tier(current_user) == "free":
+            users = [current_user]
+        else:
+            users = User.query.filter(
+                (User.created_by_id == user_id) | (User.id == user_id)
+            ).all()
     else:
         users = User.query.all()
     return jsonify(
@@ -8520,6 +8554,17 @@ def jwt_accept_invitation():
         ), 400
     if invite.is_expired:
         return jsonify({"success": False, "error": "Invitation has expired"}), 400
+
+    inviter = db.session.get(User, invite.invited_by_id)
+    account_owner = _get_account_owner(inviter) if inviter else None
+    if is_saas() and (
+        not account_owner or get_user_effective_tier(account_owner) != "pro"
+    ):
+        return jsonify({
+            "success": False,
+            "error": "Invitation requires an active Pro plan",
+            "upgrade_required": True,
+        }), 403
 
     if User.query.filter_by(username=username).first():
         return jsonify({"success": False, "error": "Username is already taken"}), 400

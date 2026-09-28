@@ -754,7 +754,7 @@ export const getBillingUsage = async () => {
   return response;
 };
 
-export const createCheckoutSession = (tier: string = 'basic', interval: string = 'monthly') =>
+export const createCheckoutSession = (tier: string = 'pro', interval: string = 'monthly') =>
   unwrap(api.post<ApiResponse<CheckoutResponse>>('/billing/create-checkout', { tier, interval }));
 
 export const createPortalSession = () =>

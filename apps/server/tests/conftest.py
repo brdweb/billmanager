@@ -32,7 +32,7 @@ os.environ.pop('SENTRY_DSN', None)
 import config
 from app import create_app, create_access_token, JWT_SECRET_KEY
 from models import (
-    db, User, Database, Bill, Payment,
+    db, User, Database, Bill, Payment, Subscription,
     OAuthAccount, TwoFAConfig, TwoFAChallenge, WebAuthnCredential,
 )
 from werkzeug.security import generate_password_hash
@@ -96,7 +96,9 @@ def regular_user(app, db_session, admin_user):
         password_change_required=False,
         created_by_id=admin_user.id if config.is_saas() else None
     )
-    user.set_password('userpassword123')
+    user.set_password("userpassword123")
+    if config.is_saas() and admin_user.subscription is None:
+        db_session.add(Subscription(user_id=admin_user.id, tier='pro', status='active'))
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
@@ -113,6 +115,8 @@ def test_database(app, db_session, admin_user):
         owner_id=admin_user.id if config.is_saas() else None
     )
     db_session.add(database)
+    if config.is_saas() and admin_user.subscription is None:
+        db_session.add(Subscription(user_id=admin_user.id, tier="pro", status="active"))
     db_session.commit()
     db_session.refresh(database)
 

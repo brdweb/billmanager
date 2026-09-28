@@ -36,8 +36,7 @@ import { useConfig } from '../context/ConfigContext';
 import { formatCurrencyFor, getLocale } from '../lib/currency';
 
 const PRICING = {
-  basic: { monthly: 5, annual: 50 },
-  plus: { monthly: 7.5, annual: 75 },
+  pro: { monthly: 2.99, annual: 24 },
 };
 
 export function Billing() {
@@ -74,7 +73,7 @@ export function Billing() {
     void fetchData();
   }, [fetchData, isSelfHosted]);
 
-  const handleSubscribe = async (tier: 'basic' | 'plus') => {
+  const handleSubscribe = async (tier: 'pro') => {
     setActionLoading(true);
     try {
       const response = await api.createCheckoutSession(tier, billingInterval);
@@ -204,7 +203,7 @@ export function Billing() {
     return tier.charAt(0).toUpperCase() + tier.slice(1);
   };
 
-  const getAnnualSavings = (tier: 'basic' | 'plus') => {
+  const getAnnualSavings = (tier: 'pro') => {
     const monthly = PRICING[tier].monthly * 12;
     const annual = PRICING[tier].annual;
     return Math.round((1 - annual / monthly) * 100);
@@ -325,8 +324,8 @@ export function Billing() {
         </Paper>
       )}
 
-      {/* Pricing Plans - Only show if not subscribed */}
-      {!status?.has_subscription && (
+      {/* Pricing is available to Free users and trial subscribers. */}
+      {(!status?.has_subscription || status.is_trialing) && (
         <>
           <Group justify="center" mb="lg">
             <SegmentedControl
@@ -334,13 +333,13 @@ export function Billing() {
               onChange={(v) => setBillingInterval(v as 'monthly' | 'annual')}
               data={[
                 { value: 'monthly', label: t('billingPage.monthlyToggle') },
-                { value: 'annual', label: t('billingPage.annualToggle', { percent: getAnnualSavings('basic') }) },
+                { value: 'annual', label: t('billingPage.annualToggle', { percent: getAnnualSavings('pro') }) },
               ]}
             />
           </Group>
 
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg" mb="lg">
-            {/* Basic Plan */}
+          <SimpleGrid cols={1} spacing="lg" mb="lg">
+            {/* Pro Plan */}
             <Card withBorder shadow="sm" radius="md" padding="lg">
               <Card.Section withBorder inheritPadding py="xs">
                 <Group justify="space-between">
@@ -348,7 +347,7 @@ export function Billing() {
                     <ThemeIcon variant="light" color="blue" size="lg">
                       <IconRocket size={20} />
                     </ThemeIcon>
-                    <Text fw={600} size="lg">{t('billingPage.basicPlan')}</Text>
+                    <Text fw={600} size="lg">{t('billingPage.proPlan')}</Text>
                   </Group>
                   <Badge color="blue" variant="light">{t('billingPage.popular')}</Badge>
                 </Group>
@@ -356,11 +355,11 @@ export function Billing() {
 
               <Card.Section inheritPadding py="md">
                 <Group align="baseline" gap={4}>
-                  <Text size="xl" fw={700}>{formatCurrencyFor(billingInterval === 'monthly' ? PRICING.basic.monthly : PRICING.basic.annual, 'USD')}</Text>
+                  <Text size="xl" fw={700}>{formatCurrencyFor(billingInterval === 'monthly' ? PRICING.pro.monthly : PRICING.pro.annual, 'USD')}</Text>
                   <Text size="sm" c="dimmed">{billingInterval === 'monthly' ? t('billingPage.perMonth') : t('billingPage.perYear')}</Text>
                 </Group>
                 {billingInterval === 'annual' && (
-                  <Text size="xs" c="dimmed">{t('billingPage.thatsPerMonth', { amount: formatCurrencyFor(PRICING.basic.annual / 12, 'USD') })}</Text>
+                  <Text size="xs" c="dimmed">{t('billingPage.thatsPerMonth', { amount: formatCurrencyFor(PRICING.pro.annual / 12, 'USD') })}</Text>
                 )}
 
                 <List
@@ -369,69 +368,21 @@ export function Billing() {
                   mt="md"
                   icon={<IconCheck size={16} color="var(--mantine-color-green-6)" />}
                 >
-                  <List.Item>{t('billingPage.basicFeature1')}</List.Item>
-                  <List.Item>{t('billingPage.basicFeature2')}</List.Item>
-                  <List.Item>{t('billingPage.basicFeature3')}</List.Item>
-                  <List.Item>{t('billingPage.basicFeature4')}</List.Item>
-                  <List.Item>{t('billingPage.basicFeature5')}</List.Item>
+                  <List.Item>{t('billingPage.proFeature1')}</List.Item>
+                  <List.Item>{t('billingPage.proFeature2')}</List.Item>
+                  <List.Item>{t('billingPage.proFeature3')}</List.Item>
+                  <List.Item>{t('billingPage.proFeature4')}</List.Item>
+                  <List.Item>{t('billingPage.proFeature5')}</List.Item>
                 </List>
               </Card.Section>
 
               <Button
                 fullWidth
-                onClick={() => handleSubscribe('basic')}
+                onClick={() => handleSubscribe('pro')}
                 loading={actionLoading}
                 leftSection={<IconCrown size={16} />}
               >
-                {t('billingPage.getBasic')}
-              </Button>
-            </Card>
-
-            {/* Plus Plan */}
-            <Card withBorder shadow="sm" radius="md" padding="lg" style={{ borderColor: 'var(--mantine-color-violet-5)', borderWidth: 2 }}>
-              <Card.Section withBorder inheritPadding py="xs">
-                <Group justify="space-between">
-                  <Group>
-                    <ThemeIcon variant="light" color="violet" size="lg">
-                      <IconCrown size={20} />
-                    </ThemeIcon>
-                    <Text fw={600} size="lg">{t('billingPage.plusPlan')}</Text>
-                  </Group>
-                  <Badge color="violet">{t('billingPage.bestValue')}</Badge>
-                </Group>
-              </Card.Section>
-
-              <Card.Section inheritPadding py="md">
-                <Group align="baseline" gap={4}>
-                  <Text size="xl" fw={700}>{formatCurrencyFor(billingInterval === 'monthly' ? PRICING.plus.monthly : PRICING.plus.annual, 'USD')}</Text>
-                  <Text size="sm" c="dimmed">{billingInterval === 'monthly' ? t('billingPage.perMonth') : t('billingPage.perYear')}</Text>
-                </Group>
-                {billingInterval === 'annual' && (
-                  <Text size="xs" c="dimmed">{t('billingPage.thatsPerMonth', { amount: formatCurrencyFor(PRICING.plus.annual / 12, 'USD') })}</Text>
-                )}
-
-                <List
-                  spacing="sm"
-                  size="sm"
-                  mt="md"
-                  icon={<IconCheck size={16} color="var(--mantine-color-green-6)" />}
-                >
-                  <List.Item>{t('billingPage.plusFeature1')}</List.Item>
-                  <List.Item>{t('billingPage.plusFeature2')}</List.Item>
-                  <List.Item>{t('billingPage.plusFeature3')}</List.Item>
-                  <List.Item>{t('billingPage.plusFeature4')}</List.Item>
-                  <List.Item>{t('billingPage.plusFeature5')}</List.Item>
-                </List>
-              </Card.Section>
-
-              <Button
-                fullWidth
-                color="violet"
-                onClick={() => handleSubscribe('plus')}
-                loading={actionLoading}
-                leftSection={<IconCrown size={16} />}
-              >
-                {t('billingPage.getPlus')}
+                {t('billingPage.getPro')}
               </Button>
             </Card>
           </SimpleGrid>

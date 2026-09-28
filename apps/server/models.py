@@ -442,7 +442,7 @@ class Subscription(db.Model):
 
     # Plan and tier info
     plan = db.Column(db.String(50), default='early_adopter')  # Legacy: early_adopter
-    tier = db.Column(db.String(20), default='free')  # free, basic, plus
+    tier = db.Column(db.String(20), default='free')  # free, pro (basic/plus retained for historical rows)
     billing_interval = db.Column(db.String(20), default='monthly')  # monthly, annual
     status = db.Column(db.String(50), default='trialing')  # trialing, active, canceled, past_due, unpaid
 
@@ -484,11 +484,11 @@ class Subscription(db.Model):
     def effective_tier(self):
         """Get the effective tier based on subscription status"""
         # Active paid subscription gets their tier
-        if self.status == 'active' and self.tier in ('basic', 'plus'):
-            return self.tier
-        # Trialing users get basic tier features during trial
+        if self.status == 'active' and self.tier in ('pro', 'basic', 'plus'):
+            return 'pro'
+        # Trialing users get Pro features during trial
         if self.status == 'trialing' and not self.is_trial_expired:
-            return 'basic'
+            return 'pro'
         # Expired trial or no subscription = free tier
         return 'free'
 

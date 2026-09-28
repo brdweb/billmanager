@@ -180,6 +180,7 @@ class TestV2UserRoleChangeGuards:
             created_by_id=admin_user.id,
         )
         sub_admin.set_password('pw12345678')
+        db_session.add(Subscription(user_id=admin_user.id, tier='pro', status='active'))
         db_session.add(sub_admin)
         db_session.commit()
 
