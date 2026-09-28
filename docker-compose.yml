@@ -25,6 +25,11 @@ services:
       # DEFAULT_LOCALE controls regional formatting and defaults to en-US.
       - DEFAULT_LOCALE=${DEFAULT_LOCALE:-en-US}
 
+      # Optional error-only Sentry reporting; blank DSN disables all reporting.
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-development}
+      - SENTRY_RELEASE=${SENTRY_RELEASE:-}
+
       # Registration settings (optional)
       # - ENABLE_REGISTRATION=true  # Allow public registration
       # - REQUIRE_EMAIL_VERIFICATION=true  # Require email verification

@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a reproducible problem.
+title: "[Bug]: "
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+
+        Search open and closed issues before filing. Do not report suspected vulnerabilities here; use the private route in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The BillManager release, image tag, or commit you ran.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, browser or client version, deployment mode, and relevant configuration (without secrets).
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include expected and actual behavior.
+      placeholder: |
+        1. ...
+        2. ...
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true

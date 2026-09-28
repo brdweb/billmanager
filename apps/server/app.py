@@ -73,6 +73,7 @@ from services.stripe_service import (
     get_billing_readiness,
     log_missing_billing_configuration,
 )
+from services.crash_reporting import init_crash_reporting
 from services.telemetry import telemetry
 from services.scheduler import scheduler
 from services.product_analytics import analytics_sources
@@ -10257,6 +10258,7 @@ def serve_static(path):
 
 
 def create_app():
+    init_crash_reporting(SERVER_VERSION)
     app = Flask(__name__, static_folder=None)
     app.url_map.strict_slashes = False
     app.config["MAX_CONTENT_LENGTH"] = int(
