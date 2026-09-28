@@ -1,5 +1,6 @@
 """Opt-in, error-only Sentry reporting with a closed outbound data contract."""
 
+import logging
 import os
 from pathlib import Path
 import platform
@@ -10,6 +11,8 @@ import sentry_sdk
 from sentry_sdk.envelope import Envelope
 from sentry_sdk.integrations.flask import FlaskIntegration
 from sentry_sdk.transport import HttpTransport
+
+logger = logging.getLogger(__name__)
 
 _SERVER_ROOT = Path(__file__).resolve().parents[1]
 _LIBRARY_ROOT = Path(sysconfig.get_path("purelib")).resolve()
@@ -116,4 +119,7 @@ def init_crash_reporting(server_version):
         )
     except Exception:
         # SDK errors can contain the DSN; do not echo them into logs or tracebacks.
-        raise RuntimeError("Invalid Sentry configuration; check server environment") from None
+        logger.warning(
+            "Crash reporting disabled: invalid Sentry configuration; "
+            "check the operator runbook"
+        )

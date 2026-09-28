@@ -19,8 +19,9 @@ deployment's private configuration, never source control:
   Set this explicitly if the deployment does not inject its actual version.
 
 The main Compose file forwards these variables. Other deployment systems must
-inject them into the server process. An invalid DSN fails startup with a generic
-error that does not repeat its value. Remove `SENTRY_DSN` and restart to disable.
+inject them into the server process. An invalid DSN disables crash reporting and
+logs a generic warning that does not repeat its value. Remove `SENTRY_DSN` and
+restart to disable.
 No paid features, purchases, or quota increases are required or authorized. The
 SDK respects Sentry rate limits; project quota exhaustion can drop errors.
 

@@ -46,12 +46,11 @@ def test_unconfigured_reporting_never_initializes(monkeypatch, mode, dsn):
     init_crash_reporting("test")
 
 
-def test_invalid_configuration_does_not_echo_dsn(monkeypatch):
+def test_invalid_configuration_does_not_echo_dsn(monkeypatch, caplog):
     monkeypatch.setenv("SENTRY_DSN", _CANARY)
-    with pytest.raises(RuntimeError) as error:
-        init_crash_reporting("test")
-    assert _CANARY not in str(error.value)
-    assert error.value.__suppress_context__
+    init_crash_reporting("test")
+    assert "Crash reporting disabled: invalid Sentry configuration" in caplog.text
+    assert _CANARY not in caplog.text
 
 
 def test_flask_exception_is_captured_and_scrubbed(envelopes):
