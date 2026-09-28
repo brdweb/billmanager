@@ -200,11 +200,14 @@ def test_delayed_checkout_preserves_provider_cancellation_and_free_seat_guards(
     test_database.owner_id = admin_user.id
     regular_user.created_by_id = admin_user.id
     regular_user.accessible_databases.append(test_database)
-    subscription = Subscription(
-        user_id=admin_user.id,
-        tier="pro",
-        status="trialing",
-        trial_ends_at=datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1),
+    subscription = admin_user.subscription
+    if subscription is None:
+        subscription = Subscription(user_id=admin_user.id)
+        db_session.add(subscription)
+    subscription.tier = "pro"
+    subscription.status = "trialing"
+    subscription.trial_ends_at = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
     )
     invite = UserInvite(
         email="delayed-checkout-invite@example.com",
@@ -214,7 +217,7 @@ def test_delayed_checkout_preserves_provider_cancellation_and_free_seat_guards(
         expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1),
     )
     token = invite.set_token()
-    db_session.add_all((subscription, invite))
+    db_session.add(invite)
     db_session.commit()
 
     owner_headers = _managed_user_headers(admin_user, test_database)
