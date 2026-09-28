@@ -55,6 +55,7 @@ For local development in WSL or Linux, the repo now includes a small task runner
 
 ```bash
 make bootstrap
+export BILLMANAGER_DEV_DB_PASSWORD="$(openssl rand -base64 32)"
 make dev-up
 make test
 ```
@@ -62,8 +63,8 @@ make test
 What these commands do:
 
 - `make bootstrap` creates `.venv`, installs backend Python dependencies, and runs `npm ci` in `apps/web` and `apps/mobile`
-- `make dev-up` builds and starts the local Docker stack from `docker-compose.dev.yml`
-- `make test` runs backend, web, and mobile tests
+- `make dev-up` builds and starts the local Docker stack from `docker-compose.dev.yml`. It keeps `BILLMANAGER_DEV_DB_PASSWORD` raw for PostgreSQL and derives the percent-encoded URL component without putting the password on a command line.
+- `make test` runs backend, web, and mobile tests. Its disposable local PostgreSQL container uses a fresh generated password unless `BACKEND_TEST_DB_PASSWORD` is set; external test databases still require an explicitly allowlisted `BACKEND_TEST_DB_URL`.
 - `make verify` runs the full test suite plus backend security checks
 
 Mobile development uses an Expo development client rather than Expo Go. See the [mobile build and release-readiness guide](apps/mobile/README.md).

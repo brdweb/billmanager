@@ -6,7 +6,7 @@ services:
       - "5000:5000"
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://billsuser:${BILLMANAGER_DEV_DB_PASSWORD:?set BILLMANAGER_DEV_DB_PASSWORD}@db:5432/billsdb
+      - DATABASE_URL=postgresql://billsuser:${BILLMANAGER_DEV_DB_PASSWORD_URLENCODED:?run this stack through make dev-up}@db:5432/billsdb
       - FLASK_SECRET_KEY=dev-secret-key-change-in-prod
       - DEPLOYMENT_MODE=self-hosted
       # DEFAULT_LOCALE controls regional formatting and defaults to en-US.

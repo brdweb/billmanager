@@ -5,13 +5,17 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from urllib.parse import unquote, urlsplit
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "scripts" / "validate-test-database-url.py"
+PASSWORD_ENCODER = ROOT / "scripts" / "urlencode-database-password.py"
 E2E = ROOT / "test-e2e.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "build.yml"
+COMPOSE = ROOT / "docker-compose.dev.yml"
+MAKEFILE = ROOT / "Makefile"
 
 
 def _database_url(host: str = "192.168.40.113", query: str = "") -> str:
@@ -93,3 +97,32 @@ def test_ci_service_and_application_passwords_match():
     assert service is not None
     assert application is not None
     assert service.group(1) == application.group(1)
+
+
+def test_database_password_encoder_preserves_special_characters():
+    password = "synthetic'pass/word"
+    result = subprocess.run(
+        [sys.executable, str(PASSWORD_ENCODER)],
+        input=password,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    scheme = "postgresql" + "://"
+    url = f"{scheme}billsuser:{result.stdout}@localhost:5432/bills_test"
+    assert unquote(urlsplit(url).password or "") == password
+    assert "'" not in result.stdout
+    assert "/" not in result.stdout
+
+
+def test_e2e_database_urls_are_read_from_the_environment():
+    script = E2E.read_text()
+    assert "psycopg.connect('$DATABASE_URL')" not in script
+    assert script.count("psycopg.connect(os.environ['DATABASE_URL'])") == 4
+    assert script.count("DATABASE_URL=\"$DATABASE_URL\" python3") == 5
+
+
+def test_dev_compose_separates_raw_and_url_encoded_passwords():
+    compose = COMPOSE.read_text()
+    makefile = MAKEFILE.read_text()
+    assert "POSTGRES_PASSWORD=${BILLMANAGER_DEV_DB_PASSWORD:" in compose

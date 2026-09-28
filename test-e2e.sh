@@ -317,14 +317,16 @@ fi
 # Test 4: Database migrations
 echo -n "Testing: Database schema... "
 cd "$SERVER_DIR"
-MIGRATION_CHECK=$(python3 -c "
+MIGRATION_CHECK=$(DATABASE_URL="$DATABASE_URL" python3 2>/dev/null << 'MIGRATION_CHECK_SCRIPT'
+import os
 import psycopg
-conn = psycopg.connect('$DATABASE_URL')
+conn = psycopg.connect(os.environ['DATABASE_URL'])
 cur = conn.cursor()
-cur.execute(\"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'share_audit_log'\")
+cur.execute("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'share_audit_log'")
 count = cur.fetchone()[0]
 print(count)
-" 2>/dev/null)
+MIGRATION_CHECK_SCRIPT
+)
 
 if [ "$MIGRATION_CHECK" = "1" ]; then
     echo -e "${GREEN}PASS${NC}"
@@ -577,20 +579,22 @@ EOF
 # Test audit logging table structure
 echo -n "Testing: Audit logging schema... "
 cd "$SERVER_DIR"
-AUDIT_CHECK=$(python3 -c "
+AUDIT_CHECK=$(DATABASE_URL="$DATABASE_URL" python3 2>/dev/null << 'AUDIT_CHECK_SCRIPT'
+import os
 import psycopg
-conn = psycopg.connect('$DATABASE_URL')
+conn = psycopg.connect(os.environ['DATABASE_URL'])
 cur = conn.cursor()
-cur.execute(\"\"\"
+cur.execute("""
     SELECT column_name
     FROM information_schema.columns
     WHERE table_name = 'share_audit_log'
     ORDER BY ordinal_position
-\"\"\")
+""")
 columns = [row[0] for row in cur.fetchall()]
 expected = ['id', 'share_id', 'bill_id', 'action', 'actor_user_id', 'affected_user_id', 'extra_data', 'ip_address', 'user_agent', 'created_at']
 print('OK' if columns == expected else 'FAIL')
-" 2>/dev/null)
+AUDIT_CHECK_SCRIPT
+)
 
 if [ "$AUDIT_CHECK" = "OK" ]; then
     echo -e "${GREEN}PASS${NC}"
@@ -602,20 +606,22 @@ fi
 
 # Test audit logging indexes
 echo -n "Testing: Audit logging indexes... "
-INDEX_CHECK=$(python3 -c "
+INDEX_CHECK=$(DATABASE_URL="$DATABASE_URL" python3 2>/dev/null << 'INDEX_CHECK_SCRIPT'
+import os
 import psycopg
-conn = psycopg.connect('$DATABASE_URL')
+conn = psycopg.connect(os.environ['DATABASE_URL'])
 cur = conn.cursor()
-cur.execute(\"\"\"
+cur.execute("""
     SELECT indexname
     FROM pg_indexes
     WHERE tablename = 'share_audit_log'
-\"\"\")
+""")
 indexes = [row[0] for row in cur.fetchall()]
 required = ['idx_share_audit_log_share_id', 'idx_share_audit_log_bill_id', 'idx_share_audit_log_actor', 'idx_share_audit_log_created_at']
 has_all = all(idx in indexes for idx in required)
 print('OK' if has_all else 'FAIL')
-" 2>/dev/null)
+INDEX_CHECK_SCRIPT
+)
 
 if [ "$INDEX_CHECK" = "OK" ]; then
     echo -e "${GREEN}PASS${NC}"
@@ -887,21 +893,23 @@ fi
 
 # Verify new tables exist via the running database
 echo -n "Testing: OIDC/2FA migration tables exist... "
-TABLE_CHECK=$(python3 -c "
+TABLE_CHECK=$(DATABASE_URL="$DATABASE_URL" python3 2>/dev/null << 'TABLE_CHECK_SCRIPT'
+import os
 import psycopg
-conn = psycopg.connect('$DATABASE_URL')
+conn = psycopg.connect(os.environ['DATABASE_URL'])
 cur = conn.cursor()
-cur.execute(\"\"\"
+cur.execute("""
     SELECT table_name FROM information_schema.tables
     WHERE table_schema = 'public'
     AND table_name IN ('oauth_accounts', 'twofa_config', 'twofa_challenges', 'webauthn_credentials')
     ORDER BY table_name
-\"\"\")
+""")
 tables = [row[0] for row in cur.fetchall()]
 expected = ['oauth_accounts', 'twofa_challenges', 'twofa_config', 'webauthn_credentials']
 print('OK' if tables == expected else 'FAIL')
 conn.close()
-" 2>/dev/null)
+TABLE_CHECK_SCRIPT
+)
 if [ "$TABLE_CHECK" = "OK" ]; then
     echo -e "${GREEN}PASS${NC}"
     echo "- PASS: All 4 OIDC/2FA tables exist (oauth_accounts, twofa_config, twofa_challenges, webauthn_credentials)" >> "$REPORT_FILE"
