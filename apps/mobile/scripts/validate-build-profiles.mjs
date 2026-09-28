@@ -130,6 +130,17 @@ for (const [label, config] of Object.entries({ production, development })) {
 }
 
 const eas = JSON.parse(readFileSync(new URL('../eas.json', import.meta.url), 'utf8'));
+const androidReleaseWorkflow = readFileSync(
+  new URL('../../../.github/workflows/release-android.yml', import.meta.url),
+  'utf8',
+);
+for (const requiredFragment of [
+  'run: node scripts/verify-sentry-eas-environment.mjs',
+]) {
+  if (!androidReleaseWorkflow.includes(requiredFragment)) {
+    throw new Error(`Android Sentry preview builds must include protected EAS preflight: ${requiredFragment}`);
+  }
+}
 if (eas.cli?.appVersionSource !== 'remote') {
   throw new Error('Production store builds must use remote version codes for reliable auto-incrementing.');
 }
