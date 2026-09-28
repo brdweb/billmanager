@@ -1,7 +1,5 @@
 # Security Policy
 
-> **DRAFT — awaiting board approval before publication.**
-
 BillManager handles personal financial data, so security reports are welcome and appreciated.
 
 ## Supported Versions

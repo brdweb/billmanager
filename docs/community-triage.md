@@ -1,7 +1,5 @@
 # Community triage playbook
 
-> **DRAFT — awaiting board approval before publication.**
-
 ## Cadence and ownership
 
 Review new issues and pull requests twice weekly. Aim to acknowledge a

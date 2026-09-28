@@ -1,7 +1,5 @@
 # Contributing to BillManager
 
-> **DRAFT — awaiting board approval before publication.**
-
 Thank you for considering a contribution. This guide covers the commands that
 were exercised in the project maintainer container on 2026-09-26.
 
@@ -18,7 +16,7 @@ This project uses Python 3.14 in CI and Node.js 24.19.0 for the web app. The
 following web and Python-lock commands were run from this checkout:
 
 ```sh
-(cd apps/web && npm ci)
+make bootstrap   # creates .venv, installs backend deps, runs npm ci for web and mobile
 (cd apps/web && npm test)
 (cd apps/web && npm run build)
 .venv/bin/python scripts/check-python-lock.py

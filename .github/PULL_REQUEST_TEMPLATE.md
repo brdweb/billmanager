@@ -1,4 +1,3 @@
-<!-- DRAFT — awaiting board approval before publication. -->
 
 ## Summary
 

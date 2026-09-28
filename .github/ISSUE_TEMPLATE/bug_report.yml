@@ -6,7 +6,6 @@ body:
   - type: markdown
     attributes:
       value: |
-        > **DRAFT — awaiting board approval before publication.**
 
         Search open and closed issues before filing. Do not report suspected vulnerabilities here; use the private route in SECURITY.md.
   - type: input
