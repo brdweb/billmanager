@@ -144,7 +144,7 @@ jobs:
           printf 'build_id=%s\n' "$build_id" >> "$GITHUB_OUTPUT"
 
       - name: Upload EAS build metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-eas-build-metadata
           path: apps/mobile/eas-android-build.json
