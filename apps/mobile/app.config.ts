@@ -18,6 +18,9 @@ const MOBILE_RELEASE_LABEL = releaseLabel(MOBILE_RELEASE_VERSION);
 const SENTRY_DSN = process.env.SENTRY_DSN?.trim() || undefined;
 const SENTRY_ORGANIZATION = 'jason-mitchell';
 const SENTRY_PROJECT = 'billmanager-mobile';
+const SENTRY_TEST_CRASH_ENABLED =
+  process.env.EAS_BUILD_PROFILE === 'preview' &&
+  process.env.BILLMANAGER_SENTRY_TEST_CRASH === 'true';
 
 const EAS_PROJECT_ID = '061766ea-b874-4027-bcbb-a24b395cb8b6';
 const IOS_BUNDLE_ID = 'com.brdweb.billmanager';
@@ -196,6 +199,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       // Sentry DSNs are public client routing keys. The upload token is never
       // included in app config; EAS supplies SENTRY_AUTH_TOKEN at build time.
       sentryDsn: SENTRY_DSN,
+      // Temporary internal-preview harness for native crash validation. This
+      // stays false for development, iOS preview, and every production build.
+      sentryTestCrashEnabled: SENTRY_TEST_CRASH_ENABLED,
       eas: {
         projectId: EAS_PROJECT_ID,
       },
