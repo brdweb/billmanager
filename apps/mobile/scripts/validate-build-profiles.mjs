@@ -42,6 +42,12 @@ function buildProperties(config) {
   return plugin?.[1]?.android;
 }
 
+function sentryPlugin(config) {
+  return config.plugins.find((entry) => (
+    Array.isArray(entry) && entry[0] === '@sentry/react-native/expo'
+  ));
+}
+
 function assertPolicy(config, expected, label) {
   const ats = config.ios?.infoPlist?.NSAppTransportSecurity;
   const actual = {
@@ -97,6 +103,14 @@ for (const [label, config] of Object.entries({ production, development })) {
   if (config.extra?.releaseLabel !== expectedReleaseLabel) {
     throw new Error(`${label} release label is not derived from the package pre-release.`);
   }
+  const sentryOptions = sentryPlugin(config)?.[1];
+  if (
+    sentryOptions?.organization !== 'jason-mitchell' ||
+    sentryOptions?.project !== 'billmanager-mobile' ||
+    sentryOptions?.url !== 'https://sentry.io/'
+  ) {
+    throw new Error(`${label} Sentry plugin must target jason-mitchell/billmanager-mobile.`);
+  }
 }
 
 const eas = JSON.parse(readFileSync(new URL('../eas.json', import.meta.url), 'utf8'));
@@ -130,4 +144,4 @@ if (
   throw new Error('Android submissions must default to a draft internal-test release.');
 }
 
-console.log('Validated API 36 Android app-bundle builds, safe draft submission, and transport policy.');
+console.log('Validated API 36 Android app-bundle builds, Sentry upload target, safe draft submission, and transport policy.');
