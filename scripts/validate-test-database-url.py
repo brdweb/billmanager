@@ -11,13 +11,18 @@ APPROVED = {
     "database": "bills_test",
     "user": "billsuser",
 }
+QUERY_TARGET_OVERRIDES = {"host", "port", "dbname", "database", "user", "service"}
 
 
 def main() -> int:
     url = os.environ.get("DATABASE_URL", "")
     try:
         parsed = urlsplit(url)
-        hostaddr_values = parse_qs(parsed.query, keep_blank_values=True).get("hostaddr", [])
+        query = {
+            unquote(key).lower(): values
+            for key, values in parse_qs(parsed.query, keep_blank_values=True).items()
+        }
+        hostaddr_values = query.get("hostaddr", [])
         matches = (
             parsed.scheme in {"postgres", "postgresql"}
             and parsed.hostname == APPROVED["host"]
@@ -26,6 +31,7 @@ def main() -> int:
             and parsed.username is not None
             and unquote(parsed.username) == APPROVED["user"]
             and parsed.password not in (None, "")
+            and QUERY_TARGET_OVERRIDES.isdisjoint(query)
             and all(value == APPROVED["host"] for value in hostaddr_values)
         )
     except (TypeError, ValueError):
