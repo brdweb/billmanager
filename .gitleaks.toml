@@ -2,6 +2,12 @@
 # https://github.com/gitleaks/gitleaks
 
 title = "BillManager Secrets Scan"
+[[rules]]
+id = "postgresql-inline-password"
+description = "PostgreSQL URL contains an inline password literal"
+regex = 'postgres(ql)?://[^[:space:]/:@]+:[^[:space:]$@][^[:space:]@]*@'
+keywords = ["postgres://", "postgresql://"]
+
 
 [extend]
 # Use the default gitleaks config as a base
@@ -18,7 +24,6 @@ paths = [
 ]
 # Known test/dev credentials that are not real secrets
 regexes = [
-  '''billspass''',
   '''testsecret''',
   '''testpassword''',
   '''Strongpass123''',

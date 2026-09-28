@@ -55,6 +55,7 @@ For local development in WSL or Linux, the repo now includes a small task runner
 
 ```bash
 make bootstrap
+export BILLMANAGER_DEV_DB_PASSWORD="$(openssl rand -base64 32)"
 make dev-up
 make test
 ```
@@ -62,8 +63,8 @@ make test
 What these commands do:
 
 - `make bootstrap` creates `.venv`, installs backend Python dependencies, and runs `npm ci` in `apps/web` and `apps/mobile`
-- `make dev-up` builds and starts the local Docker stack from `docker-compose.dev.yml`
-- `make test` runs backend, web, and mobile tests
+- `make dev-up` builds and starts the local Docker stack from `docker-compose.dev.yml`. It keeps `BILLMANAGER_DEV_DB_PASSWORD` raw for PostgreSQL and derives the percent-encoded URL component without putting the password on a command line.
+- `make test` runs backend, web, and mobile tests. Its disposable local PostgreSQL container uses a fresh generated password unless `BACKEND_TEST_DB_PASSWORD` is set; external test databases still require an explicitly allowlisted `BACKEND_TEST_DB_URL`.
 - `make verify` runs the full test suite plus backend security checks
 
 Mobile development uses an Expo development client rather than Expo Go. See the [mobile build and release-readiness guide](apps/mobile/README.md).
@@ -221,7 +222,7 @@ If you already have a PostgreSQL server or prefer to use a managed database serv
          - "5000:5000"
        restart: unless-stopped
        environment:
-         - DATABASE_URL=postgresql://billsuser:your-secure-password@your-db-host:5432/billsdb
+         - DATABASE_URL=postgresql://billsuser:$POSTGRES_PASSWORD@your-db-host:5432/billsdb
          - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:?set FLASK_SECRET_KEY}
          - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY}
          - APP_URL=${APP_URL:?set APP_URL to the public HTTPS URL}
@@ -233,7 +234,7 @@ If you already have a PostgreSQL server or prefer to use a managed database serv
    docker run -d \
      --name billmanager \
      -p 5000:5000 \
-     -e DATABASE_URL=postgresql://billsuser:your-secure-password@your-db-host:5432/billsdb \
+     -e DATABASE_URL=postgresql://billsuser:$POSTGRES_PASSWORD@your-db-host:5432/billsdb \
      -e FLASK_SECRET_KEY="$FLASK_SECRET_KEY" \
      -e JWT_SECRET_KEY="$JWT_SECRET_KEY" \
      -e APP_URL="$APP_URL" \
@@ -243,7 +244,7 @@ If you already have a PostgreSQL server or prefer to use a managed database serv
 
 **Database URL Format:**
 ```
-postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
+postgresql://USERNAME:$PASSWORD@HOST:PORT/DATABASE
 ```
 
 | Component | Example | Description |
@@ -255,16 +256,16 @@ postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
 | DATABASE | `billsdb` | Database name |
 
 **Examples:**
-- Local: `postgresql://billsuser:pass@localhost:5432/billsdb`
-- Remote: `postgresql://billsuser:pass@db.example.com:5432/billsdb`
-- AWS RDS: `postgresql://billsuser:pass@mydb.abc123.us-east-1.rds.amazonaws.com:5432/billsdb`
-- Supabase: `postgresql://postgres:pass@db.xxxx.supabase.co:5432/postgres`
+- Local: `postgresql://billsuser:$POSTGRES_PASSWORD@localhost:5432/billsdb`
+- Remote: `postgresql://billsuser:$POSTGRES_PASSWORD@db.example.com:5432/billsdb`
+- AWS RDS: `postgresql://billsuser:$POSTGRES_PASSWORD@mydb.abc123.us-east-1.rds.amazonaws.com:5432/billsdb`
+- Supabase: `postgresql://postgres:$POSTGRES_PASSWORD@db.xxxx.supabase.co:5432/postgres`
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://billsuser:billspass@db:5432/billsdb` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://billsuser:$POSTGRES_PASSWORD@db:5432/billsdb` |
 | `FLASK_SECRET_KEY` | Backward-compatible fallback for `JWT_SECRET_KEY` | **Required in production when `JWT_SECRET_KEY` is unset** |
 | `JWT_SECRET_KEY` | Secret key for API access, refresh, and OAuth state tokens | Falls back to `FLASK_SECRET_KEY` |
 | `EMAIL_PROVIDER` | Outbound email provider: `smtp`, `resend`, or `none` | Auto-detects Resend/SMTP config |

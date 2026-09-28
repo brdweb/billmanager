@@ -10268,9 +10268,9 @@ def create_app():
     )
 
     # Get DATABASE_URL and convert to psycopg3 dialect if needed
-    db_url = os.environ.get(
-        "DATABASE_URL", "postgresql://billsuser:billspass@db:5432/billsdb"
-    )
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL is required")
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url

@@ -6,10 +6,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${ROOT_DIR}/.venv"
 CONTAINER_NAME="${BACKEND_TEST_DB_CONTAINER:-billmanager-test-db}"
 DB_USER="${BACKEND_TEST_DB_USER:-billsuser}"
-DB_PASSWORD="${BACKEND_TEST_DB_PASSWORD:-billspass}"
 DB_NAME="${BACKEND_TEST_DB_NAME:-bills_test}"
 DB_PORT="${BACKEND_TEST_DB_PORT:-5432}"
 BACKEND_TEST_DB_EXTERNAL="${BACKEND_TEST_DB_EXTERNAL:-0}"
+DB_PASSWORD_GENERATED=0
 if [[ "${BACKEND_TEST_DB_EXTERNAL}" == "1" ]]; then
   DATABASE_URL="${BACKEND_TEST_DB_URL:-${DATABASE_URL:-}}"
   if [[ -z "${DATABASE_URL}" ]]; then
@@ -17,7 +17,13 @@ if [[ "${BACKEND_TEST_DB_EXTERNAL}" == "1" ]]; then
     exit 1
   fi
 else
-  DATABASE_URL="${BACKEND_TEST_DB_URL:-postgresql://${DB_USER}:${DB_PASSWORD}@localhost:${DB_PORT}/${DB_NAME}}"
+  DB_PASSWORD="${BACKEND_TEST_DB_PASSWORD:-}"
+  if [[ -z "${DB_PASSWORD}" ]]; then
+    DB_PASSWORD="$(openssl rand -base64 32)"
+    DB_PASSWORD_GENERATED=1
+  fi
+  DB_PASSWORD_URLENCODED="$(printf '%s' "${DB_PASSWORD}" | python3 "${ROOT_DIR}/scripts/urlencode-database-password.py")"
+  DATABASE_URL="${BACKEND_TEST_DB_URL:-postgresql://${DB_USER}:${DB_PASSWORD_URLENCODED}@localhost:${DB_PORT}/${DB_NAME}}"
 fi
 DB_IMAGE="${BACKEND_TEST_DB_IMAGE:-postgres:17-alpine}"
 DB_ONLY=0
@@ -38,11 +44,16 @@ ensure_test_db() {
   local status
   status="$(docker inspect -f '{{.State.Status}}' "${CONTAINER_NAME}" 2>/dev/null || true)"
 
+  if [[ -n "${status}" && "${DB_PASSWORD_GENERATED}" == "1" ]]; then
+    docker rm -f "${CONTAINER_NAME}" >/dev/null
+    status=""
+  fi
+
   if [[ -z "${status}" ]]; then
-    docker run -d \
+    POSTGRES_PASSWORD="${DB_PASSWORD}" docker run -d \
       --name "${CONTAINER_NAME}" \
       -e POSTGRES_USER="${DB_USER}" \
-      -e POSTGRES_PASSWORD="${DB_PASSWORD}" \
+      -e POSTGRES_PASSWORD \
       -e POSTGRES_DB="${DB_NAME}" \
       -p "${DB_PORT}:5432" \
       "${DB_IMAGE}" >/dev/null
@@ -140,6 +151,8 @@ main() {
   case "${BACKEND_TEST_DB_EXTERNAL}" in
     0)
       require_cmd docker
+      require_cmd openssl
+      require_cmd python3
       ensure_test_db
       ;;
     1)
