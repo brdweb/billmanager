@@ -6,7 +6,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${ROOT_DIR}/.venv"
 CONTAINER_NAME="${BACKEND_TEST_DB_CONTAINER:-billmanager-test-db}"
 DB_USER="${BACKEND_TEST_DB_USER:-billsuser}"
-DB_PASSWORD="${BACKEND_TEST_DB_PASSWORD:-billspass}"
 DB_NAME="${BACKEND_TEST_DB_NAME:-bills_test}"
 DB_PORT="${BACKEND_TEST_DB_PORT:-5432}"
 BACKEND_TEST_DB_EXTERNAL="${BACKEND_TEST_DB_EXTERNAL:-0}"
@@ -17,6 +16,11 @@ if [[ "${BACKEND_TEST_DB_EXTERNAL}" == "1" ]]; then
     exit 1
   fi
 else
+  if [[ -z "${BACKEND_TEST_DB_PASSWORD:-}" ]]; then
+    printf 'BACKEND_TEST_DB_PASSWORD is required when BACKEND_TEST_DB_EXTERNAL=0\n' >&2
+    exit 1
+  fi
+  DB_PASSWORD="${BACKEND_TEST_DB_PASSWORD}"
   DATABASE_URL="${BACKEND_TEST_DB_URL:-postgresql://${DB_USER}:${DB_PASSWORD}@localhost:${DB_PORT}/${DB_NAME}}"
 fi
 DB_IMAGE="${BACKEND_TEST_DB_IMAGE:-postgres:17-alpine}"

@@ -113,10 +113,10 @@ Ensure PostgreSQL is running and accessible:
 
 ```bash
 # Test connection
-psql postgresql://billsuser:billspass@192.168.40.113:5432/bills_test -c "SELECT 1"
+psql postgresql://billsuser:$BACKEND_TEST_DB_PASSWORD@192.168.40.113:5432/bills_test -c "SELECT 1"
 
 # Check if database exists
-psql postgresql://billsuser:billspass@192.168.40.113:5432/postgres -c "\l" | grep bills_test
+psql postgresql://billsuser:$BACKEND_TEST_DB_PASSWORD@192.168.40.113:5432/postgres -c "\l" | grep bills_test
 ```
 
 ### Playwright Not Installed
