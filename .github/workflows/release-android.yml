@@ -136,6 +136,14 @@ jobs:
         working-directory: apps/mobile
         run: npm ci
 
+      - name: Provision protected Sentry variables in the EAS preview environment
+        if: inputs.action == 'preview-sentry-test'
+        working-directory: apps/mobile
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: node scripts/provision-sentry-eas-environment.mjs
+
       - name: Verify Sentry variables in the EAS preview environment
         if: inputs.action == 'preview-sentry-test'
         working-directory: apps/mobile

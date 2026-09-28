@@ -135,6 +135,9 @@ const androidReleaseWorkflow = readFileSync(
   'utf8',
 );
 for (const requiredFragment of [
+  'SENTRY_DSN: ${{ secrets.SENTRY_DSN }}',
+  'SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}',
+  'run: node scripts/provision-sentry-eas-environment.mjs',
   'run: node scripts/verify-sentry-eas-environment.mjs',
 ]) {
   if (!androidReleaseWorkflow.includes(requiredFragment)) {
