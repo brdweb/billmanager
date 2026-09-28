@@ -37,6 +37,7 @@ if [[ -z "${DATABASE_URL}" ]]; then
     printf 'DATABASE_URL or BACKEND_TEST_DB_URL is required to run test-e2e.sh\n' >&2
     exit 1
 fi
+DATABASE_URL="${DATABASE_URL}" python3 "${PROJECT_ROOT}/scripts/validate-test-database-url.py"
 FLASK_PORT=5001
 VITE_PORT=5173
 # Bind to 0.0.0.0 so the test servers are accessible from other machines on the LAN

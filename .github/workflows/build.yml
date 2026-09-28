@@ -35,7 +35,7 @@ jobs:
         ports:
           - 5432:5432
     env:
-      DATABASE_URL: postgresql://billsuser:${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/bills_test
+      DATABASE_URL: postgresql://billsuser:ci-${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/bills_test
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
