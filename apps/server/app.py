@@ -2237,6 +2237,8 @@ def stripe_webhook():
                         # needs an explicit operator reconciliation policy.
                         raise RuntimeError("Conflicting Stripe subscription association")
                     details = get_subscription(subscription_id)
+                    if "error" in details or not details.get("status"):
+                        raise RuntimeError("Unable to reconcile Stripe subscription")
                     trusted_plan = get_plan_for_stripe_price_id(details.get("price_id"))
                     if not trusted_plan:
                         raise RuntimeError("Unable to reconcile Stripe subscription")
@@ -2246,7 +2248,7 @@ def stripe_webhook():
                         db.session.add(subscription)
                     subscription.stripe_customer_id = data.get("customer")
                     subscription.stripe_subscription_id = subscription_id
-                    subscription.status = "active"
+                    subscription.status = details["status"]
                     subscription.tier = tier
                     subscription.billing_interval = interval
                     subscription.plan = f"{tier}_{interval}"
