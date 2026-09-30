@@ -312,6 +312,7 @@ def test_stripe_webhook_derives_entitlement_from_paid_price(
         "get_subscription",
         lambda subscription_id: {
             "price_id": "price_basic_monthly",
+            "status": "active",
             "current_period_start": 1_700_000_000,
             "current_period_end": 1_700_100_000,
         },

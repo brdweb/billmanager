@@ -179,8 +179,8 @@ export interface DatabaseWithAccess extends DatabaseInfo {
 export interface SubscriptionStatus {
   has_subscription: boolean;
   status?: 'active' | 'canceled' | 'past_due' | 'trialing';
-  tier?: 'free' | 'basic' | 'plus';
-  effective_tier: 'free' | 'basic' | 'plus';
+  tier?: 'free' | 'pro' | 'basic' | 'plus';
+  effective_tier: 'free' | 'pro' | 'basic' | 'plus';
   billing_interval?: 'monthly' | 'annual';
   current_period_end?: string;
   cancel_at_period_end?: boolean;
@@ -196,7 +196,7 @@ export interface UsageItem {
 }
 
 export interface BillingUsage {
-  tier: 'free' | 'basic' | 'plus';
+  tier: 'free' | 'pro' | 'basic' | 'plus';
   usage: {
     bills: UsageItem;
     bill_groups: UsageItem;

@@ -142,7 +142,7 @@ def test_oidc_deletion_requires_independent_email_proof(client, db_session, admi
     assert result.status_code == 200
 
 
-@pytest.mark.parametrize('price, expected', [('price_opaque123', 'basic'), ('price_unknown_plus', 'free')])
+@pytest.mark.parametrize('price, expected', [('price_opaque123', 'pro'), ('price_unknown_plus', 'free')])
 def test_stripe_updated_uses_exact_configured_price(client, db_session, admin_user, monkeypatch, price, expected):
     sub = Subscription(user_id=admin_user.id, tier='plus', status='active', stripe_subscription_id='sub_security')
     db_session.add(sub)

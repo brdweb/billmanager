@@ -250,7 +250,7 @@ def send_welcome_email(email: str, username: str) -> bool:
             <a href="{login_url}" class="button">Start Using BillManager</a>
         </p>
 
-        <p>Your 14-day free trial has started. Enjoy full access to all features!</p>
+        <p>Your 30-day free trial has started. Enjoy full access to all features!</p>
     """
 
     html = get_email_template(content, "You're All Set!")
