@@ -2,6 +2,25 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.0',
+    date: '2026-09-30',
+    title: 'Pro-Tarif und zuverlässige Abrechnung',
+    sections: [
+      { heading: 'Neue Funktionen', items: [
+        'Basic und Plus werden zum Pro-Tarif: 2,99 $/Monat oder 24 $/Jahr mit unbegrenzten Rechnungen, 6 Benutzern und 3 Rechnungsgruppen',
+        'Neue Konten starten mit einer 30-tägigen Pro-Testphase ohne Kreditkarte; bestehende Basic- und Plus-Abos behalten den Pro-Zugang',
+      ] },
+      { heading: 'Verbesserungen', items: [
+        'Stripe-Webhooks werden zuverlässig erfasst und verarbeitet; bei unvollständiger Zahlungskonfiguration schlägt die Abrechnung sicher fehl',
+        'Abgebrochene oder geänderte Checkouts gleichen den Tarifzugang jetzt korrekt ab',
+        'Selbst gehostete Server können datenschutzgefilterte Absturzberichte aktivieren; ohne Konfiguration bleiben sie aus',
+      ] },
+      { heading: 'Sicherheit', items: [
+        'Web-, Server- und Mobile-Abhängigkeiten aktualisiert, einschließlich Korrekturen für neu veröffentlichte Sicherheitshinweise',
+      ] },
+    ],
+  },
+  {
     version: '4.12.2',
     date: '2026-09-06',
     title: 'Konto- und Mandantensicherheit',

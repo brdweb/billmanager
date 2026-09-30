@@ -10,16 +10,17 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.12.2
+## 🎉 What's New in v4.13.0
 
-**Account and Tenant Security** - Stronger invitation and share authorization, fresh confirmation for sensitive account actions, and safer OAuth, billing, and telemetry boundaries.
+**Pro Plan and Reliable Billing** - One Pro plan replaces Basic and Plus on the hosted service, billing is hardened end to end, and self-hosted servers gain opt-in crash reporting.
 
 ### Highlights
 
-- **Account confirmation** - OAuth linking, adding passkeys, regenerating recovery codes, and passwordless deletion require a fresh password, verified-email code, or fresh sign-in to the existing OIDC identity. OIDC confirmation requires the provider to honor `prompt=login`, `max_age=0`, and return a signed `auth_time`; no email service is needed for this path.
-- **Data isolation** - Invitation grants are checked again at acceptance; bill shares retain their intended recipient. Login email addresses are read-only in user administration.
-- **Deployment changes** - API documentation scripts are bundled locally, telemetry statistics use `TELEMETRY_STATS_API_KEY` or an operator JWT, and ingestion keys cannot trigger trusted deployment alerts.
-- **Client compatibility** - Recovery-code regeneration uses POST. Native custom-scheme OAuth requires the updated mobile client with an app-held verifier. Existing in-progress linking/enrollment flows must be restarted after upgrading. The new confirmation table is created automatically at startup.
+- **Pro plan** - Hosted plans are now Free and Pro ($2.99/month or $24/year). New accounts get a 30-day Pro trial with no card. Existing Basic and Plus subscriptions resolve to Pro access. SaaS deployments set `STRIPE_PRICE_PRO_MONTHLY` and `STRIPE_PRICE_PRO_ANNUAL`; legacy Basic/Plus price IDs remain entitlement aliases only.
+- **Billing reliability** - Stripe webhook events are persisted and processed idempotently, checkout fails closed on incomplete configuration, and canceled checkouts reconcile entitlement correctly. The webhook table is created automatically at startup.
+- **Crash reporting (opt-in)** - Set `SENTRY_DSN` to send privacy-filtered server error reports. There is no built-in DSN; reporting is off by default. See [docs/server-crash-reporting.md](docs/server-crash-reporting.md).
+- **Analytics stay out of self-hosted images** - The public image contains no tracker. Hosted analytics ship in a separate SaaS image.
+- **Mobile** - The Android app is in closed testing on Google Play; iOS is coming soon.
 
 ---
 
@@ -32,7 +33,7 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 - **Enhanced Frequencies**: Weekly, bi-weekly, monthly (including 1st & 15th), quarterly, yearly, and custom schedules
 - **Auto-Payments**: Automatic payment processing for recurring transactions
 - **Modern UI**: Responsive design with dark/light mode, 70+ custom icons, and visual calendar
-- **Mobile Alpha-1 (internal testing)**: Native-adaptive iOS and Android clients with offline support and local actionable reminders; public replacement release gates are still open
+- **Mobile Apps**: Native-adaptive Android client in Google Play closed testing (iOS coming soon) with offline support and local actionable reminders
 - **Email Invitations**: Invite users via email with configurable roles and access control
 - **Bill Groups**: Organize finances into separate groups (personal, business, family, etc.)
 - **Bill Sharing**: Share bills with other users and split costs by percentage, fixed amount, or equally
