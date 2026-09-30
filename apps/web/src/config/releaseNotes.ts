@@ -50,6 +50,25 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.0',
+    date: '2026-09-30',
+    title: 'Pro Plan and Reliable Billing',
+    sections: [
+      { heading: 'New Features', items: [
+        'Basic and Plus are now one Pro plan: $2.99/month or $24/year with unlimited bills, 6 users, and 3 bill groups',
+        'New accounts start with a 30-day Pro trial, no card required; existing Basic and Plus subscriptions keep Pro access',
+      ] },
+      { heading: 'Improvements', items: [
+        'Stripe webhooks are recorded and processed reliably, and billing fails closed when payment configuration is incomplete',
+        'Canceled or changed checkouts now reconcile plan access correctly',
+        'Self-hosted servers can opt in to privacy-filtered crash reporting; it stays off unless configured',
+      ] },
+      { heading: 'Security', items: [
+        'Refreshed web, server, and mobile dependencies, including fixes for newly published advisories',
+      ] },
+    ],
+  },
+  {
     version: '4.12.2',
     date: '2026-09-06',
     title: 'Account and Tenant Security',
