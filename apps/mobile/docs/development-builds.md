@@ -218,6 +218,16 @@ credentials, or the EAS project to bypass a signing problem. Each build produces
 a JSON build-metadata artifact and records the EAS build ID in the job summary.
 Save that ID before requesting a submission.
 
+The temporary Android `preview-sentry-test` action also uses the protected
+`android-production` reviewer gate, but selects the internal `preview` EAS
+profile and never enters the submission job. The protected environment must hold
+`SENTRY_DSN` and `SENTRY_AUTH_TOKEN` as environment secrets. The job copies them
+directly into the EAS `preview` environment with `SENSITIVE` and `SECRET`
+visibility, respectively; the provisioning script suppresses EAS CLI output and
+reports names and visibility only. It then queries Expo for only those names and
+their visibility before starting the build. Missing protected values, a failed
+transfer, or unsafe metadata stops the job before EAS consumes build capacity.
+
 An iOS submission creates an App Store Connect/TestFlight candidate; an Android
 submission creates a draft internal-testing candidate. Neither action makes a
 public release. Public promotion and the device/release gates remain manual.

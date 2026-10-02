@@ -16,6 +16,7 @@ import {
   Palette,
   Server,
   ShieldCheck,
+  TriangleAlert,
   UserPlus,
   Users,
 } from 'lucide-react-native';
@@ -36,6 +37,10 @@ import { useAdaptiveLayout } from '../../design/useAdaptiveLayout';
 import { useAdaptiveTheme } from '../../design/useAdaptiveTheme';
 import { getFormattingConfig } from '../../i18n/format';
 import { getLanguageOption, normalizeLanguage } from '../../i18n';
+import {
+  isSentryTestCrashEnabled,
+  triggerSentryNativeTestCrash,
+} from '../../telemetry/sentryTestCrash';
 
 interface SettingsHomeScreenViewProps {
   platform: AdaptivePlatform;
@@ -111,12 +116,28 @@ export function SettingsHomeScreenView({ platform }: SettingsHomeScreenViewProps
       : t('mobileSettings.home.selfHosted');
   const canAdminister = user?.role === 'admin' && Boolean(activeProfile.capabilities?.administration);
   const canManageBilling = Boolean(user?.is_account_owner && activeProfile.capabilities?.billing);
+  const sentryTestCrashEnabled = isSentryTestCrashEnabled();
 
   const confirmLogout = () => {
     Alert.alert(t('mobileSettings.home.logOutTitle'), t('mobileSettings.home.logOutBody'), [
       { text: t('mobileSettings.home.cancel'), style: 'cancel' },
       { text: t('mobileSettings.home.logOut'), style: 'destructive', onPress: () => void logout() },
     ]);
+  };
+
+  const confirmSentryTestCrash = () => {
+    Alert.alert(
+      t('mobileSettings.home.sentryTestCrashTitle'),
+      t('mobileSettings.home.sentryTestCrashBody'),
+      [
+        { text: t('mobileSettings.home.cancel'), style: 'cancel' },
+        {
+          text: t('mobileSettings.home.sentryTestCrashAction'),
+          style: 'destructive',
+          onPress: triggerSentryNativeTestCrash,
+        },
+      ],
+    );
   };
 
   return (
@@ -299,8 +320,18 @@ export function SettingsHomeScreenView({ platform }: SettingsHomeScreenViewProps
                   subtitle={'BillManager Mobile ' + appVersion}
                   leading={<SettingIcon platform={platform}><Info size={21} color={theme.colors.primary} /></SettingIcon>}
                   onPress={() => navigation.navigate('ReleaseNotes')}
-                  isLast
+                  isLast={!sentryTestCrashEnabled}
                 />
+                {sentryTestCrashEnabled ? (
+                  <AdaptiveListRow
+                    platform={platform}
+                    title={t('mobileSettings.home.sentryTestCrash')}
+                    subtitle={t('mobileSettings.home.sentryTestCrashDetail')}
+                    leading={<SettingIcon platform={platform}><TriangleAlert size={21} color={theme.colors.danger} /></SettingIcon>}
+                    onPress={confirmSentryTestCrash}
+                    isLast
+                  />
+                ) : null}
               </SettingsGroup>
             </View>
           </View>
