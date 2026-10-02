@@ -1,4 +1,11 @@
 {
   "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
-  "high": true
+  "high": true,
+  "allowlist": [
+    // node-forge <=1.4.0 RSA PKCS#1 v1.5 signature verification; no patched
+    // release exists. Reached only through Expo tooling (@expo/cli) and
+    // expo-updates code signing, which this app does not configure. Remove
+    // when node-forge or Expo ships a fix.
+    "GHSA-86w9-cpqp-85rv"
+  ]
 }
