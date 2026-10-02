@@ -136,6 +136,11 @@ jobs:
         working-directory: apps/mobile
         run: npm ci
 
+      - name: Verify Sentry variables in the EAS production environment
+        if: env.EAS_BUILD_PROFILE == 'production'
+        working-directory: apps/mobile
+        run: node scripts/verify-sentry-eas-environment.mjs --environment production
+
       - name: Provision protected Sentry variables in the EAS preview environment
         if: inputs.action == 'preview-sentry-test'
         working-directory: apps/mobile
@@ -147,7 +152,7 @@ jobs:
       - name: Verify Sentry variables in the EAS preview environment
         if: inputs.action == 'preview-sentry-test'
         working-directory: apps/mobile
-        run: node scripts/verify-sentry-eas-environment.mjs
+        run: node scripts/verify-sentry-eas-environment.mjs --environment preview
 
       - name: Build Android with EAS
         working-directory: apps/mobile

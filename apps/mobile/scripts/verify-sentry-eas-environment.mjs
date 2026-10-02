@@ -2,7 +2,6 @@ import { pathToFileURL } from 'node:url';
 
 const EXPO_GRAPHQL_URL = 'https://api.expo.dev/graphql';
 const EAS_PROJECT_ID = '061766ea-b874-4027-bcbb-a24b395cb8b6';
-const EAS_ENVIRONMENT = 'preview';
 export const REQUIRED_SENTRY_VARIABLES = ['SENTRY_DSN', 'SENTRY_AUTH_TOKEN'];
 
 const SENTRY_METADATA_QUERY = `
@@ -40,9 +39,14 @@ export function verifySentryEasEnvironmentMetadata(variables) {
 }
 
 export async function fetchSentryEasEnvironmentMetadata({
+  environment,
   expoToken = process.env.EXPO_TOKEN,
   fetchImpl = globalThis.fetch,
 } = {}) {
+  if (environment !== 'preview' && environment !== 'production') {
+    throw new Error(`Unsupported EAS environment: ${environment}.`);
+  }
+
   if (!expoToken) {
     throw new Error('EXPO_TOKEN is required for the EAS metadata preflight.');
   }
@@ -57,7 +61,7 @@ export async function fetchSentryEasEnvironmentMetadata({
       query: SENTRY_METADATA_QUERY,
       variables: {
         appId: EAS_PROJECT_ID,
-        environment: EAS_ENVIRONMENT,
+        environment,
         filterNames: REQUIRED_SENTRY_VARIABLES,
       },
     }),
@@ -82,12 +86,18 @@ export async function fetchSentryEasEnvironmentMetadata({
 
 async function main() {
   try {
-    const verified = await fetchSentryEasEnvironmentMetadata();
+    const environmentIndex = process.argv.indexOf('--environment', 2);
+    const environment = environmentIndex === -1 ? undefined : process.argv[environmentIndex + 1];
+    if (!environment || environment.startsWith('--')) {
+      throw new Error('Missing required --environment <preview|production> argument.');
+    }
+
+    const verified = await fetchSentryEasEnvironmentMetadata({ environment });
     const summary = verified.map(({ name, visibility }) => `${name} (${visibility})`).join(', ');
-    process.stdout.write(`Verified EAS preview environment metadata: ${summary}.\n`);
+    process.stdout.write(`Verified EAS ${environment} environment metadata: ${summary}.\n`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'EAS environment verification failed.';
-    process.stderr.write(`${message}\n`);
+    console.error(message);
     process.exitCode = 1;
   }
 }

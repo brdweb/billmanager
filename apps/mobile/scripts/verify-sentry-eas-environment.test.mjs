@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   fetchSentryEasEnvironmentMetadata,
@@ -44,9 +44,10 @@ describe('verifySentryEasEnvironmentMetadata', () => {
     ])).toThrow('SENTRY_AUTH_TOKEN must use EAS SECRET visibility.');
   });
 
-  it('requests only names and visibility from Expo', async () => {
+  it.each(['preview', 'production'])('requests only names and visibility from Expo (%s)', async (environment) => {
     const requests = [];
     const result = await fetchSentryEasEnvironmentMetadata({
+      environment,
       expoToken: 'synthetic-expo-token',
       fetchImpl: async (url, options) => {
         requests.push({ url, options });
@@ -76,11 +77,22 @@ describe('verifySentryEasEnvironmentMetadata', () => {
     expect(requests[0].options.headers.authorization).toBe('Bearer synthetic-expo-token');
     expect(requestBody.variables).toEqual({
       appId: '061766ea-b874-4027-bcbb-a24b395cb8b6',
-      environment: 'preview',
+      environment,
       filterNames: REQUIRED_SENTRY_VARIABLES,
     });
     expect(requestBody.query).toContain('name');
     expect(requestBody.query).toContain('visibility');
     expect(requestBody.query).not.toMatch(/\bvalue\b/u);
+  });
+
+  it('rejects unsupported environments before requesting Expo metadata', async () => {
+    const fetchImpl = vi.fn();
+
+    await expect(fetchSentryEasEnvironmentMetadata({
+      environment: 'staging',
+      expoToken: 'synthetic-expo-token',
+      fetchImpl,
+    })).rejects.toThrow('Unsupported EAS environment: staging.');
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
