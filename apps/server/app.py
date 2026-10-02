@@ -2237,6 +2237,8 @@ def stripe_webhook():
                         # needs an explicit operator reconciliation policy.
                         raise RuntimeError("Conflicting Stripe subscription association")
                     details = get_subscription(subscription_id)
+                    if "error" in details or not details.get("status"):
+                        raise RuntimeError("Unable to reconcile Stripe subscription")
                     trusted_plan = get_plan_for_stripe_price_id(details.get("price_id"))
                     if not trusted_plan:
                         raise RuntimeError("Unable to reconcile Stripe subscription")
@@ -2246,7 +2248,7 @@ def stripe_webhook():
                         db.session.add(subscription)
                     subscription.stripe_customer_id = data.get("customer")
                     subscription.stripe_subscription_id = subscription_id
-                    subscription.status = "active"
+                    subscription.status = details["status"]
                     subscription.tier = tier
                     subscription.billing_interval = interval
                     subscription.plan = f"{tier}_{interval}"
@@ -10266,9 +10268,9 @@ def create_app():
     )
 
     # Get DATABASE_URL and convert to psycopg3 dialect if needed
-    db_url = os.environ.get(
-        "DATABASE_URL", "postgresql://billsuser:billspass@db:5432/billsdb"
-    )
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL is required")
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url

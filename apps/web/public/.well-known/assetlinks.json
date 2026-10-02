@@ -8,7 +8,8 @@
       "namespace": "android_app",
       "package_name": "com.brdweb.billmanagermobile",
       "sha256_cert_fingerprints": [
-        "8E:15:2C:AB:4C:77:ED:B6:0A:0B:89:E4:B4:82:FD:67:B1:B1:82:0A:94:E1:3D:DB:02:DD:C5:E5:8C:C5:E6:80"
+        "8E:15:2C:AB:4C:77:ED:B6:0A:0B:89:E4:B4:82:FD:67:B1:B1:82:0A:94:E1:3D:DB:02:DD:C5:E5:8C:C5:E6:80",
+        "6D:91:46:56:05:53:7C:83:68:57:75:BE:F4:7A:11:C1:7F:B6:40:96:C2:A4:52:8F:83:E0:20:AD:E6:43:75:38"
       ]
     }
   }

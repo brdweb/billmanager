@@ -39,6 +39,9 @@ install-mobile:
 	@bash ./scripts/bootstrap-dev.sh mobile
 
 dev-up:
+	@BILLMANAGER_DEV_DB_PASSWORD="$${BILLMANAGER_DEV_DB_PASSWORD:?set BILLMANAGER_DEV_DB_PASSWORD as documented in README.md}"; \
+	BILLMANAGER_DEV_DB_PASSWORD_URLENCODED="$$(printf '%s' "$${BILLMANAGER_DEV_DB_PASSWORD}" | $(PYTHON) ./scripts/urlencode-database-password.py)"; \
+	export BILLMANAGER_DEV_DB_PASSWORD BILLMANAGER_DEV_DB_PASSWORD_URLENCODED; \
 	docker compose -f $(COMPOSE_FILE) up -d --build
 
 dev-down:

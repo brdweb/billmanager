@@ -20,7 +20,7 @@ info:
     requested purpose. Its callback returns the grant only after fresh sign-in
     to the already-linked identity with a signed auth_time claim.
 
-  version: 4.12.2
+  version: 4.13.0
   license:
     name: O'Saasy License
     url: https://osaasy.dev/

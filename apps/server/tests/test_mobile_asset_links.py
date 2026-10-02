@@ -13,7 +13,7 @@ ASSET_LINKS_PATH = (
 )
 
 
-def test_android_asset_links_trusts_release_signing_certificate():
+def test_android_asset_links_trusts_upload_and_play_signing_certificates():
     statements = json.loads(ASSET_LINKS_PATH.read_text(encoding="utf-8"))
 
     assert statements == [
@@ -27,7 +27,9 @@ def test_android_asset_links_trusts_release_signing_certificate():
                 "package_name": "com.brdweb.billmanagermobile",
                 "sha256_cert_fingerprints": [
                     "8E:15:2C:AB:4C:77:ED:B6:0A:0B:89:E4:B4:82:FD:67:"
-                    "B1:B1:82:0A:94:E1:3D:DB:02:DD:C5:E5:8C:C5:E6:80"
+                    "B1:B1:82:0A:94:E1:3D:DB:02:DD:C5:E5:8C:C5:E6:80",
+                    "6D:91:46:56:05:53:7C:83:68:57:75:BE:F4:7A:11:C1:"
+                    "7F:B6:40:96:C2:A4:52:8F:83:E0:20:AD:E6:43:75:38",
                 ],
             },
         }

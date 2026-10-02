@@ -158,8 +158,8 @@ export const mobileSettingsResources = {
       contract: 'Mobile contract',
       development: 'Development',
       unavailable: 'Unavailable',
-      latestTitle: 'BillManager Mobile Alpha-1',
-      latestStatus: 'Internal native-adaptive testing milestone',
+      latestTitle: 'BillManager Mobile 1.1',
+      latestStatus: 'Google Play closed testing release',
       sections: {
         experience: 'Experience',
         offline: 'Offline & reminders',
@@ -341,8 +341,8 @@ export const mobileSettingsResources = {
       contract: 'Mobile-Vertrag',
       development: 'Entwicklung',
       unavailable: 'Nicht verfügbar',
-      latestTitle: 'BillManager Mobile Alpha-1',
-      latestStatus: 'Interner Meilenstein für native-adaptive Tests',
+      latestTitle: 'BillManager Mobile 1.1',
+      latestStatus: 'Release für geschlossene Tests bei Google Play',
       sections: {
         experience: 'Bedienung',
         offline: 'Offline & Erinnerungen',
