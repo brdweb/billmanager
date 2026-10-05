@@ -44,9 +44,12 @@ updates:
     directory: /apps/server
     schedule:
       interval: weekly
+    # Major releases (e.g. Stripe SDKs that change the pinned API version)
+    # arrive as standalone PRs so they get a deliberate migration review.
     groups:
       server-dependencies:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: docker
     directory: /
     schedule:
