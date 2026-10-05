@@ -29,8 +29,13 @@ def billing(monkeypatch):
     monkeypatch.setattr(stripe_service, "get_billing_readiness", lambda: {"billing_enabled": True})
     customer = Mock(return_value=SimpleNamespace(id="cus_synthetic"))
     checkout = Mock(return_value=SimpleNamespace(id="cs_synthetic", url="https://example.invalid/checkout"))
-    retrieve = Mock(return_value={"items": {"data": [{"id": "si_synthetic"}]}})
-    modify = Mock(return_value=SimpleNamespace(id="sub_synthetic", status="active", current_period_end=200))
+    # Real SDK objects: StripeObject is not a dict, so fakes must not be either.
+    subscription = stripe_service.stripe.Subscription.construct_from({
+        "id": "sub_synthetic", "object": "subscription", "status": "active",
+        "items": {"object": "list", "data": [{"id": "si_synthetic", "object": "subscription_item", "current_period_end": 200}]},
+    }, "sk_test_synthetic")
+    retrieve = Mock(return_value=subscription)
+    modify = Mock(return_value=subscription)
     monkeypatch.setattr(stripe_service.stripe.Customer, "create", customer)
     monkeypatch.setattr(stripe_service.stripe.checkout.Session, "create", checkout)
     monkeypatch.setattr(stripe_service.stripe.Subscription, "retrieve", retrieve)
