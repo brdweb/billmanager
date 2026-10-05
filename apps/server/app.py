@@ -2282,8 +2282,10 @@ def stripe_webhook():
                 else:
                     subscription.tier = "free"
                     subscription.billing_interval = "monthly"
-            if data.get("current_period_end"):
-                subscription.current_period_end = datetime.datetime.fromtimestamp(data["current_period_end"])
+                # Billing periods are per subscription item since API 2025-03-31.basil.
+                period_end = items[0].get("current_period_end")
+                if period_end:
+                    subscription.current_period_end = datetime.datetime.fromtimestamp(period_end)
 
         if subscription:
             subscription.stripe_last_event_created = event_created

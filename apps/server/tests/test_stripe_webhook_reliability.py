@@ -1,4 +1,8 @@
 import datetime
+import hashlib
+import hmac
+import json
+import time
 
 import app as app_module
 import config
@@ -13,6 +17,14 @@ def _event(event_id, event_type, created, obj):
         "created": created,
         "data": {"object": obj},
     }
+
+
+def _signed(event, secret="whsec_test"):
+    """Payload and Stripe-Signature header verifiable by the real SDK."""
+    payload = json.dumps({"object": "event", **event})
+    timestamp = int(time.time())
+    digest = hmac.new(secret.encode(), f"{timestamp}.{payload}".encode(), hashlib.sha256).hexdigest()
+    return payload.encode(), f"t={timestamp},v1={digest}"
 
 
 def test_saas_readiness_requires_all_stripe_inputs(monkeypatch):
@@ -57,8 +69,11 @@ def test_self_hosted_billing_remains_disabled_even_when_stripe_is_ready(monkeypa
 def test_construct_webhook_distinguishes_valid_and_invalid_signature(monkeypatch):
     monkeypatch.setattr(stripe_service, "STRIPE_AVAILABLE", True)
     monkeypatch.setattr(stripe_service, "STRIPE_WEBHOOK_SECRET", "whsec_test")
-    monkeypatch.setattr(stripe_service.stripe.Webhook, "construct_event", lambda *args: {"id": "evt_valid"})
-    assert stripe_service.construct_webhook_event(b"{}", "sig")["id"] == "evt_valid"
+    payload, signature = _signed(_event("evt_valid", "invoice.paid", 1, {"subscription": "sub_1"}))
+    event = stripe_service.construct_webhook_event(payload, signature)
+    # Callers read events with dict methods; a raw StripeObject raises on .get().
+    assert event.get("id") == "evt_valid"
+    assert event.get("data", {}).get("object", {}).get("subscription") == "sub_1"
 
     def invalid(*args):
         raise stripe_service.stripe.error.SignatureVerificationError("bad", b"{}")
@@ -174,3 +189,48 @@ def test_commit_failure_rolls_back_ledger_and_business_change(client, app, db_se
     with app.app_context():
         assert StripeWebhookEvent.query.filter_by(event_id="evt_commit_fail").first() is None
         assert Subscription.query.filter_by(stripe_subscription_id="sub_commit").one().status == "active"
+
+
+def test_signed_subscription_update_reads_item_billing_period(client, app, db_session, regular_user, monkeypatch):
+    # End-to-end through the real SDK: current Stripe APIs put periods on items.
+    monkeypatch.setattr(stripe_service, "STRIPE_AVAILABLE", True)
+    monkeypatch.setattr(stripe_service, "STRIPE_WEBHOOK_SECRET", "whsec_test")
+    monkeypatch.setattr(app_module, "get_plan_for_stripe_price_id", lambda price: ("pro", "monthly") if price == "price_pm" else None)
+    db_session.add(Subscription(user_id=regular_user.id, stripe_subscription_id="sub_signed", status="active"))
+    db_session.commit()
+    payload, signature = _signed(_event("evt_signed", "customer.subscription.updated", 100, {
+        "id": "sub_signed", "object": "subscription", "status": "past_due",
+        "items": {"object": "list", "data": [{
+            "id": "si_1", "object": "subscription_item", "current_period_end": 1_800_000_000,
+            "price": {"id": "price_pm", "object": "price"},
+        }]},
+    }))
+
+    response = client.post("/api/v2/webhooks/stripe", data=payload, headers={"Stripe-Signature": signature})
+
+    assert response.status_code == 200
+    with app.app_context():
+        subscription = Subscription.query.filter_by(stripe_subscription_id="sub_signed").one()
+        assert subscription.status == "past_due"
+        assert subscription.tier == "pro"
+        assert subscription.current_period_end == datetime.datetime.fromtimestamp(1_800_000_000)
+
+
+def test_get_subscription_reads_sdk_object_and_item_periods(monkeypatch):
+    monkeypatch.setattr(stripe_service, "STRIPE_AVAILABLE", True)
+    monkeypatch.setattr(stripe_service, "STRIPE_SECRET_KEY", "sk_test")
+    retrieved = stripe_service.stripe.Subscription.construct_from({
+        "id": "sub_1", "object": "subscription", "status": "active",
+        "cancel_at_period_end": False, "canceled_at": None,
+        "items": {"object": "list", "data": [{
+            "id": "si_1", "object": "subscription_item",
+            "current_period_start": 100, "current_period_end": 200,
+            "price": {"id": "price_pm", "object": "price"},
+        }]},
+    }, "sk_test")
+    monkeypatch.setattr(stripe_service.stripe.Subscription, "retrieve", lambda *_: retrieved)
+
+    assert stripe_service.get_subscription("sub_1") == {
+        "id": "sub_1", "status": "active", "current_period_start": 100, "current_period_end": 200,
+        "cancel_at_period_end": False, "canceled_at": None, "price_id": "price_pm",
+    }
