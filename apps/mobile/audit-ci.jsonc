@@ -6,6 +6,11 @@
     // release exists. Reached only through Expo tooling (@expo/cli) and
     // expo-updates code signing, which this app does not configure. Remove
     // when node-forge or Expo ships a fix.
-    "GHSA-86w9-cpqp-85rv"
+    "GHSA-86w9-cpqp-85rv",
+    // braces <=3.0.3 stack exhaustion on deeply nested patterns; no patched
+    // release exists. Reached only through micromatch in build tooling
+    // (Metro file map, patch-package) with developer-controlled globs, not
+    // in the app bundle. Remove when braces ships a fix.
+    "GHSA-vfj7-8cjw-p6xm"
   ]
 }
