@@ -125,7 +125,8 @@ def create_checkout_session(
         # Create checkout session
         session = stripe.checkout.Session.create(
             customer=customer_id,
-            payment_method_types=['card'],
+            # API 2026-09-30.endive removed payment_method_types; keep card-only.
+            allowed_payment_method_types=['card'],
             line_items=[{
                 'price': price_id,
                 'quantity': 1,
