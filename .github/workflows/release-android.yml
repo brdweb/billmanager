@@ -128,7 +128,7 @@ jobs:
 
       - name: Build Android with EAS
         working-directory: apps/mobile
-        run: npx --yes eas-cli@16.28.0 build --platform android --profile production --non-interactive --wait --json > eas-android-build.json
+        run: npx --yes eas-cli@24.10.0 build --platform android --profile production --non-interactive --wait --json > eas-android-build.json
 
       - name: Extract EAS build ID
         id: build-metadata
@@ -197,7 +197,7 @@ jobs:
 
       - name: Submit Android build with EAS
         working-directory: apps/mobile
-        run: npx --yes eas-cli@16.28.0 submit --platform android --profile production --id "$BUILD_ID" --non-interactive
+        run: npx --yes eas-cli@24.10.0 submit --platform android --profile production --id "$BUILD_ID" --non-interactive
 
       - name: Write submission summary
         env:

@@ -1,6 +1,6 @@
 {
   "name": "@billmanager/mobile",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "main": "index.ts",
   "engines": {
     "node": ">=24.19.0 <25"

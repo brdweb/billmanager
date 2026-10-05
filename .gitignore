@@ -83,3 +83,6 @@ AGENTS.md
 
 # Local Hermes workspace state
 .hermes/
+
+# Local omp agent configuration
+.omp/

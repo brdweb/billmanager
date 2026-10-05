@@ -6,7 +6,7 @@ BillManager Mobile requires an Expo development build. Expo Go cannot load the S
 
 - Node.js 24.19.0 and npm
 - an Expo account with access to the existing `brdweb/billmanager-mobile` EAS project
-- EAS CLI 16.28.0 (use `npx eas-cli@16.28.0`)
+- EAS CLI 24.10.0 (use `npx eas-cli@24.10.0`)
 - Android Studio, Android SDK, an emulator or Android device, and a compatible JDK for local Android builds
 - macOS with Xcode for local iOS builds, widget/passkey work, signing diagnosis, and final App Store checks
 
@@ -60,25 +60,25 @@ Generated translation and API changes are real source changes. Review and commit
 Authenticate once:
 
 ```bash
-npx eas-cli@16.28.0 login
+npx eas-cli@24.10.0 login
 ```
 
 Android internal development client:
 
 ```bash
-npx eas-cli@16.28.0 build --platform android --profile development
+npx eas-cli@24.10.0 build --platform android --profile development
 ```
 
 iOS simulator client:
 
 ```bash
-npx eas-cli@16.28.0 build --platform ios --profile development
+npx eas-cli@24.10.0 build --platform ios --profile development
 ```
 
 iOS physical-device internal client:
 
 ```bash
-npx eas-cli@16.28.0 build --platform ios --profile development:device
+npx eas-cli@24.10.0 build --platform ios --profile development:device
 ```
 
 After installing the matching development client, start Metro:
@@ -140,7 +140,7 @@ only by the Windows user running the build:
 - `%LOCALAPPDATA%\BillManager\android-signing\credentials.json`
 - `%LOCALAPPDATA%\BillManager\android-signing\keystore.jks`
 
-Download the existing Android keystore through `npx eas-cli@16.28.0 credentials
+Download the existing Android keystore through `npx eas-cli@24.10.0 credentials
 --platform android`; do not generate a replacement key and never copy either
 credential file into the repository. The script also expects the preview
 profile's pinned Windows Node.js version and the Android 36 SDK, Build Tools,
@@ -230,9 +230,9 @@ requires the same release approval, protected environment, recorded build ID,
 EAS-managed store credentials, and manual public-promotion gates:
 
 ```bash
-npx eas-cli@16.28.0 build --platform all --profile production
-npx eas-cli@16.28.0 submit --platform ios --id <EAS_BUILD_ID>
-npx eas-cli@16.28.0 submit --platform android --id <EAS_BUILD_ID>
+npx eas-cli@24.10.0 build --platform all --profile production
+npx eas-cli@24.10.0 submit --platform ios --id <EAS_BUILD_ID>
+npx eas-cli@24.10.0 submit --platform android --id <EAS_BUILD_ID>
 ```
 
 ## Mac and Xcode responsibilities
