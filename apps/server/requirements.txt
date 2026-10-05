@@ -16,7 +16,7 @@ psycopg[binary]>=3.3.6
 flask-migrate==4.1.0
 PyJWT==2.15.1
 resend==2.49.0
-stripe==15.6.1
+stripe==16.0.0
 APScheduler==3.11.3
 requests>=2.34.2
 authlib>=1.8.0
