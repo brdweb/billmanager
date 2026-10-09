@@ -262,9 +262,10 @@ Native source files and native source context are excluded
 (`includeNativeSources` and `includeSourceContext` are false); tracing
 instrumentation and automatic dependency installation are also disabled.
 These settings describe the expected upload path, not a successful upload.
-Inspect the real candidate build logs for JavaScript and Android symbol/mapping
-upload results, and verify the received event frames in Sentry. Build-log upload
-evidence and received source mapping/native symbolication are still pending.
+The October 9 Android preview at `f5c8e85` completed JavaScript source-map and
+116 native debug-file uploads; the authenticated Sentry project shows the
+artifacts. Repeat upload verification for each updated signed candidate.
+Received source mapping/native symbolication remain pending.
 
 The temporary Settings **Test JavaScript error reporting** and **Test crash
 reporting** controls are retained until live verification is captured. Both use
@@ -281,9 +282,12 @@ On an authorized test device, perform these two separate actions:
    flush completion, timeout, and failure; none proves receipt or source mapping.
    Find the real received JavaScript event in Sentry and verify its original
    application frame and release/distribution before proceeding.
-2. Confirm **Test crash reporting** separately. This intentionally closes the
-   app immediately. Reopen it once to upload the stored native crash, then find
-   the separate received native event and inspect its symbolicated frames.
+2. Confirm **Test crash reporting** separately. The temporary native SDK patch
+   raises Android `SIGABRT` to exercise the actual in-process NDK handler, closing
+   the app immediately. Reopen it once to upload the stored native crash, then
+   find the separate received native event and inspect its symbolicated frames.
+   The earlier `f5c8e85` preview used the stock SDK Java `RuntimeException`;
+   that Java result does not establish C/C++/NDK capture.
 
 Do not substitute the on-device JavaScript flush result for dashboard evidence,
 or a JavaScript event for the native-crash-after-relaunch gate.
@@ -299,9 +303,12 @@ from the real candidate and the Sentry project for each target platform:
 3. A received session and the expected crash/session health outcome, correlated
    to the candidate and device test.
 4. Inspection of the received JS/native events and session payloads confirms
-   the privacy contract: no credentials, financial or personal data, user
-   identity, request payloads, or disallowed breadcrumbs/attachments. Do not
-   relax scrubbing to obtain a successful receipt.
+   the privacy contract: no credentials, financial/account data, account identity,
+   request payloads, or disallowed breadcrumbs/attachments. Standard anonymous
+   SDK installation IDs and per-session UUIDs remain enabled by owner decision
+   for distinct-installation and crash/session health metrics. They are not
+   BillManager account IDs; disclose them as identifiers with diagnostics in
+   the public policy and store forms. Do not relax other scrubbing for receipt.
 
 Record event IDs or restricted links, timestamps, candidate identity, and
 symbolication/session results without copying sensitive payloads into release
@@ -315,7 +322,8 @@ symbolication have not been established by configuration or metadata checks.
 Keep the PR draft, retain the temporary harness, and do not merge or promote a
 public release until the captured evidence satisfies all these gates. Remove
 the temporary harness only after live JavaScript and native evidence is captured;
-remove both actions before merge. Store and device release approval remain
+remove both actions and the temporary SDK `crash()` SIGABRT hunk before merge.
+Keep the native privacy callbacks. Store and device release approval remain
 separate requirements.
 
 An iOS submission creates an App Store Connect/TestFlight candidate; an Android

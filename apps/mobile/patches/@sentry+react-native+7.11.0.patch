@@ -3,23 +3,38 @@ new file mode 100644
 index 0000000..7bba7ea
 --- /dev/null
 +++ b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/BillManagerSentryPrivacy.java
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,178 @@
 +package io.sentry.react;
 +
 +import io.sentry.Hint;
 +import io.sentry.SentryEvent;
++import io.sentry.protocol.DebugImage;
++import io.sentry.protocol.DebugMeta;
++import io.sentry.protocol.SdkVersion;
++import io.sentry.protocol.SentryPackage;
 +import io.sentry.protocol.Mechanism;
 +import io.sentry.protocol.SentryException;
 +import io.sentry.protocol.SentryStackFrame;
 +import io.sentry.protocol.SentryStackTrace;
 +import io.sentry.protocol.SentryThread;
-+import java.util.Collections;
 +import java.util.List;
++import java.util.Set;
++import java.util.regex.Pattern;
 +import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.annotations.Nullable;
 +
 +final class BillManagerSentryPrivacy {
 +  private static final String REDACTED_EVENT_VALUE = "[redacted]";
++  private static final Pattern SDK_NAME =
++      Pattern.compile("sentry\\.(?:javascript(?:\\.[a-z-]+)*|cocoa|(?:java|native)(?:\\.android(?:\\.react-native)?)?)");
++  private static final Pattern VERSION =
++      Pattern.compile("\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?");
++  private static final Pattern PACKAGE_NAME =
++      Pattern.compile("(?:npm:@sentry/[a-z-]+|cocoapods:Sentry|maven:io\\.sentry:sentry(?:-android(?:-core|-ndk)?)?)");
++  private static final Pattern CODE_SYMBOL =
++      Pattern.compile("[A-Za-z_$~][A-Za-z0-9_$.:<>()\\[\\],*&~+!=%|^\\-]{0,255}");
++  private static final Pattern OBJC_SYMBOL =
++      Pattern.compile("[-+]\\[[A-Za-z_][A-Za-z0-9_]*(?:\\([A-Za-z_][A-Za-z0-9_]*\\))? [A-Za-z_][A-Za-z0-9_:]*\\]");
 +
 +  private BillManagerSentryPrivacy() {}
 +
@@ -36,10 +51,11 @@ index 0000000..7bba7ea
 +    event.setFingerprints(null);
 +    event.setThrowable(null);
 +    event.setUnknown(null);
++    event.setModules(null);
++    scrubSdk(event);
++    scrubDebugMeta(event.getDebugMeta());
 +
-+    for (final String contextKey : Collections.list(event.getContexts().keys())) {
-+      event.getContexts().remove(contextKey);
-+    }
++    event.getContexts().entrySet().clear();
 +
 +    final @Nullable List<SentryException> exceptions = event.getExceptions();
 +    if (exceptions != null) {
@@ -53,6 +69,7 @@ index 0000000..7bba7ea
 +          mechanism.setDescription(null);
 +          mechanism.setHelpLink(null);
 +          mechanism.setData(null);
++          mechanism.setMeta(null);
 +          mechanism.setUnknown(null);
 +        }
 +      }
@@ -62,6 +79,7 @@ index 0000000..7bba7ea
 +    if (threads != null) {
 +      for (final SentryThread thread : threads) {
 +        thread.setName(null);
++        thread.setHeldLocks(null);
 +        thread.setUnknown(null);
 +        scrubStacktrace(thread.getStacktrace());
 +      }
@@ -75,11 +93,19 @@ index 0000000..7bba7ea
 +  }
 +
 +  private static void scrubStacktrace(final @Nullable SentryStackTrace stacktrace) {
-+    if (stacktrace == null || stacktrace.getFrames() == null) return;
++    if (stacktrace == null) return;
++    stacktrace.setRegisters(null);
++    stacktrace.setUnknown(null);
++    if (stacktrace.getFrames() == null) return;
 +    for (final SentryStackFrame frame : stacktrace.getFrames()) {
-+      frame.setFilename(null);
-+      frame.setAbsPath(null);
++      frame.setFilename(bundlePath(frame.getFilename()));
++      frame.setAbsPath(bundlePath(frame.getAbsPath()));
++      frame.setPackage(null);
++      frame.setLock(null);
 +      frame.setRawFunction(null);
++      frame.setFunction(codeSymbol(frame.getFunction()));
++      frame.setModule(codeSymbol(frame.getModule()));
++      frame.setSymbol(codeSymbol(frame.getSymbol()));
 +      frame.setVars(null);
 +      frame.setContextLine(null);
 +      frame.setPreContext(null);
@@ -87,19 +113,95 @@ index 0000000..7bba7ea
 +      frame.setUnknown(null);
 +    }
 +  }
++
++  private static void scrubSdk(final @NotNull SentryEvent event) {
++    final @Nullable SdkVersion sdk = event.getSdk();
++    if (sdk == null) return;
++    if (!SDK_NAME.matcher(sdk.getName()).matches()
++        || !VERSION.matcher(sdk.getVersion()).matches()) {
++      event.setSdk(null);
++      return;
++    }
++    sdk.setUnknown(null);
++    // These sets can be the SDK's shared metadata registry. Clearing integration
++    // names changes serialized metadata only, not the active integrations.
++    sdk.getIntegrationSet().clear();
++    final Set<SentryPackage> packages = sdk.getPackageSet();
++    for (final SentryPackage pkg : packages) {
++      if (!PACKAGE_NAME.matcher(pkg.getName()).matches()
++          || !VERSION.matcher(pkg.getVersion()).matches()) {
++        packages.remove(pkg);
++      } else {
++        pkg.setUnknown(null);
++      }
++    }
++  }
++
++  private static void scrubDebugMeta(final @Nullable DebugMeta meta) {
++    if (meta == null) return;
++    meta.setUnknown(null);
++    meta.setSdkInfo(null);
++    if (meta.getImages() == null) return;
++    for (final DebugImage image : meta.getImages()) {
++      image.setCodeFile(bundlePath(image.getCodeFile()));
++      image.setDebugFile(null);
++      image.setUnknown(null);
++    }
++  }
++
++  private static @Nullable String codeSymbol(final @Nullable String value) {
++    if (value == null) return null;
++    if (OBJC_SYMBOL.matcher(value).matches()
++        || "operator new".equals(value)
++        || "operator new[]".equals(value)
++        || "operator delete".equals(value)
++        || "operator delete[]".equals(value)) return value;
++    if (!CODE_SYMBOL.matcher(value).matches()) return null;
++    for (int i = 0; i < value.length(); i++) {
++      if (value.charAt(i) != ':') continue;
++      if (i + 1 >= value.length() || value.charAt(i + 1) != ':') return null;
++      i++;
++    }
++    return value;
++  }
++
++  private static @Nullable String bundlePath(final @Nullable String value) {
++    if (value == null) return null;
++    int end = value.length();
++    final int query = value.indexOf('?');
++    final int fragment = value.indexOf('#');
++    if (query >= 0) end = Math.min(end, query);
++    if (fragment >= 0) end = Math.min(end, fragment);
++    final String path = end == value.length() ? value : value.substring(0, end);
++    final String name = path.startsWith("app:///") ? path.substring(7) : path;
++    return "index.bundle".equals(name)
++            || "index.android.bundle".equals(name)
++            || "index.ios.bundle".equals(name)
++            || "main.jsbundle".equals(name)
++        ? path
++        : null;
++  }
 +}
 diff --git a/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java
 index 11a4b40..ecc6f29 100644
 --- a/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java
 +++ b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java
-@@ -361,6 +361,7 @@ public class RNSentryModuleImpl {
+@@ -361,5 +361,6 @@ public class RNSentryModuleImpl {
  
      options.setBeforeSend(
          (event, hint) -> {
-+          BillManagerSentryPrivacy.scrub(event, hint);
            setEventOriginTag(event);
            addPackages(event, options.getSdkVersion());
++          BillManagerSentryPrivacy.scrub(event, hint);
+@@ -539,5 +540,7 @@ public class RNSentryModuleImpl {
+   }
  
+   public void crash() {
+-    throw new RuntimeException("TEST - Sentry Client Crash (only works in release mode)");
++    // TEMPORARY: preview-only device proof of the in-process NDK signal handler.
++    android.os.Process.sendSignal(
++        android.os.Process.myPid(), android.system.OsConstants.SIGABRT);
+   }
 diff --git a/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.h b/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.h
 new file mode 100644
 index 0000000..ce3dbd3
@@ -116,15 +218,66 @@ new file mode 100644
 index 0000000..c46144a
 --- /dev/null
 +++ b/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.m
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,104 @@
 +#import "BillManagerSentryPrivacy.h"
++#import <dispatch/dispatch.h>
 +
 +@import Sentry;
 +
 +static NSString *const BillManagerRedactedEventValue = @"[redacted]";
 +
++static NSString *_Nullable BillManagerMatchingString(id value, NSRegularExpression *pattern)
++{
++    if (![value isKindOfClass:NSString.class]) return nil;
++    NSRange range = NSMakeRange(0, [value length]);
++    NSTextCheckingResult *match = [pattern firstMatchInString:value options:0 range:range];
++    return match != nil && NSEqualRanges(match.range, range) ? value : nil;
++}
++
++static NSDictionary<NSString *, id> *_Nullable BillManagerScrubSdk(NSDictionary *sdk)
++{
++    if (![sdk isKindOfClass:NSDictionary.class]) return nil;
++    static NSRegularExpression *sdkNamePattern;
++    static NSRegularExpression *packageNamePattern;
++    static NSRegularExpression *versionPattern;
++    static dispatch_once_t onceToken;
++    dispatch_once(&onceToken, ^{
++        sdkNamePattern = [NSRegularExpression
++            regularExpressionWithPattern:@"^sentry\\.(?:javascript(?:\\.[a-z-]+)*|cocoa(?:\\.react-native)?|(?:java|native)(?:\\.android(?:\\.react-native)?)?)$"
++            options:0 error:NULL];
++        packageNamePattern = [NSRegularExpression
++            regularExpressionWithPattern:@"^(?:npm:@sentry/[a-z-]+|cocoapods:Sentry|maven:io\\.sentry:sentry(?:-android(?:-core|-ndk)?)?)$"
++            options:0 error:NULL];
++        versionPattern = [NSRegularExpression
++            regularExpressionWithPattern:@"^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
++            options:0 error:NULL];
++    });
++    NSString *name = BillManagerMatchingString(sdk[@"name"], sdkNamePattern);
++    NSString *version = BillManagerMatchingString(sdk[@"version"], versionPattern);
++    NSMutableArray<NSDictionary<NSString *, NSString *> *> *packages = nil;
++    id rawPackages = sdk[@"packages"];
++    if ([rawPackages isKindOfClass:NSArray.class]) {
++        for (id package in rawPackages) {
++            if (![package isKindOfClass:NSDictionary.class]) continue;
++            NSString *packageName = BillManagerMatchingString(package[@"name"], packageNamePattern);
++            NSString *packageVersion = BillManagerMatchingString(package[@"version"], versionPattern);
++            if (packageName == nil || packageVersion == nil) continue;
++            if (packages == nil) packages = [NSMutableArray new];
++            [packages addObject:@{ @"name": packageName, @"version": packageVersion }];
++        }
++    }
++    if (name == nil && version == nil && packages == nil) return nil;
++    NSMutableDictionary<NSString *, id> *result = [NSMutableDictionary new];
++    if (name != nil) result[@"name"] = name;
++    if (version != nil) result[@"version"] = version;
++    if (packages != nil) result[@"packages"] = packages;
++    return result;
++}
++
 +static void BillManagerScrubStacktrace(SentryStacktrace *_Nullable stacktrace)
 +{
++    // Cocoa 8.58 serializes this raw dictionary even when there are no frames.
++    stacktrace.registers = @{};
 +    for (SentryFrame *frame in stacktrace.frames) {
 +        frame.fileName = nil;
 +        frame.package = nil;
@@ -149,6 +302,8 @@ index 0000000..c46144a
 +    event.context = nil;
 +    event.breadcrumbs = nil;
 +    event.request = nil;
++    event.modules = nil;
++    event.sdk = BillManagerScrubSdk(event.sdk);
 +    // Preserve debug UUIDs and image addresses/sizes for dSYM symbolication, not runtime paths.
 +    for (SentryDebugMeta *image in event.debugMeta) {
 +        image.codeFile = nil;
