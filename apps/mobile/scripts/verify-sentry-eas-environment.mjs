@@ -28,6 +28,10 @@ export function verifySentryEasEnvironmentMetadata(variables) {
     throw new Error(`Missing required EAS environment variable names: ${missing.join(', ')}`);
   }
 
+  if (byName.get('SENTRY_DSN')?.visibility !== 'SENSITIVE') {
+    throw new Error('SENTRY_DSN must use EAS SENSITIVE visibility.');
+  }
+
   if (byName.get('SENTRY_AUTH_TOKEN')?.visibility !== 'SECRET') {
     throw new Error('SENTRY_AUTH_TOKEN must use EAS SECRET visibility.');
   }

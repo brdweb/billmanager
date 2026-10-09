@@ -135,13 +135,14 @@ const androidReleaseWorkflow = readFileSync(
   'utf8',
 );
 for (const requiredFragment of [
-  'SENTRY_DSN: ${{ secrets.SENTRY_DSN }}',
-  'SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}',
-  'run: node scripts/provision-sentry-eas-environment.mjs',
-  'run: node scripts/verify-sentry-eas-environment.mjs',
+  'if [[ "$REF" != "refs/heads/feat/mobile-sentry-bil-28" ]]; then',
+  'environment: android-production',
+  "EAS_BUILD_PROFILE: ${{ inputs.action == 'preview-sentry-test' && 'preview' || 'production' }}",
+  'run: node scripts/verify-sentry-eas-environment.mjs --environment preview',
+  'run: node scripts/verify-sentry-eas-environment.mjs --environment production',
 ]) {
   if (!androidReleaseWorkflow.includes(requiredFragment)) {
-    throw new Error(`Android Sentry preview builds must include protected EAS preflight: ${requiredFragment}`);
+    throw new Error(`Android Sentry preview builds must retain protected profile selection and metadata-only EAS preflights: ${requiredFragment}`);
   }
 }
 if (eas.cli?.appVersionSource !== 'remote') {

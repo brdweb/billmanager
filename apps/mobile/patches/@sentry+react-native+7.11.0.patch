@@ -116,7 +116,7 @@ new file mode 100644
 index 0000000..c46144a
 --- /dev/null
 +++ b/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.m
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,51 @@
 +#import "BillManagerSentryPrivacy.h"
 +
 +@import Sentry;
@@ -127,6 +127,7 @@ index 0000000..c46144a
 +{
 +    for (SentryFrame *frame in stacktrace.frames) {
 +        frame.fileName = nil;
++        frame.package = nil;
 +        frame.vars = nil;
 +        frame.contextLine = nil;
 +        frame.preContext = nil;
@@ -148,6 +149,11 @@ index 0000000..c46144a
 +    event.context = nil;
 +    event.breadcrumbs = nil;
 +    event.request = nil;
++    // Preserve debug UUIDs and image addresses/sizes for dSYM symbolication, not runtime paths.
++    for (SentryDebugMeta *image in event.debugMeta) {
++        image.codeFile = nil;
++        image.name = nil;
++    }
 +    BillManagerScrubStacktrace(event.stacktrace);
 +    for (SentryThread *thread in event.threads) {
 +        thread.name = nil;

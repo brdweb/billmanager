@@ -23,25 +23,97 @@ function safeType(value: string | undefined, fallback: string): string {
   return value && SAFE_TYPE.test(value) ? value : fallback;
 }
 
-function withoutUrlData(value: string | undefined): string | undefined {
-  if (!value) return value;
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return '[redacted-url]';
-  return value.replace(/[?#].*$/, '');
+const DEBUG_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})(?:[0-9a-f]{1,8})?$/i;
+const ADDRESS = /^0x[0-9a-f]{1,16}$/i;
+const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const BUNDLE_NAME = /^(?:index(?:\.android|\.ios)?\.bundle|main\.jsbundle)$/;
+const CODE_SYMBOL = /^[A-Za-z_$~][A-Za-z0-9_$.:<>()[\],*&~+!=%|^-]{0,255}$/;
+const OBJC_SYMBOL = /^[-+]\[[A-Za-z_][A-Za-z0-9_]*(?:\([A-Za-z_][A-Za-z0-9_]*\))? [A-Za-z_][A-Za-z0-9_:]*\]$/;
+
+function matching(value: unknown, pattern: RegExp): string | undefined {
+  return typeof value === 'string' && pattern.test(value) ? value : undefined;
+}
+
+function unsignedInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function bundlePath(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const path = value.replace(/[?#].*$/, '');
+  // Only application-owned bundle identities are needed for JS symbolication.
+  // Never extract a basename from a URL or host path: that can retain user data.
+  if (BUNDLE_NAME.test(path)) return path;
+  if (path.startsWith('app:///') && BUNDLE_NAME.test(path.slice(7))) return path;
+  return undefined;
+}
+
+function codeSymbol(value: unknown): string | undefined {
+  const nativeSymbol = matching(value, OBJC_SYMBOL)
+    ?? matching(value, /^operator (?:new|delete)(?:\[\])?$/);
+  if (nativeSymbol) return nativeSymbol;
+  const symbol = matching(value, CODE_SYMBOL);
+  // C++ namespace separators are safe; a single colon can introduce a URI scheme.
+  return symbol && !/(^|[^:]):([^:]|$)/.test(symbol) ? symbol : undefined;
+}
+
+function scrubSdk(sdk: ErrorEvent['sdk']): ErrorEvent['sdk'] {
+  if (!sdk) return undefined;
+  return {
+    name: matching(sdk.name, /^sentry\.(?:javascript(?:\.[a-z-]+)*|cocoa|java(?:\.android)?|native)$/),
+    version: matching(sdk.version, VERSION),
+    packages: sdk.packages?.flatMap((pkg) => {
+      const name = matching(pkg.name, /^(?:npm:@sentry\/[a-z-]+|cocoapods:Sentry|maven:io\.sentry:sentry(?:-android(?:-core|-ndk)?)?)$/);
+      const version = matching(pkg.version, VERSION);
+      return name && version ? [{ name, version }] : [];
+    }),
+  };
+}
+
+function scrubDebugMeta(meta: ErrorEvent['debug_meta']): ErrorEvent['debug_meta'] {
+  if (!meta) return undefined;
+  return {
+    images: meta.images?.flatMap<NonNullable<NonNullable<ErrorEvent['debug_meta']>['images']>[number]>((image) => {
+      const debug_id = matching(image.debug_id, DEBUG_ID);
+      if (!debug_id) return [];
+      if (image.type === 'macho') {
+        const image_addr = matching(image.image_addr, ADDRESS);
+        return image_addr ? [{
+          type: 'macho' as const,
+          debug_id,
+          image_addr,
+          image_size: unsignedInteger(image.image_size),
+          code_file: bundlePath(image.code_file),
+        }] : [];
+      }
+      if (image.type === 'sourcemap' || image.type === 'wasm') {
+        // Debug IDs still identify uploaded artifacts when the runtime path is private.
+        return [{
+          type: image.type,
+          debug_id,
+          code_file: bundlePath(image.code_file) ?? '[redacted]',
+        }];
+      }
+      return [];
+    }),
+  };
 }
 
 function scrubFrame(frame: StackFrame): StackFrame {
   return {
-    filename: withoutUrlData(frame.filename),
-    function: frame.function,
-    module: frame.module,
-    lineno: frame.lineno,
-    colno: frame.colno,
-    abs_path: withoutUrlData(frame.abs_path),
-    in_app: frame.in_app,
-    platform: frame.platform,
-    instruction_addr: frame.instruction_addr,
-    addr_mode: frame.addr_mode,
-    debug_id: frame.debug_id,
+    filename: bundlePath(frame.filename),
+    function: codeSymbol(frame.function),
+    module: codeSymbol(frame.module),
+    lineno: unsignedInteger(frame.lineno),
+    colno: unsignedInteger(frame.colno),
+    abs_path: bundlePath(frame.abs_path),
+    in_app: typeof frame.in_app === 'boolean' ? frame.in_app : undefined,
+    platform: matching(frame.platform, /^(?:javascript|native|cocoa|java|objc|c|cpp|wasm)$/),
+    instruction_addr: matching(frame.instruction_addr, ADDRESS),
+    addr_mode: matching(frame.addr_mode, /^(?:abs|rel(?::\d+)?)$/),
+    debug_id: matching(frame.debug_id, DEBUG_ID),
   };
 }
 
@@ -85,9 +157,12 @@ function scrubThread(thread: Thread): Thread {
 
 /**
  * Build an allowlisted event rather than trying to enumerate sensitive keys.
- * Stack frames and debug images are retained for symbolication; user/runtime
- * context, requests, URLs, messages, breadcrumbs, tags and arbitrary data are
- * deliberately omitted.
+ * Canonical JS bundle names, code symbols, debug IDs and native addresses survive;
+ * arbitrary SDK metadata, module maps, image fields and runtime paths do not.
+ * User/runtime context, requests, messages, breadcrumbs, tags and data are omitted.
+ * Noncanonical paths are omitted, so their source-map association is not retained.
+ * A syntactically valid code symbol cannot be distinguished from user data shaped
+ * like that symbol; retain only bounded code syntax, never prose.
  */
 export function scrubSentryEvent(event: ErrorEvent, hint?: BeforeSendHint): ErrorEvent {
   if (hint?.attachments) hint.attachments = [];
@@ -103,9 +178,10 @@ export function scrubSentryEvent(event: ErrorEvent, hint?: BeforeSendHint): Erro
     dist: event.dist,
     environment: event.environment,
     type: undefined,
-    sdk: event.sdk,
-    modules: event.modules,
-    debug_meta: event.debug_meta,
+    sdk: scrubSdk(event.sdk),
+    // Runtime module maps are arbitrary name/value data, not symbolication inputs.
+    modules: undefined,
+    debug_meta: scrubDebugMeta(event.debug_meta),
     exception: event.exception?.values
       ? { values: event.exception.values.map(scrubException) }
       : undefined,

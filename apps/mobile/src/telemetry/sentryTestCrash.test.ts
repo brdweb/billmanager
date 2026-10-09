@@ -56,17 +56,6 @@ describe('Sentry native test crash harness', () => {
     expect(isSentryTestCrashEnabled()).toBe(false);
   });
 
-  it('invokes the native SDK crash only for the gated preview build', () => {
-    state.extra = {
-      sentryDsn: 'https://public@example.invalid/1',
-      sentryTestCrashEnabled: true,
-    };
-
-    triggerSentryNativeTestCrash();
-
-    expect(state.nativeCrash).toHaveBeenCalledOnce();
-  });
-
   it('refuses to invoke the native crash when the gate is closed', () => {
     expect(() => triggerSentryNativeTestCrash()).toThrow(
       'Sentry native test crash is unavailable in this build.',

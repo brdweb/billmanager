@@ -131,7 +131,7 @@ jobs:
 
       - name: Build iOS with EAS
         working-directory: apps/mobile
-        run: npx --yes eas-cli@16.28.0 build --platform ios --profile production --non-interactive --wait --json > eas-ios-build.json
+        run: npx --yes eas-cli@24.10.0 build --platform ios --profile production --non-interactive --wait --json > eas-ios-build.json
 
       - name: Extract EAS build ID
         id: build-metadata
@@ -200,7 +200,7 @@ jobs:
 
       - name: Submit iOS build with EAS
         working-directory: apps/mobile
-        run: npx --yes eas-cli@16.28.0 submit --platform ios --profile production --id "$BUILD_ID" --non-interactive
+        run: npx --yes eas-cli@24.10.0 submit --platform ios --profile production --id "$BUILD_ID" --non-interactive
 
       - name: Write submission summary
         env:

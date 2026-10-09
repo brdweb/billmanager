@@ -37,9 +37,16 @@ describe('verifySentryEasEnvironmentMetadata', () => {
     );
   });
 
+  it.each(['PUBLIC', 'SECRET', undefined])('rejects unsafe DSN visibility (%s)', (visibility) => {
+    expect(() => verifySentryEasEnvironmentMetadata([
+      { name: 'SENTRY_DSN', visibility },
+      { name: 'SENTRY_AUTH_TOKEN', visibility: 'SECRET' },
+    ])).toThrow('SENTRY_DSN must use EAS SENSITIVE visibility.');
+  });
+
   it('requires secret visibility for the upload token', () => {
     expect(() => verifySentryEasEnvironmentMetadata([
-      { name: 'SENTRY_DSN', visibility: 'PUBLIC' },
+      { name: 'SENTRY_DSN', visibility: 'SENSITIVE' },
       { name: 'SENTRY_AUTH_TOKEN', visibility: 'SENSITIVE' },
     ])).toThrow('SENTRY_AUTH_TOKEN must use EAS SECRET visibility.');
   });

@@ -76,6 +76,9 @@ def test_pro_checkout_price_and_metadata_agree(monkeypatch, interval):
     assert 'error' not in result
     assert captured['line_items'] == [{'price': 'price_pm' if interval == 'monthly' else 'price_pa', 'quantity': 1}]
     assert captured['metadata']['tier'] == captured['subscription_data']['metadata']['tier'] == 'pro'
+    # Stripe API 2026-09-30.endive rejects payment_method_types on Checkout Sessions.
+    assert captured['allowed_payment_method_types'] == ['card']
+    assert 'payment_method_types' not in captured
 
 
 def test_registration_creates_30_day_trial_without_payment(client, db_session, monkeypatch):

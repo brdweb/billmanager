@@ -1,8 +1,24 @@
 # Mobile implementation status and release gates
 
-Status snapshot: 2026-07-15, `codex/mobile-native-rewrite`.
+Implementation/device-matrix baseline: 2026-07-15, `codex/mobile-native-rewrite`. Submission and external-evidence update: 2026-10-09. The July matrix is historical implementation evidence, not current device acceptance or store status.
 
 This document tracks implementation evidence, not a release declaration. A row marked **Implemented** means the source path exists and is wired into the application. It does not mean that the flow has passed the complete iOS, Android, SaaS, self-hosted, accessibility, or store acceptance matrix.
+
+## Submission and external evidence — 2026-10-09
+
+| Observed attempt | Evidence | What remains unknown |
+|---|---|---|
+| iOS EAS submit attempted on 2026-10-05 and failed | [GitHub Actions run 37350650165](https://github.com/brdweb/billmanager/actions/runs/37350650165); [EAS build 982e0bb3-395a-4d95-9ebf-4cee90feb26c](https://expo.dev/accounts/brdweb/projects/billmanager-mobile/builds/982e0bb3-395a-4d95-9ebf-4cee90feb26c), version `1.1.1`, build `14`; [EAS submission 83984cb3-4729-4457-a430-de4c7db51160](https://expo.dev/accounts/brdweb/projects/billmanager-mobile/submissions/83984cb3-4729-4457-a430-de4c7db51160) | Detailed failure cause is unavailable until authenticated EAS access. Current App Store Connect processing, TestFlight, review, and public availability are not established. |
+| Android EAS submit attempted on 2026-10-01 and failed because a first manual submission was required | [GitHub Actions run 36797506238](https://github.com/brdweb/billmanager/actions/runs/36797506238); [EAS build 50710a09-70ae-4d47-a4f6-595ed97227d7](https://expo.dev/accounts/brdweb/projects/billmanager-mobile/builds/50710a09-70ae-4d47-a4f6-595ed97227d7), version `1.1.0`, versionCode `10` | Automated failure does not prove that no separate manual upload or Play closed test exists. Current track releases, tester participation, testing eligibility, and production access require authenticated Play Console evidence. |
+
+Next authenticated dashboard actions:
+
+1. In EAS, open the linked iOS submission and its detailed logs, record the actual failure reason, and resolve that cause using the existing signing/store account. In App Store Connect, inspect the app's builds for `1.1.1 (14)`, processing/export-compliance status, TestFlight availability, privacy disclosures, review metadata, and release state before deciding whether to retry submission.
+2. In Play Console, inspect **Test and release → Testing → Closed testing** and **App bundle explorer** for the existing manual upload, versionCode `10`, active releases, tester enrollment/participation, and the account's required test duration. If the first manual submission is still missing, complete the console's first-upload flow with the approved signed AAB; do not overwrite or infer an existing closed test. Check **Production** for the actual production-access requirements and eligibility; request access only after Play's requirements and the release gates below pass.
+3. In the existing EAS project's **Environment variables**, confirm metadata in both `preview` and `production`: `SENTRY_DSN` must have `SENSITIVE` visibility and `SENTRY_AUTH_TOKEN` must have `SECRET` visibility. Record environment/name/visibility evidence only, never values. Live metadata validation remains pending authenticated access; correct metadata alone does not prove working credentials or telemetry receipt.
+4. In Sentry, capture current candidate evidence on each target platform: received JavaScript errors with source-mapped frames, native crashes after restart with matching symbols/dSYMs and symbolicated frames, received sessions and crash/session outcomes, and privacy inspection of the received JS/native/session payloads (including removal of native private paths while preserving debug UUID/address/size metadata). Record candidate release/distribution, event IDs or restricted links, timestamps, and results. Production receipt/symbol upload must be evidenced separately from preview. These external checks remain pending; source tests do not prove device behavior, native payload privacy, receipt, or symbolication. See [Sentry setup and release evidence](development-builds.md#sentry-setup-and-release-evidence).
+
+The live EAS, App Store Connect, Play Console, and Sentry state is inaccessible without authenticated access in this review. Neither the observed attempts nor the historical July matrix establishes public approval or testing eligibility. The user currently authorizes completion of public store release, but this authorization does not waive technical/testing gates, Apple review requirements, Play testing/production-access requirements, or the separate Sentry proof required before PR merge and public rollout.
 
 ## Status legend
 
@@ -67,7 +83,7 @@ The public replacement must not ship until every gate below is checked. The curr
 | Gate | Current state | Evidence required to close |
 |---|---|---|
 | Active web parity matrix is 100% complete | **Open** | Freeze the active web baseline, attach one mobile equivalent and test identifier to every capability, and close any role/deployment/device gaps found by that acceptance matrix. |
-| Lint, typecheck, unit, contract, component, and device suites pass in CI | **Source-level CI gates implemented; release gate open** | The local combined mobile check passes 171 tests across 48 files, validates 6 Maestro flows, reports Expo Doctor 20/20, and confirms generated-contract and dependency drift are clean; the complete server suite passes 167 tests. CI enforces the same source checks. Execute the Maestro role/deployment/device matrix on installed binaries before closing this gate. |
+| Lint, typecheck, unit, contract, component, and device suites pass in CI | **Source-level CI gates implemented; release gate open** | Record a green release-candidate CI run covering source checks, generated-contract/dependency drift, and the complete server suite. Execute the Maestro role/deployment/device matrix on installed binaries before closing this gate; source checks alone do not establish device acceptance. |
 | `expo install --check` and Expo Doctor pass | **Local checks passed and CI definitions enforce both; release gate open** | Record both commands from a clean release-candidate install and a green branch CI run. |
 | Clean Android development and release builds | **Local debug build passed; release gate open** | CNG prebuild, the passkey and Glance modules, application Kotlin compilation, and `assembleDebug` pass locally. Install the dev client, validate notification actions/passkeys/widgets/deep links on representative devices, and produce a signed release candidate. |
 | Clean iOS development and release builds | **Open; requires Mac** | CNG prebuild, CocoaPods/Xcode compile, simulator and physical device flows, AuthenticationServices, WidgetKit, universal links, signing, archive, and App Store validation. |
@@ -81,7 +97,7 @@ The public replacement must not ship until every gate below is checked. The curr
 | Reminder/HTTPS documentation matches product behavior | **Implemented in repository docs** | Review this documentation against the signed release candidate and public support documentation. |
 | Widget data is minimal and amounts are hidden by default | **Implemented; validation open** | Inspect iOS shared container and Android preferences plus lock-screen/home-screen behavior in release builds. |
 | Release binary contains no development URL, cleartext exception, test credential, or debug telemetry | **Open** | Inspect the final Android App Bundle and iOS archive produced with the production EAS profile. |
-| Simultaneous public App Store and Google Play replacement | **Not authorized** | Both closed-test tracks pass the same matrix and a release owner explicitly approves publication. |
+| Simultaneous public App Store and Google Play replacement | **User authorized completion; release gate open** | Both platforms must pass the same acceptance matrix, all technical/testing gates, and their store-specific review/testing/production-access requirements before coordinated public publication. Authorization is not evidence that either store has approved release. |
 
 ## Deferred features
 

@@ -6,7 +6,7 @@ BillManager Mobile requires an Expo development build. Expo Go cannot load the S
 
 - Node.js 24.19.0 and npm
 - an Expo account with access to the existing `brdweb/billmanager-mobile` EAS project
-- EAS CLI 16.28.0 (use `npx eas-cli@16.28.0`)
+- EAS CLI 24.10.0 (use `npx eas-cli@24.10.0`)
 - Android Studio, Android SDK, an emulator or Android device, and a compatible JDK for local Android builds
 - macOS with Xcode for local iOS builds, widget/passkey work, signing diagnosis, and final App Store checks
 
@@ -60,25 +60,25 @@ Generated translation and API changes are real source changes. Review and commit
 Authenticate once:
 
 ```bash
-npx eas-cli@16.28.0 login
+npx eas-cli@24.10.0 login
 ```
 
 Android internal development client:
 
 ```bash
-npx eas-cli@16.28.0 build --platform android --profile development
+npx eas-cli@24.10.0 build --platform android --profile development
 ```
 
 iOS simulator client:
 
 ```bash
-npx eas-cli@16.28.0 build --platform ios --profile development
+npx eas-cli@24.10.0 build --platform ios --profile development
 ```
 
 iOS physical-device internal client:
 
 ```bash
-npx eas-cli@16.28.0 build --platform ios --profile development:device
+npx eas-cli@24.10.0 build --platform ios --profile development:device
 ```
 
 After installing the matching development client, start Metro:
@@ -140,7 +140,7 @@ only by the Windows user running the build:
 - `%LOCALAPPDATA%\BillManager\android-signing\credentials.json`
 - `%LOCALAPPDATA%\BillManager\android-signing\keystore.jks`
 
-Download the existing Android keystore through `npx eas-cli@16.28.0 credentials
+Download the existing Android keystore through `npx eas-cli@24.10.0 credentials
 --platform android`; do not generate a replacement key and never copy either
 credential file into the repository. The script also expects the preview
 profile's pinned Windows Node.js version and the Android 36 SDK, Build Tools,
@@ -220,13 +220,76 @@ Save that ID before requesting a submission.
 
 The temporary Android `preview-sentry-test` action also uses the protected
 `android-production` reviewer gate, but selects the internal `preview` EAS
-profile and never enters the submission job. The protected environment must hold
-`SENTRY_DSN` and `SENTRY_AUTH_TOKEN` as environment secrets. The job copies them
-directly into the EAS `preview` environment with `SENSITIVE` and `SECRET`
-visibility, respectively; the provisioning script suppresses EAS CLI output and
-reports names and visibility only. It then queries Expo for only those names and
-their visibility before starting the build. Missing protected values, a failed
-transfer, or unsafe metadata stops the job before EAS consumes build capacity.
+profile and never enters the submission job. It remains restricted to the
+Sentry test branch named in the workflow. It does not provision or copy Sentry
+values from GitHub secrets into EAS.
+
+### Sentry setup and release evidence
+
+An authorized operator must provision the approved `SENTRY_DSN` with exactly
+`SENSITIVE` visibility and `SENTRY_AUTH_TOKEN` with exactly `SECRET` visibility
+in both the EAS `preview` and `production` environments, using the EAS dashboard
+for the existing project. Obtain values through the approved credential channel;
+never paste them into chat, source files, command-line arguments, build logs, or
+release evidence. The upload token is build-only and must never enter the app
+configuration or binary. The DSN is a client routing key included in the app,
+but its EAS visibility must still be `SENSITIVE`, not `PUBLIC` or `SECRET`.
+
+The workflows query Expo only for the required variable names and visibility:
+Android runs the `preview` preflight for `preview-sentry-test` and the
+`production` preflight for store candidates; iOS runs the `production` preflight.
+Missing names or incorrect visibility fail closed before a build. No variable
+values are requested or printed. Metadata success cannot prove the configured
+values work, the upload token is authorized, or Sentry has received telemetry.
+An authorized operator can run the same metadata-only preflights from
+`apps/mobile` with `EXPO_TOKEN` already supplied through secure environment
+handling (not command-line arguments):
+
+```bash
+node scripts/verify-sentry-eas-environment.mjs --environment preview
+node scripts/verify-sentry-eas-environment.mjs --environment production
+```
+
+Use EAS CLI 24.10.0 for authorized builds. The current main mobile version is
+1.1.1; record the actual candidate version, build number, EAS build ID, commit,
+platform, and Sentry release/distribution rather than assuming an earlier
+pre-release version.
+
+The temporary Settings **Test crash reporting** control is retained until live
+native verification is captured. It is enabled only for the internal Android
+`preview` profile with the crash flag and a configured DSN, not development,
+iOS preview, or production. On an authorized test device, confirm the intentional
+crash, then reopen the app once to upload the stored native crash. This control
+does not itself prove receipt or test JavaScript error reporting.
+
+Before merging the Sentry PR or allowing any public rollout, capture evidence
+from the real candidate and the Sentry project for each target platform:
+
+1. A received JavaScript error event with the expected release/distribution and
+   readable source-mapped application frames.
+2. A received native crash after restart, with symbolicated application frames
+   (including the matching Android native symbols or iOS dSYMs). An Android
+   preview result is not evidence of iOS receipt.
+3. A received session and the expected crash/session health outcome, correlated
+   to the candidate and device test.
+4. Inspection of the received JS/native events and session payloads confirms
+   the privacy contract: no credentials, financial or personal data, user
+   identity, request payloads, or disallowed breadcrumbs/attachments. Do not
+   relax scrubbing to obtain a successful receipt.
+
+Record event IDs or restricted links, timestamps, candidate identity, and
+symbolication/session results without copying sensitive payloads into release
+notes. Verify the production-profile symbol upload and receipt path as well;
+preview evidence alone does not approve production. If a platform has no
+in-app crash control, use an approved native test procedure rather than enabling
+the Android-only harness in a production binary.
+
+**External proof is pending:** native/JavaScript receipt, sessions, and
+symbolication have not been established by configuration or metadata checks.
+Keep the PR draft, retain the temporary harness, and do not merge or promote a
+public release until the captured evidence satisfies all these gates. Remove
+the temporary harness only after live native evidence is captured; store and
+device release approval remain separate requirements.
 
 An iOS submission creates an App Store Connect/TestFlight candidate; an Android
 submission creates a draft internal-testing candidate. Neither action makes a
@@ -240,9 +303,9 @@ requires the same release approval, protected environment, recorded build ID,
 EAS-managed store credentials, and manual public-promotion gates:
 
 ```bash
-npx eas-cli@16.28.0 build --platform all --profile production
-npx eas-cli@16.28.0 submit --platform ios --id <EAS_BUILD_ID>
-npx eas-cli@16.28.0 submit --platform android --id <EAS_BUILD_ID>
+npx eas-cli@24.10.0 build --platform all --profile production
+npx eas-cli@24.10.0 submit --platform ios --id <EAS_BUILD_ID>
+npx eas-cli@24.10.0 submit --platform android --id <EAS_BUILD_ID>
 ```
 
 ## Mac and Xcode responsibilities

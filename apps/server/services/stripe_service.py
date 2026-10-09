@@ -125,7 +125,8 @@ def create_checkout_session(
         # Create checkout session
         session = stripe.checkout.Session.create(
             customer=customer_id,
-            payment_method_types=['card'],
+            # API 2026-09-30.endive removed payment_method_types; keep card-only.
+            allowed_payment_method_types=['card'],
             line_items=[{
                 'price': price_id,
                 'quantity': 1,
@@ -185,7 +186,7 @@ def construct_webhook_event(payload: bytes, sig_header: str) -> dict:
     """
     Verify and construct webhook event from Stripe.
 
-    Returns the event object or dict with 'error'.
+    Returns the event as a plain dict, or a dict with 'error'.
     """
     if not STRIPE_AVAILABLE or not STRIPE_WEBHOOK_SECRET:
         return {'error': 'Webhook secret not configured', 'error_code': 'configuration'}
@@ -196,7 +197,8 @@ def construct_webhook_event(payload: bytes, sig_header: str) -> dict:
         event = stripe.Webhook.construct_event(
             payload, sig_header, STRIPE_WEBHOOK_SECRET
         )
-        return event
+        # StripeObject is not a dict; callers read the event with dict methods.
+        return event.to_dict()
     except ValueError:
         logger.error("Invalid webhook payload received")
         return {'error': 'Invalid payload', 'error_code': 'invalid_payload'}
@@ -213,18 +215,18 @@ def get_subscription(subscription_id: str) -> dict:
     stripe.api_key = STRIPE_SECRET_KEY
 
     try:
-        subscription = stripe.Subscription.retrieve(subscription_id)
+        subscription = stripe.Subscription.retrieve(subscription_id).to_dict()
         items = subscription.get('items', {}).get('data', [])
-        price = items[0].get('price') if items else None
-        price_id = price.get('id') if hasattr(price, 'get') else getattr(price, 'id', None)
+        item = items[0] if items else {}
         return {
-            'id': subscription.id,
-            'status': subscription.status,
-            'current_period_start': subscription.current_period_start,
-            'current_period_end': subscription.current_period_end,
-            'cancel_at_period_end': subscription.cancel_at_period_end,
-            'canceled_at': subscription.canceled_at,
-            'price_id': price_id,
+            'id': subscription['id'],
+            'status': subscription.get('status'),
+            # Billing periods are per subscription item since API 2025-03-31.basil.
+            'current_period_start': item.get('current_period_start'),
+            'current_period_end': item.get('current_period_end'),
+            'cancel_at_period_end': subscription.get('cancel_at_period_end'),
+            'canceled_at': subscription.get('canceled_at'),
+            'price_id': item.get('price', {}).get('id'),
         }
     except stripe.error.StripeError:
         logger.error("Stripe subscription retrieval failed")
@@ -256,11 +258,12 @@ def update_subscription(subscription_id: str, new_price_id: str, prorate: bool =
 
     try:
         # Get current subscription to find the item ID
-        subscription = stripe.Subscription.retrieve(subscription_id)
-        if not subscription.get('items', {}).get('data'):
+        subscription = stripe.Subscription.retrieve(subscription_id).to_dict()
+        items = subscription.get('items', {}).get('data', [])
+        if not items:
             return {'error': 'No subscription items found'}
 
-        item_id = subscription['items']['data'][0]['id']
+        item_id = items[0]['id']
 
         if prorate:
             # Immediate change with proration (for upgrades)
@@ -286,10 +289,11 @@ def update_subscription(subscription_id: str, new_price_id: str, prorate: bool =
                 billing_cycle_anchor='unchanged'
             )
 
+        updated_items = updated.to_dict().get('items', {}).get('data', [])
         return {
             'id': updated.id,
             'status': updated.status,
-            'current_period_end': updated.current_period_end,
+            'current_period_end': updated_items[0].get('current_period_end') if updated_items else None,
         }
     except stripe.error.StripeError as e:
         logger.error(f"Stripe update subscription error: {e}")
