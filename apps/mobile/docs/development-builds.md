@@ -255,12 +255,38 @@ Use EAS CLI 24.10.0 for authorized builds. The current main mobile version is
 platform, and Sentry release/distribution rather than assuming an earlier
 pre-release version.
 
-The temporary Settings **Test crash reporting** control is retained until live
-native verification is captured. It is enabled only for the internal Android
-`preview` profile with the crash flag and a configured DSN, not development,
-iOS preview, or production. On an authorized test device, confirm the intentional
-crash, then reopen the app once to upload the stored native crash. This control
-does not itself prove receipt or test JavaScript error reporting.
+The pinned Sentry Expo integration is configured to upload the JavaScript bundle
+and source map. Its Android `experimental_android` integration enables the Sentry
+Gradle plugin for automatic native-symbol and ProGuard/R8 mapping uploads.
+Native source files and native source context are excluded
+(`includeNativeSources` and `includeSourceContext` are false); tracing
+instrumentation and automatic dependency installation are also disabled.
+These settings describe the expected upload path, not a successful upload.
+Inspect the real candidate build logs for JavaScript and Android symbol/mapping
+upload results, and verify the received event frames in Sentry. Build-log upload
+evidence and received source mapping/native symbolication are still pending.
+
+The temporary Settings **Test JavaScript error reporting** and **Test crash
+reporting** controls are retained until live verification is captured. Both use
+the same gate: an Android runtime, the internal `preview` profile crash flag,
+and a configured DSN, never development, iOS preview, or production. The runtime
+platform check also rejects an iOS binary built with the generic preview profile.
+On an authorized test device, perform these two separate actions:
+
+1. Confirm **Test JavaScript error reporting** first. It captures a synthetic
+   `Error` at the stable application-owned location in
+   `src/telemetry/sentryTestCrash.ts`, without customer data or test extras, and
+   requests the initialized Sentry client's supported `flush(5000)` API. The
+   timeout bounds its wait, not transport cancellation. The result distinguishes
+   flush completion, timeout, and failure; none proves receipt or source mapping.
+   Find the real received JavaScript event in Sentry and verify its original
+   application frame and release/distribution before proceeding.
+2. Confirm **Test crash reporting** separately. This intentionally closes the
+   app immediately. Reopen it once to upload the stored native crash, then find
+   the separate received native event and inspect its symbolicated frames.
+
+Do not substitute the on-device JavaScript flush result for dashboard evidence,
+or a JavaScript event for the native-crash-after-relaunch gate.
 
 Before merging the Sentry PR or allowing any public rollout, capture evidence
 from the real candidate and the Sentry project for each target platform:
@@ -288,8 +314,9 @@ the Android-only harness in a production binary.
 symbolication have not been established by configuration or metadata checks.
 Keep the PR draft, retain the temporary harness, and do not merge or promote a
 public release until the captured evidence satisfies all these gates. Remove
-the temporary harness only after live native evidence is captured; store and
-device release approval remain separate requirements.
+the temporary harness only after live JavaScript and native evidence is captured;
+remove both actions before merge. Store and device release approval remain
+separate requirements.
 
 An iOS submission creates an App Store Connect/TestFlight candidate; an Android
 submission creates a draft internal-testing candidate. Neither action makes a

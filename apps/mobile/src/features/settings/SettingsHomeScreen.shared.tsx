@@ -39,6 +39,7 @@ import { getFormattingConfig } from '../../i18n/format';
 import { getLanguageOption, normalizeLanguage } from '../../i18n';
 import {
   isSentryTestCrashEnabled,
+  triggerSentryJavaScriptTestError,
   triggerSentryNativeTestCrash,
 } from '../../telemetry/sentryTestCrash';
 
@@ -135,6 +136,37 @@ export function SettingsHomeScreenView({ platform }: SettingsHomeScreenViewProps
           text: t('mobileSettings.home.sentryTestCrashAction'),
           style: 'destructive',
           onPress: triggerSentryNativeTestCrash,
+        },
+      ],
+    );
+  };
+
+  const confirmSentryJavaScriptTestError = () => {
+    Alert.alert(
+      t('mobileSettings.home.sentryTestErrorTitle'),
+      t('mobileSettings.home.sentryTestErrorBody'),
+      [
+        { text: t('mobileSettings.home.cancel'), style: 'cancel' },
+        {
+          text: t('mobileSettings.home.sentryTestErrorAction'),
+          onPress: () => {
+            void (async () => {
+              try {
+                const flushed = await triggerSentryJavaScriptTestError();
+                Alert.alert(
+                  t('mobileSettings.home.sentryTestErrorResultTitle'),
+                  t(flushed
+                    ? 'mobileSettings.home.sentryTestErrorFlushed'
+                    : 'mobileSettings.home.sentryTestErrorPending'),
+                );
+              } catch {
+                Alert.alert(
+                  t('mobileSettings.home.sentryTestErrorResultTitle'),
+                  t('mobileSettings.home.sentryTestErrorFailed'),
+                );
+              }
+            })();
+          },
         },
       ],
     );
@@ -323,14 +355,23 @@ export function SettingsHomeScreenView({ platform }: SettingsHomeScreenViewProps
                   isLast={!sentryTestCrashEnabled}
                 />
                 {sentryTestCrashEnabled ? (
-                  <AdaptiveListRow
-                    platform={platform}
-                    title={t('mobileSettings.home.sentryTestCrash')}
-                    subtitle={t('mobileSettings.home.sentryTestCrashDetail')}
-                    leading={<SettingIcon platform={platform}><TriangleAlert size={21} color={theme.colors.danger} /></SettingIcon>}
-                    onPress={confirmSentryTestCrash}
-                    isLast
-                  />
+                  <>
+                    <AdaptiveListRow
+                      platform={platform}
+                      title={t('mobileSettings.home.sentryTestError')}
+                      subtitle={t('mobileSettings.home.sentryTestErrorDetail')}
+                      leading={<SettingIcon platform={platform}><TriangleAlert size={21} color={theme.colors.danger} /></SettingIcon>}
+                      onPress={confirmSentryJavaScriptTestError}
+                    />
+                    <AdaptiveListRow
+                      platform={platform}
+                      title={t('mobileSettings.home.sentryTestCrash')}
+                      subtitle={t('mobileSettings.home.sentryTestCrashDetail')}
+                      leading={<SettingIcon platform={platform}><TriangleAlert size={21} color={theme.colors.danger} /></SettingIcon>}
+                      onPress={confirmSentryTestCrash}
+                      isLast
+                    />
+                  </>
                 ) : null}
               </SettingsGroup>
             </View>
