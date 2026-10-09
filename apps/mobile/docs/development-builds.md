@@ -218,6 +218,114 @@ credentials, or the EAS project to bypass a signing problem. Each build produces
 a JSON build-metadata artifact and records the EAS build ID in the job summary.
 Save that ID before requesting a submission.
 
+The temporary Android `preview-sentry-test` action also uses the protected
+`android-production` reviewer gate, but selects the internal `preview` EAS
+profile and never enters the submission job. It remains restricted to the
+Sentry test branch named in the workflow. It does not provision or copy Sentry
+values from GitHub secrets into EAS.
+
+### Sentry setup and release evidence
+
+An authorized operator must provision the approved `SENTRY_DSN` with exactly
+`SENSITIVE` visibility and `SENTRY_AUTH_TOKEN` with exactly `SECRET` visibility
+in both the EAS `preview` and `production` environments, using the EAS dashboard
+for the existing project. Obtain values through the approved credential channel;
+never paste them into chat, source files, command-line arguments, build logs, or
+release evidence. The upload token is build-only and must never enter the app
+configuration or binary. The DSN is a client routing key included in the app,
+but its EAS visibility must still be `SENSITIVE`, not `PUBLIC` or `SECRET`.
+
+The workflows query Expo only for the required variable names and visibility:
+Android runs the `preview` preflight for `preview-sentry-test` and the
+`production` preflight for store candidates; iOS runs the `production` preflight.
+Missing names or incorrect visibility fail closed before a build. No variable
+values are requested or printed. Metadata success cannot prove the configured
+values work, the upload token is authorized, or Sentry has received telemetry.
+An authorized operator can run the same metadata-only preflights from
+`apps/mobile` with `EXPO_TOKEN` already supplied through secure environment
+handling (not command-line arguments):
+
+```bash
+node scripts/verify-sentry-eas-environment.mjs --environment preview
+node scripts/verify-sentry-eas-environment.mjs --environment production
+```
+
+Use EAS CLI 24.10.0 for authorized builds. The current main mobile version is
+1.1.1; record the actual candidate version, build number, EAS build ID, commit,
+platform, and Sentry release/distribution rather than assuming an earlier
+pre-release version.
+
+The pinned Sentry Expo integration is configured to upload the JavaScript bundle
+and source map. Its Android `experimental_android` integration enables the Sentry
+Gradle plugin for automatic native-symbol and ProGuard/R8 mapping uploads.
+Native source files and native source context are excluded
+(`includeNativeSources` and `includeSourceContext` are false); tracing
+instrumentation and automatic dependency installation are also disabled.
+These settings describe the expected upload path, not a successful upload.
+The October 9 Android preview at `f5c8e85` completed JavaScript source-map and
+116 native debug-file uploads; the authenticated Sentry project shows the
+artifacts. Repeat upload verification for each updated signed candidate.
+Received source mapping/native symbolication remain pending.
+
+The temporary Settings **Test JavaScript error reporting** and **Test crash
+reporting** controls are retained until live verification is captured. Both use
+the same gate: an Android runtime, the internal `preview` profile crash flag,
+and a configured DSN, never development, iOS preview, or production. The runtime
+platform check also rejects an iOS binary built with the generic preview profile.
+On an authorized test device, perform these two separate actions:
+
+1. Confirm **Test JavaScript error reporting** first. It captures a synthetic
+   `Error` at the stable application-owned location in
+   `src/telemetry/sentryTestCrash.ts`, without customer data or test extras, and
+   requests the initialized Sentry client's supported `flush(5000)` API. The
+   timeout bounds its wait, not transport cancellation. The result distinguishes
+   flush completion, timeout, and failure; none proves receipt or source mapping.
+   Find the real received JavaScript event in Sentry and verify its original
+   application frame and release/distribution before proceeding.
+2. Confirm **Test crash reporting** separately. The temporary native SDK patch
+   raises Android `SIGABRT` to exercise the actual in-process NDK handler, closing
+   the app immediately. Reopen it once to upload the stored native crash, then
+   find the separate received native event and inspect its symbolicated frames.
+   The earlier `f5c8e85` preview used the stock SDK Java `RuntimeException`;
+   that Java result does not establish C/C++/NDK capture.
+
+Do not substitute the on-device JavaScript flush result for dashboard evidence,
+or a JavaScript event for the native-crash-after-relaunch gate.
+
+Before merging the Sentry PR or allowing any public rollout, capture evidence
+from the real candidate and the Sentry project for each target platform:
+
+1. A received JavaScript error event with the expected release/distribution and
+   readable source-mapped application frames.
+2. A received native crash after restart, with symbolicated application frames
+   (including the matching Android native symbols or iOS dSYMs). An Android
+   preview result is not evidence of iOS receipt.
+3. A received session and the expected crash/session health outcome, correlated
+   to the candidate and device test.
+4. Inspection of the received JS/native events and session payloads confirms
+   the privacy contract: no credentials, financial/account data, account identity,
+   request payloads, or disallowed breadcrumbs/attachments. Standard anonymous
+   SDK installation IDs and per-session UUIDs remain enabled by owner decision
+   for distinct-installation and crash/session health metrics. They are not
+   BillManager account IDs; disclose them as identifiers with diagnostics in
+   the public policy and store forms. Do not relax other scrubbing for receipt.
+
+Record event IDs or restricted links, timestamps, candidate identity, and
+symbolication/session results without copying sensitive payloads into release
+notes. Verify the production-profile symbol upload and receipt path as well;
+preview evidence alone does not approve production. If a platform has no
+in-app crash control, use an approved native test procedure rather than enabling
+the Android-only harness in a production binary.
+
+**External proof is pending:** native/JavaScript receipt, sessions, and
+symbolication have not been established by configuration or metadata checks.
+Keep the PR draft, retain the temporary harness, and do not merge or promote a
+public release until the captured evidence satisfies all these gates. Remove
+the temporary harness only after live JavaScript and native evidence is captured;
+remove both actions and the temporary SDK `crash()` SIGABRT hunk before merge.
+Keep the native privacy callbacks. Store and device release approval remain
+separate requirements.
+
 An iOS submission creates an App Store Connect/TestFlight candidate; an Android
 submission creates a draft internal-testing candidate. Neither action makes a
 public release. Public promotion and the device/release gates remain manual.
