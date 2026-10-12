@@ -3,7 +3,7 @@ new file mode 100644
 index 0000000..7bba7ea
 --- /dev/null
 +++ b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/BillManagerSentryPrivacy.java
-@@ -0,0 +1,178 @@
+@@ -0,0 +1,184 @@
 +package io.sentry.react;
 +
 +import io.sentry.Hint;
@@ -143,7 +143,13 @@ index 0000000..7bba7ea
 +    meta.setSdkInfo(null);
 +    if (meta.getImages() == null) return;
 +    for (final DebugImage image : meta.getImages()) {
-+      image.setCodeFile(bundlePath(image.getCodeFile()));
++      // ELF/Mach-O lookup uses debug/code IDs, not private runtime paths.
++      // Relay still requires a nonempty code_file for these native images.
++      final String type = image.getType();
++      image.setCodeFile(
++          "elf".equals(type) || "macho".equals(type)
++              ? REDACTED_EVENT_VALUE
++              : bundlePath(image.getCodeFile()));
 +      image.setDebugFile(null);
 +      image.setUnknown(null);
 +    }
@@ -186,14 +192,15 @@ diff --git a/node_modules/@sentry/react-native/android/src/main/java/io/sentry/r
 index 11a4b40..ecc6f29 100644
 --- a/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java
 +++ b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java
-@@ -361,5 +361,6 @@ public class RNSentryModuleImpl {
- 
-     options.setBeforeSend(
+@@ -363,6 +363,7 @@ public class RNSentryModuleImpl {
          (event, hint) -> {
            setEventOriginTag(event);
            addPackages(event, options.getSdkVersion());
 +          BillManagerSentryPrivacy.scrub(event, hint);
-@@ -539,5 +540,7 @@ public class RNSentryModuleImpl {
+ 
+           return event;
+         });
+@@ -539,7 +540,9 @@ public class RNSentryModuleImpl {
    }
  
    public void crash() {
@@ -202,6 +209,8 @@ index 11a4b40..ecc6f29 100644
 +    android.os.Process.sendSignal(
 +        android.os.Process.myPid(), android.system.OsConstants.SIGABRT);
    }
+ 
+   public void addListener(String eventType) {
 diff --git a/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.h b/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.h
 new file mode 100644
 index 0000000..ce3dbd3
@@ -218,7 +227,7 @@ new file mode 100644
 index 0000000..c46144a
 --- /dev/null
 +++ b/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.m
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,105 @@
 +#import "BillManagerSentryPrivacy.h"
 +#import <dispatch/dispatch.h>
 +
@@ -304,10 +313,11 @@ index 0000000..c46144a
 +    event.request = nil;
 +    event.modules = nil;
 +    event.sdk = BillManagerScrubSdk(event.sdk);
-+    // Preserve debug UUIDs and image addresses/sizes for dSYM symbolication, not runtime paths.
++    // Mach-O lookup uses the debug UUID, not private runtime paths. Relay still
++    // requires code_file (or name for legacy apple images) to be nonempty.
 +    for (SentryDebugMeta *image in event.debugMeta) {
-+        image.codeFile = nil;
-+        image.name = nil;
++        image.codeFile = [image.type isEqualToString:@"macho"] ? BillManagerRedactedEventValue : nil;
++        image.name = [image.type isEqualToString:@"apple"] ? BillManagerRedactedEventValue : nil;
 +    }
 +    BillManagerScrubStacktrace(event.stacktrace);
 +    for (SentryThread *thread in event.threads) {
@@ -368,3 +378,36 @@ index c11782d..887678a 100644
      };
  
      if ([options valueForKey:@"enableNativeCrashHandling"] != nil) {
+diff --git a/node_modules/@sentry/react-native/dist/js/integrations/rewriteframes.js b/node_modules/@sentry/react-native/dist/js/integrations/rewriteframes.js
+--- a/node_modules/@sentry/react-native/dist/js/integrations/rewriteframes.js
++++ b/node_modules/@sentry/react-native/dist/js/integrations/rewriteframes.js
+@@ -21,6 +21,12 @@ export function createReactNativeRewriteFrames() {
+                 return frame;
+             }
+             delete frame.abs_path;
++            // Hermes runtime bytecode is not part of the application sourcemap.
++            // Preserve its exact public identity before Expo rewrites bundle names.
++            if (frame.filename === 'InternalBytecode.js' || frame.filename === '/InternalBytecode.js') {
++                frame.in_app = false;
++                return frame;
++            }
+             frame.filename = frame.filename
+                 .replace(/^file:\/\//, '')
+                 .replace(/^address at /, '')
+@@ -46,10 +52,6 @@ export function createReactNativeRewriteFrames() {
+                 return frame;
+             }
+             const appPrefix = 'app://';
+-            // https://github.com/getsentry/sentry-react-native/issues/3348
+-            if (frame.filename === '/InternalBytecode.js') {
+-                frame.in_app = false;
+-            }
+             // We always want to have a triple slash
+             frame.filename =
+                 frame.filename.indexOf('/') === 0 ? `${appPrefix}${frame.filename}` : `${appPrefix}/${frame.filename}`;
+@@ -57,4 +59,3 @@ export function createReactNativeRewriteFrames() {
+         },
+     });
+ }
+-//# sourceMappingURL=rewriteframes.js.map
+\ No newline at end of file

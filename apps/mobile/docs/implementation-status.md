@@ -4,6 +4,47 @@ Implementation/device-matrix baseline: 2026-07-15, `codex/mobile-native-rewrite`
 
 This document tracks implementation evidence, not a release declaration. A row marked **Implemented** means the source path exists and is wired into the application. It does not mean that the flow has passed the complete iOS, Android, SaaS, self-hosted, accessibility, or store acceptance matrix.
 
+## Follow-up verification — 2026-10-11
+
+- The owner reports initiating two crashes on the Android test device. The
+  October 9 zero-event observations below are historical, not the current event
+  count. This follow-up session had no authenticated Sentry dashboard access;
+  receipt, event privacy and JS/native symbolication still need inspection of
+  those existing events. An additional crash is not required merely to establish
+  that the owner performed the test. No iPhone is currently available.
+- Sentry remains an optional, unmerged feature in draft PR #170, separate from
+  `main` and the deployed web/server release. Deferring that feature avoids
+  making its native telemetry validation a prerequisite for a Sentry-free mobile
+  candidate. Store declarations must match whichever candidate is submitted;
+  ordinary signed-device acceptance still applies.
+- Follow-up source fixes preserve public Hermes runtime frame identities without
+  rewriting their coordinates as application frames, retain required redacted
+  native image identities, and correct the patch context for a clean SDK install.
+  The local mobile check passed 71 files / 351 tests, lint/types, generated drift,
+  all six Maestro definitions, build-profile validation and Expo Doctor 21/21.
+  The canonical mobile audit passed with its two existing tooling exceptions.
+  The actual SDK frame-rewrite pipeline is covered on both platform branches,
+  and patch-package applied successfully to a fresh `@sentry/react-native@7.11.0`
+  package. These checks are not native-device proof or a new signed build.
+- Public policy publication had reverted to the old marketing image. The owner
+  approved durable reconciliation: `homelab-docker` commit `98bf8da` and
+  `homelab-nix` commit `c7c9f0f` now pin the reviewed
+  `billmanager-marketing:20261009-cd90992` image in the active yoda configuration.
+  Full Nix flake checks and Compose validation passed. Both apex and `www`
+  privacy/deletion pages returned the corrected content over HTTPS; browser
+  verification confirmed the deletion mail link and policy navigation. Only the
+  marketing container changed; 32 other containers retained their IDs, images,
+  start times and restart counts. Email delivery and destructive account deletion
+  were not exercised.
+- Web/server production was already on `4.13.0`, revision `f910bc49`, with a
+  successful public `/api/v2/ping`. Its image was not changed. Later fixes on
+  `main` are outside that release tag.
+- The owner specifies a US-only initial iOS release. Confirm that App Store
+  Connect availability matches that scope before submission. Do not treat
+  non-US Apple purchasing requirements as a blocker for that scoped release;
+  Android payment-program eligibility remains a separate review item. Store
+  dashboards, tester counts and review status were not refreshed in this session.
+
 ## Submission and external evidence — 2026-10-09
 
 | Observed attempt | Evidence | What remains unknown |

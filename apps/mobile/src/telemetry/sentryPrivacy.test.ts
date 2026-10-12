@@ -104,7 +104,12 @@ describe('mobile Sentry privacy policy', () => {
       lineno: 42,
       colno: 7,
     });
-    expect(scrubbed.debug_meta).toEqual(event.debug_meta);
+    expect(scrubbed.debug_meta).toEqual({
+      images: [{
+        type: 'macho', debug_id: DEBUG_ID, image_addr: '0x100000000',
+        code_file: '[redacted]',
+      }],
+    });
     expect(hint.attachments).toEqual([]);
   });
 
@@ -160,7 +165,7 @@ describe('mobile Sentry privacy policy', () => {
       { type: 'sourcemap', debug_id: DEBUG_ID, code_file: 'app:///index.android.bundle' },
       {
         type: 'macho', debug_id: DEBUG_ID, image_addr: '0x100000000',
-        image_size: 4096, code_file: undefined,
+        image_size: 4096, code_file: '[redacted]',
       },
       { type: 'wasm', debug_id: DEBUG_ID, code_file: '[redacted]' },
     ]);
@@ -190,6 +195,38 @@ describe('mobile Sentry privacy policy', () => {
     expect(frame?.abs_path).toBeUndefined();
     expect(JSON.stringify(scrubbed)).not.toContain('PRIVATE_PATH_CANARY');
     expect(scrubbed.debug_meta?.images?.[0]?.debug_id).toBe(DEBUG_ID);
+  });
+
+  it.each(['InternalBytecode.js', '/InternalBytecode.js', 'native', '[native code]'])(
+    'preserves exact public runtime frame identity without remapping coordinates: %s',
+    (filename) => {
+      const frame = { filename, abs_path: filename, lineno: 1, colno: 907, in_app: false };
+      const scrubbed = scrubSentryEvent({
+        type: undefined,
+        exception: { values: [{ stacktrace: { frames: [frame] } }] },
+        threads: { values: [{ stacktrace: { frames: [frame] } }] },
+      });
+      expect(scrubbed.exception?.values?.[0]?.stacktrace?.frames?.[0]).toMatchObject(frame);
+      expect(scrubbed.threads?.values?.[0]?.stacktrace?.frames?.[0]).toMatchObject(frame);
+    },
+  );
+
+  it.each([
+    'file:///private/PRIVATE_PATH_CANARY/InternalBytecode.js',
+    'https://PRIVATE_PATH_CANARY.example/InternalBytecode.js',
+    'app:///private/PRIVATE_PATH_CANARY/InternalBytecode.js',
+    'InternalBytecode.js?PRIVATE_PATH_CANARY',
+    '[native code]#PRIVATE_PATH_CANARY',
+    'native/PRIVATE_PATH_CANARY',
+  ])('rejects paths and payloads resembling public runtime markers: %s', (filename) => {
+    const scrubbed = scrubSentryEvent({
+      type: undefined,
+      exception: { values: [{ stacktrace: { frames: [{ filename, abs_path: filename }] } }] },
+    });
+    expect(scrubbed.exception?.values?.[0]?.stacktrace?.frames?.[0]).toMatchObject({
+      filename: undefined, abs_path: undefined,
+    });
+    expect(JSON.stringify(scrubbed)).not.toContain('PRIVATE_PATH_CANARY');
   });
 
   it('preserves canonical bundle, code symbols, and native crash addresses', () => {

@@ -50,6 +50,13 @@ function bundlePath(value: unknown): string | undefined {
   return undefined;
 }
 
+function framePath(value: unknown): string | undefined {
+  // Public runtime identities must not be mistaken for application bundle frames.
+  if (value === 'InternalBytecode.js' || value === '/InternalBytecode.js'
+    || value === 'native' || value === '[native code]') return value;
+  return bundlePath(value);
+}
+
 function codeSymbol(value: unknown): string | undefined {
   const nativeSymbol = matching(value, OBJC_SYMBOL)
     ?? matching(value, /^operator (?:new|delete)(?:\[\])?$/);
@@ -85,7 +92,8 @@ function scrubDebugMeta(meta: ErrorEvent['debug_meta']): ErrorEvent['debug_meta'
           debug_id,
           image_addr,
           image_size: unsignedInteger(image.image_size),
-          code_file: bundlePath(image.code_file),
+          // Native artifacts use debug IDs and load addresses, never a private path.
+          code_file: '[redacted]',
         }] : [];
       }
       if (image.type === 'sourcemap' || image.type === 'wasm') {
@@ -103,12 +111,12 @@ function scrubDebugMeta(meta: ErrorEvent['debug_meta']): ErrorEvent['debug_meta'
 
 function scrubFrame(frame: StackFrame): StackFrame {
   return {
-    filename: bundlePath(frame.filename),
+    filename: framePath(frame.filename),
     function: codeSymbol(frame.function),
     module: codeSymbol(frame.module),
     lineno: unsignedInteger(frame.lineno),
     colno: unsignedInteger(frame.colno),
-    abs_path: bundlePath(frame.abs_path),
+    abs_path: framePath(frame.abs_path),
     in_app: typeof frame.in_app === 'boolean' ? frame.in_app : undefined,
     platform: matching(frame.platform, /^(?:javascript|native|cocoa|java|objc|c|cpp|wasm)$/),
     instruction_addr: matching(frame.instruction_addr, ADDRESS),

@@ -14,6 +14,7 @@ on:
         options:
           - build
           - preview-sentry-test
+          - inspect-sentry
           - submit
       build_id:
         description: Existing EAS build ID to submit
@@ -43,9 +44,9 @@ jobs:
           ACTION: ${{ inputs.action }}
           REF: ${{ github.ref }}
         run: |
-          if [[ "$ACTION" == "preview-sentry-test" ]]; then
+          if [[ "$ACTION" == "preview-sentry-test" || "$ACTION" == "inspect-sentry" ]]; then
             if [[ "$REF" != "refs/heads/feat/mobile-sentry-bil-28" ]]; then
-              echo "::error::The Sentry preview test must run from feat/mobile-sentry-bil-28."
+              echo "::error::Sentry validation must run from feat/mobile-sentry-bil-28."
               exit 1
             fi
             exit 0
@@ -111,6 +112,24 @@ jobs:
       - name: Run mobile release checks
         working-directory: apps/mobile
         run: npm run check
+
+  inspect-sentry:
+    name: Inspect Sentry Event Evidence
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'inspect-sentry'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: android-production
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+      - name: Read sanitized event evidence
+        working-directory: apps/mobile
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: node scripts/inspect-sentry-events.mjs
 
   build:
     name: Build Android Release
