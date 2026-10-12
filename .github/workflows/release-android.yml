@@ -129,7 +129,7 @@ jobs:
       - name: Read sanitized event evidence
         working-directory: apps/mobile
         env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_READ_TOKEN || secrets.SENTRY_AUTH_TOKEN }}
         run: node scripts/inspect-sentry-events.mjs
 
   sentry-ios-build:

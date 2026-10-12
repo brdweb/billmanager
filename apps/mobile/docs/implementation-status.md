@@ -8,19 +8,22 @@ This document tracks implementation evidence, not a release declaration. A row m
 
 - The owner reports initiating two crashes on the Android test device. The
   October 9 zero-event observations below are historical, not the current event
-  count. This follow-up session had no authenticated Sentry dashboard access;
-  receipt, event privacy and JS/native symbolication still need inspection of
+  count. A protected, read-only inspection using the existing GitHub upload token
+  returned HTTP 403 on October 12 UTC ([run 38188221491](https://github.com/brdweb/billmanager/actions/runs/38188221491)).
+  Receipt, event privacy and JS/native symbolication still need inspection of
   those existing events. An additional crash is not required merely to establish
   that the owner performed the test. No iPhone is currently available.
-- Sentry remains an optional, unmerged feature in draft PR #170, separate from
-  `main` and the deployed web/server release. Deferring that feature avoids
-  making its native telemetry validation a prerequisite for a Sentry-free mobile
-  candidate. Store declarations must match whichever candidate is submitted;
-  ordinary signed-device acceptance still applies.
+- The owner explicitly requested the full Sentry integration remain in scope for
+  merge/deployment. PR #170 is still separate from `main`; it remains a draft
+  while native receipt/privacy/symbolication evidence is incomplete. After the
+  read-access failure, the owner selected "Continue builds first" rather than
+  supplying another credential. The inspection action supports a separately
+  provisioned `SENTRY_READ_TOKEN` (project/event read access) without changing the
+  upload token. No credential values or raw event payloads were logged.
 - Follow-up source fixes preserve public Hermes runtime frame identities without
   rewriting their coordinates as application frames, retain required redacted
   native image identities, and correct the patch context for a clean SDK install.
-  The local mobile check passed 71 files / 351 tests, lint/types, generated drift,
+  The local mobile check passed 72 files / 354 tests, lint/types, generated drift,
   all six Maestro definitions, build-profile validation and Expo Doctor 21/21.
   The canonical mobile audit passed with its two existing tooling exceptions.
   The actual SDK frame-rewrite pipeline is covered on both platform branches,
@@ -38,7 +41,15 @@ This document tracks implementation evidence, not a release declaration. A row m
   were not exercised.
 - Web/server production was already on `4.13.0`, revision `f910bc49`, with a
   successful public `/api/v2/ping`. Its image was not changed. Later fixes on
-  `main` are outside that release tag.
+  `main` are outside that release tag. A subsequent names/boolean-only runtime
+  check confirmed the SDK is installed but `SENTRY_DSN` is **not configured**:
+  server reporting is disabled. Enabling it requires the approved server-project
+  DSN and an explicit production environment/release, followed by receipt proof;
+  do not reuse the mobile project's destination by assumption.
+- Local isolated server Sentry tests passed in both deployment modes (13 each);
+  the app-factory/database test is blocked locally by test-DB authentication.
+  Bandit and the locked Python dependency audit passed. Full backend verification
+  remains covered by GitHub CI, including the app-factory test.
 - The owner specifies a US-only initial iOS release. Confirm that App Store
   Connect availability matches that scope before submission. Do not treat
   non-US Apple purchasing requirements as a blocker for that scoped release;
