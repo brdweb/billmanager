@@ -6,6 +6,13 @@ This document tracks implementation evidence, not a release declaration. A row m
 
 ## Follow-up verification — 2026-10-11
 
+- **Merge decision updated October 12 UTC:** the owner personally confirmed
+  receipt of the Android crash data and explicitly instructed merging PR #170.
+  That confirmation supersedes the earlier draft-only merge hold below. Remove
+  the temporary crash harness and branch-only build paths, then merge after
+  final CI passes. Independent event/privacy/symbolication inspection, iOS
+  device acceptance, server DSN activation and store/public rollout remain
+  separate unfinished work; none is claimed complete by the source merge.
 - The owner reports initiating two crashes on the Android test device. The
   October 9 zero-event observations below are historical, not the current event
   count. A protected, read-only inspection using the existing GitHub upload token
@@ -14,8 +21,8 @@ This document tracks implementation evidence, not a release declaration. A row m
   those existing events. An additional crash is not required merely to establish
   that the owner performed the test. No iPhone is currently available.
 - The owner explicitly requested the full Sentry integration remain in scope for
-  merge/deployment. PR #170 is still separate from `main`; it remains a draft
-  while native receipt/privacy/symbolication evidence is incomplete. After the
+  merge/deployment. PR #170 was initially held as a draft
+  while native receipt/privacy/symbolication evidence was incomplete. After the
   read-access failure, the owner selected "Continue builds first" rather than
   supplying another credential. The inspection action supports a separately
   provisioned `SENTRY_READ_TOKEN` (project/event read access) without changing the

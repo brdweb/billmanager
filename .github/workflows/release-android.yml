@@ -13,9 +13,7 @@ on:
         type: choice
         options:
           - build
-          - preview-sentry-test
           - inspect-sentry
-          - sentry-ios-build
           - submit
       build_id:
         description: Existing EAS build ID to submit
@@ -42,16 +40,8 @@ jobs:
       - name: Restrict manual release ref
         if: github.event_name == 'workflow_dispatch'
         env:
-          ACTION: ${{ inputs.action }}
           REF: ${{ github.ref }}
         run: |
-          if [[ "$ACTION" == "preview-sentry-test" || "$ACTION" == "inspect-sentry" || "$ACTION" == "sentry-ios-build" ]]; then
-            if [[ "$REF" != "refs/heads/feat/mobile-sentry-bil-28" ]]; then
-              echo "::error::Sentry validation must run from feat/mobile-sentry-bil-28."
-              exit 1
-            fi
-            exit 0
-          fi
           case "$REF" in
             refs/heads/main | refs/tags/mobile-v*)
               ;;
@@ -132,47 +122,14 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_READ_TOKEN || secrets.SENTRY_AUTH_TOKEN }}
         run: node scripts/inspect-sentry-events.mjs
 
-  sentry-ios-build:
-    name: Compile Signed iOS Sentry Candidate
-    if: github.event_name == 'workflow_dispatch' && inputs.action == 'sentry-ios-build'
-    needs: validate
-    runs-on: ubuntu-latest
-    # Temporary validation uses the owner-approved exact-branch policy and
-    # existing Expo project credential; it never submits or publishes the app.
-    environment: android-production
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24.19.0'
-      - name: Install mobile dependencies
-        working-directory: apps/mobile
-        run: npm ci
-      - name: Verify production Sentry metadata
-        working-directory: apps/mobile
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: node scripts/verify-sentry-eas-environment.mjs --environment production
-      - name: Compile signed iOS candidate
-        working-directory: apps/mobile
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx --yes eas-cli@24.10.0 build --platform ios --profile production --non-interactive --wait --json > eas-ios-build.json
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ios-sentry-validation-metadata
-          path: apps/mobile/eas-ios-build.json
-          retention-days: 30
-
   build:
     name: Build Android Release
-    if: github.event_name == 'push' || inputs.action == 'build' || inputs.action == 'preview-sentry-test'
+    if: github.event_name == 'push' || inputs.action == 'build'
     needs: validate
     runs-on: ubuntu-latest
     environment: android-production
     env:
-      EAS_BUILD_PROFILE: ${{ inputs.action == 'preview-sentry-test' && 'preview' || 'production' }}
+      EAS_BUILD_PROFILE: production
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
       - name: Checkout repository
@@ -190,14 +147,8 @@ jobs:
         run: npm ci
 
       - name: Verify Sentry variables in the EAS production environment
-        if: env.EAS_BUILD_PROFILE == 'production'
         working-directory: apps/mobile
         run: node scripts/verify-sentry-eas-environment.mjs --environment production
-
-      - name: Verify Sentry variables in the EAS preview environment
-        if: inputs.action == 'preview-sentry-test'
-        working-directory: apps/mobile
-        run: node scripts/verify-sentry-eas-environment.mjs --environment preview
 
       - name: Build Android with EAS
         working-directory: apps/mobile

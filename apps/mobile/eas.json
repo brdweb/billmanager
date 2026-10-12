@@ -12,8 +12,7 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "BILLMANAGER_DEVELOPMENT_BUILD": "true",
-        "BILLMANAGER_SENTRY_TEST_CRASH": "false"
+        "BILLMANAGER_DEVELOPMENT_BUILD": "true"
       },
       "ios": {
         "simulator": true
@@ -26,8 +25,7 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "BILLMANAGER_DEVELOPMENT_BUILD": "true",
-        "BILLMANAGER_SENTRY_TEST_CRASH": "false"
+        "BILLMANAGER_DEVELOPMENT_BUILD": "true"
       },
       "ios": {
         "simulator": false
@@ -39,8 +37,7 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "BILLMANAGER_DEVELOPMENT_BUILD": "false",
-        "BILLMANAGER_SENTRY_TEST_CRASH": "true"
+        "BILLMANAGER_DEVELOPMENT_BUILD": "false"
       }
     },
     "preview:ios": {
@@ -49,8 +46,7 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "BILLMANAGER_DEVELOPMENT_BUILD": "false",
-        "BILLMANAGER_SENTRY_TEST_CRASH": "false"
+        "BILLMANAGER_DEVELOPMENT_BUILD": "false"
       },
       "ios": {
         "simulator": false
@@ -62,8 +58,7 @@
       "autoIncrement": true,
       "channel": "production",
       "env": {
-        "BILLMANAGER_DEVELOPMENT_BUILD": "false",
-        "BILLMANAGER_SENTRY_TEST_CRASH": "false"
+        "BILLMANAGER_DEVELOPMENT_BUILD": "false"
       },
       "android": {
         "buildType": "app-bundle"

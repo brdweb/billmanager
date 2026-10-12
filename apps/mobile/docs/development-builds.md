@@ -218,11 +218,11 @@ credentials, or the EAS project to bypass a signing problem. Each build produces
 a JSON build-metadata artifact and records the EAS build ID in the job summary.
 Save that ID before requesting a submission.
 
-The temporary Android `preview-sentry-test` action also uses the protected
-`android-production` reviewer gate, but selects the internal `preview` EAS
-profile and never enters the submission job. It remains restricted to the
-Sentry test branch named in the workflow. It does not provision or copy Sentry
-values from GitHub secrets into EAS.
+The read-only Android workflow action `inspect-sentry` uses the protected
+`android-production` reviewer gate and the normal main/mobile-tag restrictions.
+It reads `SENTRY_READ_TOKEN` when provisioned, otherwise the existing upload token,
+and reports only allowlisted event evidence. The existing upload token returned
+HTTP 403 for read access; it must not be exported or logged to work around that.
 
 ### Sentry setup and release evidence
 
@@ -267,32 +267,16 @@ The October 9 Android preview at `f5c8e85` completed JavaScript source-map and
 artifacts. Repeat upload verification for each updated signed candidate.
 Received source mapping/native symbolication remain pending.
 
-The temporary Settings **Test JavaScript error reporting** and **Test crash
-reporting** controls are retained until live verification is captured. Both use
-the same gate: an Android runtime, the internal `preview` profile crash flag,
-and a configured DSN, never development, iOS preview, or production. The runtime
-platform check also rejects an iOS binary built with the generic preview profile.
-On an authorized test device, perform these two separate actions:
+The owner personally verified Android crash-data receipt and explicitly approved
+merging PR #170 on October 12 UTC. This supersedes the earlier draft-only merge
+hold. Temporary Settings test actions, their config flags/translations, the
+SDK `crash()` SIGABRT override and branch-only build paths were removed before
+merge; native privacy callbacks and symbolication fixes remain. Older internal
+validation APKs may still contain the harness and are not public-release builds.
+The owner's receipt confirmation is not a claim that this agent independently
+inspected payloads, sessions, source maps, or iOS events.
 
-1. Confirm **Test JavaScript error reporting** first. It captures a synthetic
-   `Error` at the stable application-owned location in
-   `src/telemetry/sentryTestCrash.ts`, without customer data or test extras, and
-   requests the initialized Sentry client's supported `flush(5000)` API. The
-   timeout bounds its wait, not transport cancellation. The result distinguishes
-   flush completion, timeout, and failure; none proves receipt or source mapping.
-   Find the real received JavaScript event in Sentry and verify its original
-   application frame and release/distribution before proceeding.
-2. Confirm **Test crash reporting** separately. The temporary native SDK patch
-   raises Android `SIGABRT` to exercise the actual in-process NDK handler, closing
-   the app immediately. Reopen it once to upload the stored native crash, then
-   find the separate received native event and inspect its symbolicated frames.
-   The earlier `f5c8e85` preview used the stock SDK Java `RuntimeException`;
-   that Java result does not establish C/C++/NDK capture.
-
-Do not substitute the on-device JavaScript flush result for dashboard evidence,
-or a JavaScript event for the native-crash-after-relaunch gate.
-
-Before merging the Sentry PR or allowing any public rollout, capture evidence
+Before public rollout, capture evidence
 from the real candidate and the Sentry project for each target platform:
 
 1. A received JavaScript error event with the expected release/distribution and
@@ -317,13 +301,10 @@ preview evidence alone does not approve production. If a platform has no
 in-app crash control, use an approved native test procedure rather than enabling
 the Android-only harness in a production binary.
 
-**External proof is pending:** native/JavaScript receipt, sessions, and
-symbolication have not been established by configuration or metadata checks.
-Keep the PR draft, retain the temporary harness, and do not merge or promote a
-public release until the captured evidence satisfies all these gates. Remove
-the temporary harness only after live JavaScript and native evidence is captured;
-remove both actions and the temporary SDK `crash()` SIGABRT hunk before merge.
-Keep the native privacy callbacks. Store and device release approval remain
+**Remaining external proof:** the owner confirmed Android crash receipt, while
+independent payload/session/symbolication inspection and iOS device evidence
+remain open. These are public-rollout checks; the owner explicitly approved the
+source merge after cleanup and green CI. Store and device release approval remain
 separate requirements.
 
 An iOS submission creates an App Store Connect/TestFlight candidate; an Android

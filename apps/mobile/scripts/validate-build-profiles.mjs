@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
-function loadConfig({ development, profile = '', sentryTestCrash = 'false' }) {
+function loadConfig({ development, profile = '' }) {
   const output = execFileSync(npx, ['expo', 'config', '--type', 'public', '--json'], {
     cwd: new URL('..', import.meta.url),
     encoding: 'utf8',
@@ -11,7 +11,6 @@ function loadConfig({ development, profile = '', sentryTestCrash = 'false' }) {
       ...process.env,
       EAS_BUILD_PROFILE: profile,
       BILLMANAGER_DEVELOPMENT_BUILD: development ? 'true' : 'false',
-      BILLMANAGER_SENTRY_TEST_CRASH: sentryTestCrash,
       NO_COLOR: '1',
     },
   });
@@ -65,23 +64,16 @@ function assertPolicy(config, expected, label) {
 }
 
 const production = loadConfig({ development: false, profile: 'production' });
-const preview = loadConfig({
-  development: false,
-  profile: 'preview',
-  sentryTestCrash: 'true',
-});
+const preview = loadConfig({ development: false, profile: 'preview' });
 const iosPreview = loadConfig({ development: false, profile: 'preview:ios' });
 const development = loadConfig({ development: true, profile: 'development' });
 const introspectedProduction = loadIntrospectedProductionConfig();
 assertPolicy(production, false, 'Preview/release');
 assertPolicy(development, true, 'Development');
 
-if (preview.extra?.sentryTestCrashEnabled !== true) {
-  throw new Error('Android preview must enable the temporary Sentry native-crash harness.');
-}
-for (const [label, config] of Object.entries({ production, iosPreview, development })) {
-  if (config.extra?.sentryTestCrashEnabled !== false) {
-    throw new Error(`${label} must not enable the Sentry native-crash harness.`);
+for (const [label, config] of Object.entries({ production, preview, iosPreview, development })) {
+  if (Object.hasOwn(config.extra ?? {}, 'sentryTestCrashEnabled')) {
+    throw new Error(`${label} must not contain the removed Sentry native-crash harness.`);
   }
 }
 
@@ -135,14 +127,13 @@ const androidReleaseWorkflow = readFileSync(
   'utf8',
 );
 for (const requiredFragment of [
-  'if [[ "$REF" != "refs/heads/feat/mobile-sentry-bil-28" ]]; then',
+  'refs/heads/main | refs/tags/mobile-v*)',
   'environment: android-production',
-  "EAS_BUILD_PROFILE: ${{ inputs.action == 'preview-sentry-test' && 'preview' || 'production' }}",
-  'run: node scripts/verify-sentry-eas-environment.mjs --environment preview',
+  'EAS_BUILD_PROFILE: production',
   'run: node scripts/verify-sentry-eas-environment.mjs --environment production',
 ]) {
   if (!androidReleaseWorkflow.includes(requiredFragment)) {
-    throw new Error(`Android Sentry preview builds must retain protected profile selection and metadata-only EAS preflights: ${requiredFragment}`);
+    throw new Error(`Android release builds must retain protected production selection and metadata-only EAS preflights: ${requiredFragment}`);
   }
 }
 if (eas.cli?.appVersionSource !== 'remote') {
@@ -160,13 +151,10 @@ for (const profile of releaseProfiles) {
     throw new Error(`${profile} must enforce HTTPS-only transport policy.`);
   }
 }
-for (const profile of [...developmentProfiles, 'preview:ios', 'production']) {
-  if (eas.build?.[profile]?.env?.BILLMANAGER_SENTRY_TEST_CRASH !== 'false') {
-    throw new Error(`${profile} must disable the Sentry native-crash harness.`);
+for (const profile of [...developmentProfiles, ...releaseProfiles]) {
+  if (Object.hasOwn(eas.build?.[profile]?.env ?? {}, 'BILLMANAGER_SENTRY_TEST_CRASH')) {
+    throw new Error(`${profile} must not configure the removed Sentry native-crash harness.`);
   }
-}
-if (eas.build?.preview?.env?.BILLMANAGER_SENTRY_TEST_CRASH !== 'true') {
-  throw new Error('preview must enable the temporary Sentry native-crash harness.');
 }
 for (const profile of [...developmentProfiles, ...releaseProfiles]) {
   if (eas.build?.[profile]?.node !== '24.19.0') {
