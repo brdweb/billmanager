@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs';
 
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
-function loadConfig(development) {
+function loadConfig({ development, profile = '' }) {
   const output = execFileSync(npx, ['expo', 'config', '--type', 'public', '--json'], {
     cwd: new URL('..', import.meta.url),
     encoding: 'utf8',
     env: {
       ...process.env,
-      EAS_BUILD_PROFILE: '',
+      EAS_BUILD_PROFILE: profile,
       BILLMANAGER_DEVELOPMENT_BUILD: development ? 'true' : 'false',
       NO_COLOR: '1',
     },
@@ -42,6 +42,12 @@ function buildProperties(config) {
   return plugin?.[1]?.android;
 }
 
+function sentryPlugin(config) {
+  return config.plugins.find((entry) => (
+    Array.isArray(entry) && entry[0] === '@sentry/react-native/expo'
+  ));
+}
+
 function assertPolicy(config, expected, label) {
   const ats = config.ios?.infoPlist?.NSAppTransportSecurity;
   const actual = {
@@ -57,11 +63,19 @@ function assertPolicy(config, expected, label) {
   }
 }
 
-const production = loadConfig(false);
-const development = loadConfig(true);
+const production = loadConfig({ development: false, profile: 'production' });
+const preview = loadConfig({ development: false, profile: 'preview' });
+const iosPreview = loadConfig({ development: false, profile: 'preview:ios' });
+const development = loadConfig({ development: true, profile: 'development' });
 const introspectedProduction = loadIntrospectedProductionConfig();
 assertPolicy(production, false, 'Preview/release');
 assertPolicy(development, true, 'Development');
+
+for (const [label, config] of Object.entries({ production, preview, iosPreview, development })) {
+  if (Object.hasOwn(config.extra ?? {}, 'sentryTestCrashEnabled')) {
+    throw new Error(`${label} must not contain the removed Sentry native-crash harness.`);
+  }
+}
 
 const iosEntitlements = introspectedProduction._internal?.modResults?.ios?.entitlements;
 if (!iosEntitlements || Object.hasOwn(iosEntitlements, 'aps-environment')) {
@@ -97,9 +111,31 @@ for (const [label, config] of Object.entries({ production, development })) {
   if (config.extra?.releaseLabel !== expectedReleaseLabel) {
     throw new Error(`${label} release label is not derived from the package pre-release.`);
   }
+  const sentryOptions = sentryPlugin(config)?.[1];
+  if (
+    sentryOptions?.organization !== 'jason-mitchell' ||
+    sentryOptions?.project !== 'billmanager-mobile' ||
+    sentryOptions?.url !== 'https://sentry.io/'
+  ) {
+    throw new Error(`${label} Sentry plugin must target jason-mitchell/billmanager-mobile.`);
+  }
 }
 
 const eas = JSON.parse(readFileSync(new URL('../eas.json', import.meta.url), 'utf8'));
+const androidReleaseWorkflow = readFileSync(
+  new URL('../../../.github/workflows/release-android.yml', import.meta.url),
+  'utf8',
+);
+for (const requiredFragment of [
+  'refs/heads/main | refs/tags/mobile-v*)',
+  'environment: android-production',
+  'EAS_BUILD_PROFILE: production',
+  'run: node scripts/verify-sentry-eas-environment.mjs --environment production',
+]) {
+  if (!androidReleaseWorkflow.includes(requiredFragment)) {
+    throw new Error(`Android release builds must retain protected production selection and metadata-only EAS preflights: ${requiredFragment}`);
+  }
+}
 if (eas.cli?.appVersionSource !== 'remote') {
   throw new Error('Production store builds must use remote version codes for reliable auto-incrementing.');
 }
@@ -113,6 +149,11 @@ for (const profile of developmentProfiles) {
 for (const profile of releaseProfiles) {
   if (eas.build?.[profile]?.env?.BILLMANAGER_DEVELOPMENT_BUILD !== 'false') {
     throw new Error(`${profile} must enforce HTTPS-only transport policy.`);
+  }
+}
+for (const profile of [...developmentProfiles, ...releaseProfiles]) {
+  if (Object.hasOwn(eas.build?.[profile]?.env ?? {}, 'BILLMANAGER_SENTRY_TEST_CRASH')) {
+    throw new Error(`${profile} must not configure the removed Sentry native-crash harness.`);
   }
 }
 for (const profile of [...developmentProfiles, ...releaseProfiles]) {
@@ -130,4 +171,4 @@ if (
   throw new Error('Android submissions must default to a draft internal-test release.');
 }
 
-console.log('Validated API 36 Android app-bundle builds, safe draft submission, and transport policy.');
+console.log('Validated API 36 Android app-bundle builds, Sentry upload target, safe draft submission, and transport policy.');

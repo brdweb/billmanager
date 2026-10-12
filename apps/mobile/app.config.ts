@@ -15,6 +15,9 @@ function releaseLabel(version: string): string | undefined {
 }
 
 const MOBILE_RELEASE_LABEL = releaseLabel(MOBILE_RELEASE_VERSION);
+const SENTRY_DSN = process.env.SENTRY_DSN?.trim() || undefined;
+const SENTRY_ORGANIZATION = 'jason-mitchell';
+const SENTRY_PROJECT = 'billmanager-mobile';
 
 const EAS_PROJECT_ID = '061766ea-b874-4027-bcbb-a24b395cb8b6';
 const IOS_BUNDLE_ID = 'com.brdweb.billmanager';
@@ -106,6 +109,23 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     plugins: [
       './plugins/withLocalNotificationsOnly',
       [
+        '@sentry/react-native/expo',
+        {
+          organization: SENTRY_ORGANIZATION,
+          project: SENTRY_PROJECT,
+          url: 'https://sentry.io/',
+          experimental_android: {
+            enableAndroidGradlePlugin: true,
+            uploadNativeSymbols: true,
+            autoUploadNativeSymbols: true,
+            includeProguardMapping: true,
+            autoUploadProguardMapping: true,
+            includeNativeSources: false,
+            includeSourceContext: false,
+          },
+        },
+      ],
+      [
         'expo-secure-store',
         {
           configureAndroidBackup: false,
@@ -182,6 +202,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       allowCleartextDevelopmentServers: developmentBuild,
       releaseVersion: MOBILE_RELEASE_VERSION,
       releaseLabel: MOBILE_RELEASE_LABEL,
+      // Sentry DSNs are public client routing keys. The upload token is never
+      // included in app config; EAS supplies SENTRY_AUTH_TOKEN at build time.
+      sentryDsn: SENTRY_DSN,
       eas: {
         projectId: EAS_PROJECT_ID,
       },

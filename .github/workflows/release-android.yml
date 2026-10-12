@@ -13,6 +13,7 @@ on:
         type: choice
         options:
           - build
+          - inspect-sentry
           - submit
       build_id:
         description: Existing EAS build ID to submit
@@ -103,6 +104,24 @@ jobs:
         working-directory: apps/mobile
         run: npm run check
 
+  inspect-sentry:
+    name: Inspect Sentry Event Evidence
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'inspect-sentry'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: android-production
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+      - name: Read sanitized event evidence
+        working-directory: apps/mobile
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_READ_TOKEN || secrets.SENTRY_AUTH_TOKEN }}
+        run: node scripts/inspect-sentry-events.mjs
+
   build:
     name: Build Android Release
     if: github.event_name == 'push' || inputs.action == 'build'
@@ -110,6 +129,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: android-production
     env:
+      EAS_BUILD_PROFILE: production
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
       - name: Checkout repository
@@ -126,9 +146,13 @@ jobs:
         working-directory: apps/mobile
         run: npm ci
 
+      - name: Verify Sentry variables in the EAS production environment
+        working-directory: apps/mobile
+        run: node scripts/verify-sentry-eas-environment.mjs --environment production
+
       - name: Build Android with EAS
         working-directory: apps/mobile
-        run: npx --yes eas-cli@24.10.0 build --platform android --profile production --non-interactive --wait --json > eas-android-build.json
+        run: npx --yes eas-cli@24.10.0 build --platform android --profile "$EAS_BUILD_PROFILE" --non-interactive --wait --json > eas-android-build.json
 
       - name: Extract EAS build ID
         id: build-metadata
@@ -155,6 +179,7 @@ jobs:
           BUILD_ID: ${{ steps.build-metadata.outputs.build_id }}
           SHA: ${{ github.sha }}
           REF: ${{ github.ref }}
+          PROFILE: ${{ env.EAS_BUILD_PROFILE }}
         run: |
           {
             echo "## Android EAS build"
@@ -162,6 +187,7 @@ jobs:
             echo "- Build ID: \`$BUILD_ID\`"
             echo "- Commit: \`$SHA\`"
             echo "- Ref: \`$REF\`"
+            echo "- Profile: \`$PROFILE\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   submit:
