@@ -10,16 +10,15 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.13.0
+## 🎉 What's New in v4.13.1
 
-**Pro Plan and Reliable Billing** - One Pro plan replaces Basic and Plus on the hosted service, billing is hardened end to end, and self-hosted servers gain opt-in crash reporting.
+**Billing Webhook Fix and Dependency Refresh** - Stripe webhooks are processed again, checkout follows the current Stripe API, and web/server dependencies are refreshed.
 
 ### Highlights
 
-- **Pro plan** - Hosted plans are now Free and Pro ($2.99/month or $24/year). New accounts get a 30-day Pro trial with no card. Existing Basic and Plus subscriptions resolve to Pro access. SaaS deployments set `STRIPE_PRICE_PRO_MONTHLY` and `STRIPE_PRICE_PRO_ANNUAL`; legacy Basic/Plus price IDs remain entitlement aliases only.
-- **Billing reliability** - Stripe webhook events are persisted and processed idempotently, checkout fails closed on incomplete configuration, and canceled checkouts reconcile entitlement correctly. The webhook table is created automatically at startup.
-- **Crash reporting (opt-in)** - Set `SENTRY_DSN` to send privacy-filtered server error reports. There is no built-in DSN; reporting is off by default. See [docs/server-crash-reporting.md](docs/server-crash-reporting.md).
-- **Analytics stay out of self-hosted images** - The public image contains no tracker. Hosted analytics ship in a separate SaaS image.
+- **Stripe webhooks fixed** - 4.13.0 rejected every verified Stripe webhook with a 500, so checkout completion, renewals, cancellations, and plan changes were never applied. 4.13.1 converts SDK objects at the boundary and reads billing periods from subscription items. After upgrading, review Stripe Dashboard → Webhooks for failed deliveries and resend any older than Stripe's retry window.
+- **Stripe 16 / API `2026-09-30.endive`** - Checkout uses `allowed_payment_method_types` to stay card-only.
+- **Dependency refresh** - Mantine 9.7.1, Vite 8.3.4, Playwright 1.64, resend 2.49.1, PyJWT 2.15.1, sentry-sdk 2.71, webauthn, and related patch releases.
 - **Mobile** - The Android app is in closed testing on Google Play; iOS is coming soon.
 
 ---

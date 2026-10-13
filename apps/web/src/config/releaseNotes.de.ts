@@ -2,6 +2,21 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.1',
+    date: '2026-10-13',
+    title: 'Abrechnungs-Webhook-Fix und Abhängigkeitsaktualisierung',
+    sections: [
+      { heading: 'Fehlerbehebungen', items: [
+        'Stripe-Webhooks werden wieder verarbeitet: Checkout-Abschluss, Verlängerungen, Kündigungen und Tarifwechsel werden jetzt auf Ihr Konto angewendet',
+        'Abrechnungszeiträume werden korrekt aus den aktuellen Stripe-Abonnementdaten gelesen',
+      ] },
+      { heading: 'Verbesserungen', items: [
+        'Der Checkout verwendet die aktuelle Stripe-API und bleibt auf Kartenzahlung beschränkt',
+        'Web- und Server-Abhängigkeiten aktualisiert, darunter Mantine 9.7, Stripe 16 und Sicherheits-Patch-Releases',
+      ] },
+    ],
+  },
+  {
     version: '4.13.0',
     date: '2026-09-30',
     title: 'Pro-Tarif und zuverlässige Abrechnung',

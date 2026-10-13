@@ -50,6 +50,21 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.1',
+    date: '2026-10-13',
+    title: 'Billing Webhook Fix and Dependency Refresh',
+    sections: [
+      { heading: 'Bug Fixes', items: [
+        'Stripe webhooks are processed again: checkout completion, renewals, cancellations, and plan changes now apply to your account',
+        'Subscription billing periods are read correctly from current Stripe subscription data',
+      ] },
+      { heading: 'Improvements', items: [
+        'Checkout uses the current Stripe API and keeps card-only payment',
+        'Refreshed web and server dependencies, including Mantine 9.7, Stripe 16, and security patch releases',
+      ] },
+    ],
+  },
+  {
     version: '4.13.0',
     date: '2026-09-30',
     title: 'Pro Plan and Reliable Billing',
