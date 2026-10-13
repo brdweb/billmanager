@@ -48,11 +48,18 @@ This document tracks implementation evidence, not a release declaration. A row m
   were not exercised.
 - Web/server production was already on `4.13.0`, revision `f910bc49`, with a
   successful public `/api/v2/ping`. Its image was not changed. Later fixes on
-  `main` are outside that release tag. A subsequent names/boolean-only runtime
-  check confirmed the SDK is installed but `SENTRY_DSN` is **not configured**:
-  server reporting is disabled. Enabling it requires the approved server-project
-  DSN and an explicit production environment/release, followed by receipt proof;
-  do not reuse the mobile project's destination by assumption.
+  `main` are outside that release tag.
+- **Server crash reporting enabled October 13 UTC (owner-approved production
+  change):** `SENTRY_DSN` for the dedicated `billmanager-server` Sentry project
+  and `SENTRY_ENVIRONMENT=production` were added to the yoda-docker runtime
+  secret file; release defaults to `server-v4.13.0`. Only `billmanager-app` was
+  recreated, on the unchanged image digest; it returned healthy and the public
+  `/api/v2/ping` returned 200. A synthetic out-of-process probe was received as
+  `billmanager-server` issue `7789083327` with the exception value replaced, no
+  canary, request, user, extra or locals data, `environment=production` and
+  `release=server-v4.13.0`. An earlier probe briefly used the mobile project's
+  DSN by mistake (mobile issue `7789078008`); that destination was replaced
+  within minutes. No real production server error has been observed yet.
 - Local isolated server Sentry tests passed in both deployment modes (13 each);
   the app-factory/database test is blocked locally by test-DB authentication.
   Bandit and the locked Python dependency audit passed. Full backend verification
