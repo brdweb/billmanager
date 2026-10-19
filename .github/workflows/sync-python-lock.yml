@@ -48,7 +48,7 @@ jobs:
       - name: Skip the workflow's own lock commit
         id: guard
         env:
-          SYNC_SUBJECT: chore(deps): sync requirements.lock for Dependabot
+          SYNC_SUBJECT: "chore(deps): sync requirements.lock for Dependabot"
         run: |
           set -euo pipefail
           subject="$(git log -1 --format=%s)"
@@ -152,7 +152,7 @@ jobs:
         env:
           PYTHON_LOCK_SYNC_TOKEN: ${{ steps.app-token.outputs.token }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          SYNC_SUBJECT: chore(deps): sync requirements.lock for Dependabot
+          SYNC_SUBJECT: "chore(deps): sync requirements.lock for Dependabot"
         run: |
           set -euo pipefail
           if [[ ! "$HEAD_REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
