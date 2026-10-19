@@ -19,7 +19,7 @@ resend==2.49.1
 stripe==16.0.0
 APScheduler==3.11.3
 requests>=2.34.2
-authlib>=1.8.0
+authlib>=1.9.1
 webauthn>=3.0.1
 PyYAML>=6.0.3
 
