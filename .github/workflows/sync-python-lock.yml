@@ -7,10 +7,8 @@ name: Sync server Python lock
 # that changed (Python 3.14, --no-header), which leaves every other pin alone.
 #
 # The lock commit is pushed with a GitHub App installation token. A push
-# authenticated as GITHUB_TOKEN does not start CI: push workflows are skipped,
-# and a pull_request synchronize is left waiting for a maintainer to approve
-# workflow runs. The app token is an ordinary git push, so the existing
-# pull_request CI runs on the lock commit.
+# authenticated as GITHUB_TOKEN does not start CI. The app token is an
+# ordinary git push, so the existing pull_request CI runs on the lock commit.
 #
 # That push starts this workflow again, because the pull request author is
 # still Dependabot and requirements.txt is still part of the diff. The new
@@ -35,13 +33,11 @@ jobs:
     if: github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: write
     steps:
       - name: Checkout pull request branch
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -60,26 +56,6 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Require the lock-sync GitHub App
-        if: steps.guard.outputs.skip != 'true'
-        env:
-          APP_ID: ${{ secrets.PYTHON_LOCK_SYNC_APP_ID }}
-          APP_PRIVATE_KEY: ${{ secrets.PYTHON_LOCK_SYNC_APP_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${APP_ID}" || -z "${APP_PRIVATE_KEY}" ]]; then
-            echo "::error::Dependabot secrets PYTHON_LOCK_SYNC_APP_ID and PYTHON_LOCK_SYNC_APP_PRIVATE_KEY are not set. Actions secrets are not available on Dependabot pull requests. Create a GitHub App with Contents: Read and write on this repository, install it here, and store the App ID and PEM private key as Dependabot secrets."
-            exit 1
-          fi
-
-      - name: Create GitHub App token
-        if: steps.guard.outputs.skip != 'true'
-        id: app-token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.PYTHON_LOCK_SYNC_APP_ID }}
-          private-key: ${{ secrets.PYTHON_LOCK_SYNC_APP_PRIVATE_KEY }}
-          permission-contents: write
 
       - name: Set up Python
         if: steps.guard.outputs.skip != 'true'
@@ -94,17 +70,15 @@ jobs:
       - name: Recompile the lock for changed direct requirements
         if: steps.guard.outputs.skip != 'true'
         env:
-          BASE_REF: ${{ github.base_ref }}
-          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          if [[ ! "$BASE_REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-            echo "Unexpected base ref." >&2
+          if [[ ! "$BASE_SHA" =~ ^[a-f0-9]{40}$ ]] ||
+             ! git cat-file -e "${BASE_SHA}^{commit}"; then
+            echo "Missing pull request base commit." >&2
             exit 1
           fi
-          git -c "http.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" fetch --no-tags origin \
-            "refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
-          merge_base="$(git merge-base HEAD "refs/remotes/origin/${BASE_REF}")"
+          merge_base="$(git merge-base HEAD "$BASE_SHA")"
           git show "${merge_base}:apps/server/requirements.txt" > "${RUNNER_TEMP}/base-requirements.txt"
 
           set +e
@@ -120,8 +94,9 @@ jobs:
           fi
 
           cmd=(
-            uv pip compile apps/server/requirements.txt
+            uv --no-config pip compile apps/server/requirements.txt
             --python-version 3.14
+            --no-build
             --no-header
             --output-file apps/server/requirements.lock
           )
@@ -146,6 +121,27 @@ jobs:
             exit 0
           fi
           git diff -- apps/server/requirements.lock
+
+      - name: Require the lock-sync GitHub App
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          APP_ID: ${{ secrets.PYTHON_LOCK_SYNC_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.PYTHON_LOCK_SYNC_APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${APP_ID}" || -z "${APP_PRIVATE_KEY}" ]]; then
+            echo "::error::Dependabot secrets PYTHON_LOCK_SYNC_APP_ID and PYTHON_LOCK_SYNC_APP_PRIVATE_KEY are not set. Create a GitHub App with Contents: Read and write on this repository, install it here, and store the App ID and PEM private key as Dependabot secrets."
+            exit 1
+          fi
+
+      - name: Create GitHub App token
+        if: steps.guard.outputs.skip != 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.PYTHON_LOCK_SYNC_APP_ID }}
+          private-key: ${{ secrets.PYTHON_LOCK_SYNC_APP_PRIVATE_KEY }}
+          permission-contents: write
 
       - name: Push the updated lock
         if: steps.guard.outputs.skip != 'true'
@@ -173,7 +169,7 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m "${SYNC_SUBJECT}" -m "Recompile apps/server/requirements.lock with --upgrade-package for the direct requirements this pull request changed. Other locked packages stay at their current pins."
+          git -c core.hooksPath=/dev/null commit -m "${SYNC_SUBJECT}" -m "Recompile apps/server/requirements.lock with --upgrade-package for the direct requirements this pull request changed. Other locked packages stay at their current pins."
 
           askpass="${RUNNER_TEMP}/git-askpass.sh"
           printf '%s\n' '#!/bin/sh' 'case "$1" in' \
@@ -185,5 +181,5 @@ jobs:
           # GITHUB_TOKEN's credential helper. persist-credentials is false,
           # so this push is not attributed to GITHUB_TOKEN.
           GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 \
-            git push "https://x-access-token@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"
+            git -c core.hooksPath=/dev/null push "https://x-access-token@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"
           rm -f "$askpass"
