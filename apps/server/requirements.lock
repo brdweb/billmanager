@@ -2,7 +2,7 @@ alembic==1.20.0
     # via flask-migrate
 apscheduler==3.11.3
     # via -r apps/server/requirements.txt
-authlib==1.8.0
+authlib==1.9.1
     # via -r apps/server/requirements.txt
 bandit==1.9.4
     # via -r apps/server/requirements.txt
@@ -172,7 +172,7 @@ rich==15.0.0
     # via
     #   bandit
     #   pip-audit
-sentry-sdk==2.71.0
+sentry-sdk==2.72.0
     # via -r apps/server/requirements.txt
 sortedcontainers==2.4.0
     # via cyclonedx-python-lib
