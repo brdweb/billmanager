@@ -318,7 +318,7 @@ export default function SharedBillsScreen() {
           ListHeaderComponent={
             pendingShares.length > 0 ? (
               <Text style={styles.sectionTitle}>{t('sharedBillsSection.pendingInvitations')}</Text>
-            ) : null
+            ) : undefined
           }
           stickyHeaderIndices={pendingShares.length > 0 ? [0] : undefined}
         />

@@ -176,7 +176,7 @@ export function LoginFlowScreen({
             autoCapitalize="none"
             autoComplete="current-password"
             secureTextEntry
-            onSubmitEditing={submit}
+            onSubmitEditing={() => { void submit(); }}
           />
         )}
       />
@@ -443,7 +443,7 @@ export function EmailRequestScreen({
             autoCapitalize="none"
             autoComplete="email"
             keyboardType="email-address"
-            onSubmitEditing={submit}
+            onSubmitEditing={() => { void submit(); }}
           />
         )}
       />

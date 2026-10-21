@@ -37,6 +37,12 @@ updates:
       - dependency-name: "@shopify/flash-list"
       # Pinned by Expo's native-module matrix and patched via patch-package.
       - dependency-name: "@sentry/react-native"
+      # babel-preset-expo and jest-expo are not matched by expo-* / @expo/*.
+      # Ignore major bumps so SDK upgrades stay deliberate (see PR #205).
+      - dependency-name: babel-preset-expo
+        update-types: ["version-update:semver-major"]
+      - dependency-name: jest-expo
+        update-types: ["version-update:semver-major"]
       # image-size 2.x removes the API used by Metro's asset parser.
       - dependency-name: image-size
         versions: [">=2.0.0"]

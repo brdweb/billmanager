@@ -1,6 +1,9 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    // SDK 58 sets module to preserve, so test imports of node:fs and
+    // node:crypto are typechecked. @types/node is only a transitive package.
+    "types": ["node"]
   }
 }

@@ -14,7 +14,9 @@ import {
   Switch,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Swipeable } from 'react-native-gesture-handler';
+import ReanimatedSwipeable, {
+  type SwipeableMethods,
+} from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { api } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
@@ -65,7 +67,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [deletePayment, setDeletePayment] = useState<Payment | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const swipeableRefs = useRef<Map<number, Swipeable>>(new Map());
+  const swipeableRefs = useRef<Map<number, SwipeableMethods>>(new Map());
 
   // Share modal state
   const [showShareModal, setShowShareModal] = useState(false);
@@ -461,7 +463,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
         ) : (
           <View style={styles.card}>
             {payments.slice(0, 10).map((payment, index) => (
-              <Swipeable
+              <ReanimatedSwipeable
                 key={payment.id}
                 ref={(ref) => {
                   if (ref) {
@@ -489,7 +491,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
                   </View>
                   <Text style={styles.paymentAmount}>{formatCurrency(payment.amount)}</Text>
                 </View>
-              </Swipeable>
+              </ReanimatedSwipeable>
             ))}
           </View>
         )}

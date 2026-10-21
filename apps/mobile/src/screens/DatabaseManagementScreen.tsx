@@ -343,7 +343,7 @@ export default function DatabaseManagementScreen({ navigation }: Props) {
               <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>
                 {t('mobileParity.groupManagement.count', { count: databases.length })}
               </Text>
-            ) : null
+            ) : undefined
           }
         />
       )}
