@@ -83,9 +83,9 @@ if (!iosEntitlements || Object.hasOwn(iosEntitlements, 'aps-environment')) {
 }
 
 const requiredAndroidBuild = {
-  compileSdkVersion: 36,
+  compileSdkVersion: 37,
   targetSdkVersion: 36,
-  buildToolsVersion: '36.0.0',
+  buildToolsVersion: '37.0.0',
 };
 for (const [label, config] of Object.entries({ production, development })) {
   const actual = buildProperties(config);
@@ -171,4 +171,4 @@ if (
   throw new Error('Android submissions must default to a draft internal-test release.');
 }
 
-console.log('Validated API 36 Android app-bundle builds, Sentry upload target, safe draft submission, and transport policy.');
+console.log('Validated API 37 compile / API 36 target Android app-bundle builds, Sentry upload target, safe draft submission, and transport policy.');

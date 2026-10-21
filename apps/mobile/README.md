@@ -37,7 +37,7 @@ npm run check
 
 This checks translation codegen and generated OpenAPI drift, runs ESLint, TypeScript, and unit tests, validates Maestro flow definitions and native build-profile transport policy, checks Expo package compatibility, and runs Expo Doctor. Device execution remains a separate release-candidate gate documented in the Maestro guide.
 
-Android production builds explicitly compile and target API 36 and produce an
+Android production builds explicitly compile against API 37, target API 36, and produce an
 Android App Bundle for Google Play. The submission profile defaults to a draft
 internal-test release so uploading a candidate cannot publish it publicly by
 accident. EAS owns and auto-increments production store build numbers remotely;
