@@ -39,7 +39,8 @@ paths and arbitrary SDK contexts are excluded. Trace propagation, tracing,
 profiling, logs, metrics, automatic sessions and client reports are disabled.
 The transport strips envelope trace metadata and all non-error items, including
 attachments and manually created sessions. This server configuration has no
-release-health/session stream; mobile release health is a separate configuration.
+release-health/session stream; mobile release health is a separate configuration
+(see [mobile crash reporting](../apps/mobile/docs/crash-reporting.md)).
 The Sentry endpoint still necessarily observes the server's network source IP.
 Sentry synthesizes a `trace` context (trace ID equal to the event ID) on receipt;
 the SDK sends only the `runtime` context and envelope `event_id`/`sent_at`

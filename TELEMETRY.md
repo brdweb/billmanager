@@ -118,6 +118,19 @@ once per rolling 24-hour period. Only the aggregate number of users active in
 the prior 30 days is included in telemetry; individual login timestamps are
 never sent.
 
+## Crash Reporting (Separate from Telemetry)
+
+Optional Sentry crash reporting is a different system with its own switch and is
+not governed by `TELEMETRY_ENABLED` or the instance telemetry consent state.
+
+- **Server:** active only when `SENTRY_DSN` is set; blank disables it. There is
+  no built-in DSN. See [docs/server-crash-reporting.md](docs/server-crash-reporting.md).
+- **Mobile app:** active only in builds produced with a `SENTRY_DSN`. See
+  [apps/mobile/docs/crash-reporting.md](apps/mobile/docs/crash-reporting.md).
+
+Both strip request data, user identity, exception messages, and breadcrumbs
+before sending; the linked pages list exactly what is retained.
+
 ## Telemetry Schedule
 
 - **First send**: 5 minutes after startup
