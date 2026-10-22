@@ -35,6 +35,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     process.env.EAS_BUILD_PROFILE === 'development' ||
     process.env.EAS_BUILD_PROFILE === 'development:device' ||
     process.env.BILLMANAGER_DEVELOPMENT_BUILD === 'true';
+  // Internal preview APKs are installed on phones, which are arm64. The other
+  // three ABIs are what push the native compile over the EAS medium worker's
+  // memory limit. Production keeps the default ABI list.
+  const previewAndroidApk = process.env.EAS_BUILD_PROFILE === 'preview';
 
   return {
     ...config,
@@ -109,6 +113,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     plugins: [
       './plugins/withLocalNotificationsOnly',
       './plugins/withReleaseLintDisabled',
+      './plugins/withAndroidBuildMemory',
       [
         '@sentry/react-native/expo',
         {
@@ -189,6 +194,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
             targetSdkVersion: 36,
             buildToolsVersion: '37.0.0',
             usesCleartextTraffic: developmentBuild,
+            ...(previewAndroidApk ? { buildArchs: ['arm64-v8a'] } : {}),
           },
         },
       ],

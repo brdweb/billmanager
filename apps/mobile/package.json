@@ -16,6 +16,7 @@
   },
   "scripts": {
     "postinstall": "patch-package",
+    "eas-build-post-install": "node scripts/limit-android-native-jobs.mjs",
     "start": "expo start --dev-client",
     "start:clear": "expo start --dev-client --clear",
     "i18n:sync": "node scripts/sync-web-translations.mjs",
