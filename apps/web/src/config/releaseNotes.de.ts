@@ -2,6 +2,22 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.2',
+    date: '2026-10-22',
+    title: 'Insights-Zeiträume und Summen geteilter Rechnungen',
+    sections: [
+      { heading: 'Fehlerbehebungen', items: [
+        'Mobile Insights: Zeiträume von 6 Monaten, 12 Monaten und Jahr liefern jetzt echte Summen und Prognosen und berücksichtigen jede Wiederholung',
+        'Mobile Analysen: 6 und 12 Monate sind die nächsten Monate ab heute, Jährlich ist das Kalenderjahr, und der Cashflow behält bereits erfasste Zahlungen dieses Monats',
+        'Jahres-, Monatsvergleichs- und Kontostatistiken zählen Zahlungen zu geteilten Rechnungen in der richtigen Richtung',
+      ] },
+      { heading: 'Verbesserungen', items: [
+        'Die Absturzberichterstattung der mobilen App ist für Entwickler dokumentiert',
+        'Web-, Server- und Mobile-Abhängigkeiten aktualisiert, darunter sentry-sdk 2.72, authlib 1.9.1 und Sicherheits-Patch-Releases',
+      ] },
+    ],
+  },
+  {
     version: '4.13.1',
     date: '2026-10-13',
     title: 'Abrechnungs-Webhook-Fix und Abhängigkeitsaktualisierung',

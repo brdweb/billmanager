@@ -5342,6 +5342,113 @@ def jwt_get_monthly_stats():
     return jsonify({"success": True, "data": monthly})
 
 
+def _payment_year_expr():
+    return func.to_char(func.to_date(Payment.payment_date, "YYYY-MM-DD"), "YYYY")
+
+
+def _payment_month_expr():
+    return func.to_char(func.to_date(Payment.payment_date, "YYYY-MM-DD"), "MM")
+
+
+def _new_stats_bucket():
+    return {"expenses": 0.0, "deposits": 0.0}
+
+
+def _add_stats_amount(buckets, key, amount, is_deposit):
+    bucket = buckets.get(key)
+    if bucket is None:
+        bucket = _new_stats_bucket()
+        buckets[key] = bucket
+    if is_deposit:
+        bucket["deposits"] += float(amount or 0)
+    else:
+        bucket["expenses"] += float(amount or 0)
+
+
+def _classified_payment_buckets(accessible_db_ids, user_id, mode, years=None):
+    """Group payments using the same direction rules as /stats/monthly.
+
+    An owner's own payment follows the bill type. A payment received from a
+    sharee is income. A payment the current user made on an accepted shared
+    bill follows that bill's type. `mode` is ``year``, ``year_month``, or
+    ``account``. ``years`` limits the first two modes to those calendar years.
+    """
+    buckets = {}
+    year_expr = _payment_year_expr()
+    month_expr = _payment_month_expr()
+    if mode == "year":
+        columns = [year_expr.label("year")]
+        group_keys = ["year"]
+    elif mode == "year_month":
+        columns = [year_expr.label("year"), month_expr.label("month")]
+        group_keys = ["year", "month"]
+    elif mode == "account":
+        columns = [Bill.account.label("account")]
+        group_keys = [Bill.account]
+    else:
+        raise ValueError(f"unsupported stats grouping: {mode}")
+
+    def row_key(row):
+        if mode == "year":
+            return row[0]
+        if mode == "year_month":
+            return (row[0], row[1])
+        return row[0]
+
+    def apply_year_filter(query):
+        if years is None:
+            return query
+        return query.filter(year_expr.in_([str(year) for year in years]))
+
+    def apply_account_filter(query):
+        if mode != "account":
+            return query
+        return query.filter(Bill.account.isnot(None), Bill.account != "")
+
+    owner_rows = apply_year_filter(
+        apply_account_filter(
+            db.session.query(*columns, func.sum(Payment.amount), Bill.type)
+            .join(Bill)
+            .filter(
+                Bill.database_id.in_(accessible_db_ids),
+                Payment.share_id.is_(None),
+            )
+        )
+    ).group_by(*group_keys, Bill.type).all()
+    for row in owner_rows:
+        _add_stats_amount(buckets, row_key(row), row[-2], row[-1] == "deposit")
+
+    received_rows = apply_year_filter(
+        apply_account_filter(
+            db.session.query(*columns, func.sum(Payment.amount))
+            .join(Bill)
+            .join(BillShare, Payment.share_id == BillShare.id)
+            .filter(
+                Bill.database_id.in_(accessible_db_ids),
+                BillShare.shared_with_user_id != user_id,
+            )
+        )
+    ).group_by(*group_keys).all()
+    for row in received_rows:
+        _add_stats_amount(buckets, row_key(row), row[-1], True)
+
+    sharee_rows = apply_year_filter(
+        apply_account_filter(
+            db.session.query(*columns, func.sum(Payment.amount), Bill.type)
+            .join(Bill)
+            .join(BillShare, Payment.share_id == BillShare.id)
+            .filter(
+                BillShare.shared_with_user_id == user_id,
+                BillShare.status == "accepted",
+            )
+        )
+    ).group_by(*group_keys, Bill.type).all()
+    for row in sharee_rows:
+        _add_stats_amount(buckets, row_key(row), row[-2], row[-1] == "deposit")
+
+    return buckets
+
+
 @api_v2_bp.route("/stats/by-account", methods=["GET"])
 @limiter.limit("60 per minute")
 @jwt_required
@@ -5356,38 +5463,17 @@ def jwt_get_stats_by_account():
         return result  # Error response
     accessible_db_ids, _ = result
 
-    # Get payments grouped by account
-    results = (
-        db.session.query(Bill.account, func.sum(Payment.amount), Bill.type)
-        .join(Payment)
-        .filter(
-            Bill.database_id.in_(accessible_db_ids),
-            Bill.account != None,
-            Bill.account != "",
-        )
-        .group_by(Bill.account, Bill.type)
-        .all()
+    by_account = _classified_payment_buckets(
+        accessible_db_ids, g.jwt_user_id, "account"
     )
-
-    # Organize by account
-    by_account = {}
-    for r in results:
-        account = r[0] or "Uncategorized"
-        if account not in by_account:
-            by_account[account] = {"expenses": 0, "deposits": 0, "total": 0}
-        if r[2] == "deposit":
-            by_account[account]["deposits"] += float(r[1])
-        else:
-            by_account[account]["expenses"] += float(r[1])
-        by_account[account]["total"] = (
-            by_account[account]["expenses"] - by_account[account]["deposits"]
-        )
+    for values in by_account.values():
+        values["total"] = values["expenses"] - values["deposits"]
 
     # Convert to sorted list
     result = [
-        {"account": k, **v}
-        for k, v in sorted(
-            by_account.items(), key=lambda x: x[1]["expenses"], reverse=True
+        {"account": account, **values}
+        for account, values in sorted(
+            by_account.items(), key=lambda item: item[1]["expenses"], reverse=True
         )
     ]
 
@@ -5408,31 +5494,7 @@ def jwt_get_stats_yearly():
         return result  # Error response
     accessible_db_ids, _ = result
 
-    # Get payments grouped by year
-    results = (
-        db.session.query(
-            func.to_char(
-                func.to_date(Payment.payment_date, "YYYY-MM-DD"), "YYYY"
-            ).label("year"),
-            func.sum(Payment.amount),
-            Bill.type,
-        )
-        .join(Bill)
-        .filter(Bill.database_id.in_(accessible_db_ids))
-        .group_by("year", Bill.type)
-        .all()
-    )
-
-    # Organize by year
-    by_year = {}
-    for r in results:
-        year = r[0]
-        if year not in by_year:
-            by_year[year] = {"expenses": 0, "deposits": 0}
-        if r[2] == "deposit":
-            by_year[year]["deposits"] += float(r[1])
-        else:
-            by_year[year]["expenses"] += float(r[1])
+    by_year = _classified_payment_buckets(accessible_db_ids, g.jwt_user_id, "year")
 
     return jsonify({"success": True, "data": by_year})
 
@@ -5454,34 +5516,16 @@ def jwt_get_monthly_comparison():
     current_year = datetime.date.today().year
     last_year = current_year - 1
 
-    # Get payments for current year and last year, grouped by month
-    results = (
-        db.session.query(
-            func.to_char(
-                func.to_date(Payment.payment_date, "YYYY-MM-DD"), "YYYY"
-            ).label("year"),
-            func.to_char(func.to_date(Payment.payment_date, "YYYY-MM-DD"), "MM").label(
-                "month"
-            ),
-            func.sum(Payment.amount),
-            Bill.type,
-        )
-        .join(Bill)
-        .filter(
-            Bill.database_id.in_(accessible_db_ids),
-            func.to_char(func.to_date(Payment.payment_date, "YYYY-MM-DD"), "YYYY").in_(
-                [str(current_year), str(last_year)]
-            ),
-        )
-        .group_by("year", "month", Bill.type)
-        .all()
+    grouped = _classified_payment_buckets(
+        accessible_db_ids,
+        g.jwt_user_id,
+        "year_month",
+        years=(current_year, last_year),
     )
 
     # Organize by month with year comparison
     monthly = {}
-    for r in results:
-        year = r[0]
-        month = r[1]
+    for (year, month), values in grouped.items():
         if month not in monthly:
             monthly[month] = {
                 "month": month,
@@ -5490,17 +5534,12 @@ def jwt_get_monthly_comparison():
                 "last_year_expenses": 0,
                 "last_year_deposits": 0,
             }
-        is_current = year == str(current_year)
-        if r[3] == "deposit":
-            if is_current:
-                monthly[month]["current_year_deposits"] += float(r[2])
-            else:
-                monthly[month]["last_year_deposits"] += float(r[2])
+        if year == str(current_year):
+            monthly[month]["current_year_expenses"] += values["expenses"]
+            monthly[month]["current_year_deposits"] += values["deposits"]
         else:
-            if is_current:
-                monthly[month]["current_year_expenses"] += float(r[2])
-            else:
-                monthly[month]["last_year_expenses"] += float(r[2])
+            monthly[month]["last_year_expenses"] += values["expenses"]
+            monthly[month]["last_year_deposits"] += values["deposits"]
 
     # Convert to sorted list (by month)
     result = sorted(monthly.values(), key=lambda x: x["month"])

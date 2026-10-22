@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ArrowLeftRight,
   BarChart3,
@@ -23,9 +23,45 @@ import SegmentedControl from '../../components/adaptive/SegmentedControl';
 import { AdaptivePlatform, typography } from '../../design/tokens';
 import { useAdaptiveLayout } from '../../design/useAdaptiveLayout';
 import { useAdaptiveTheme } from '../../design/useAdaptiveTheme';
+import type { Bill, BillFrequency } from '../../types';
+import { summarizeCashFlowWindow } from '../cashFlowProjection';
+import type { PreviewBill } from '../previewData';
 import { useBillPresentation } from '../useBillPresentation';
 
 type InsightRange = '6m' | '12m' | 'year';
+
+function frequencyFromCadence(cadence: string): BillFrequency {
+  const normalized = cadence.toLowerCase();
+  if (normalized.includes('bi')) return 'bi-weekly';
+  if (normalized.includes('week')) return 'weekly';
+  if (normalized.includes('quarter')) return 'quarterly';
+  if (normalized.includes('year') || normalized.includes('annual')) return 'yearly';
+  if (normalized.includes('once')) return 'once';
+  return 'monthly';
+}
+
+function scheduledBill(bill: PreviewBill, index: number): Bill | null {
+  if (bill.source) return bill.source;
+  if (!bill.dueDate) return null;
+  return {
+    id: Number(bill.id) || index + 1,
+    name: bill.name,
+    amount: bill.amount,
+    varies: false,
+    frequency: frequencyFromCadence(bill.cadence),
+    frequency_type: 'simple',
+    frequency_config: '{}',
+    next_due: bill.dueDate,
+    auto_payment: false,
+    icon: bill.icon,
+    type: bill.tone === 'income' ? 'deposit' : 'expense',
+    account: bill.account,
+    category: bill.category,
+    notes: null,
+    archived: false,
+    is_shared: false,
+  };
+}
 
 interface InsightsHomeScreenViewProps {
   platform: AdaptivePlatform;
@@ -41,17 +77,33 @@ export function InsightsHomeScreenView({ platform }: InsightsHomeScreenViewProps
     groupOptions,
     selectedGroup,
     selectGroup,
-    totals,
-    forecast,
+    payments,
   } = useBillPresentation();
   const [showBuckets, setShowBuckets] = useState(false);
   const [range, setRange] = useState<InsightRange>('6m');
   const [chartWidth, setChartWidth] = useState(Math.max(300, layout.contentWidth - 60));
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+  const snapshot = useMemo(() => summarizeCashFlowWindow({
+    bills: bills.flatMap((bill, index) => {
+      const scheduled = scheduledBill(bill, index);
+      return scheduled ? [scheduled] : [];
+    }),
+    payments,
+    range,
+    today: new Date(),
+  }), [bills, payments, range, todayKey]);
+  const incomeShare = snapshot.income > 0 ? Math.round((snapshot.net / snapshot.income) * 100) : 0;
   const rangeLabel = range === '6m'
-    ? t('mobileCore.insights.sixMonths')
+    ? t('mobileCore.insights.nextSixMonths')
     : range === '12m'
-      ? t('mobileCore.insights.twelveMonths')
-      : String(new Date().getFullYear());
+      ? t('mobileCore.insights.nextTwelveMonths')
+      : String(today.getFullYear());
+  const rangeCaption = range === '6m'
+    ? t('mobileCore.insights.captionSix')
+    : range === '12m'
+      ? t('mobileCore.insights.captionTwelve')
+      : t('mobileCore.insights.captionYear', { year: today.getFullYear() });
 
   const handleChartLayout = (event: LayoutChangeEvent) => {
     setChartWidth(Math.max(260, event.nativeEvent.layout.width - 24));
@@ -93,6 +145,7 @@ export function InsightsHomeScreenView({ platform }: InsightsHomeScreenViewProps
               { value: 'year', label: t('mobileCore.insights.yearly') },
             ]}
           />
+          <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{rangeCaption}</Text>
 
           <View style={[styles.metricGrid, layout.isTablet && styles.metricGridTablet]}>
             <AdaptiveSurface style={[styles.metric, { backgroundColor: theme.colors.primaryContainer }]}>
@@ -100,7 +153,7 @@ export function InsightsHomeScreenView({ platform }: InsightsHomeScreenViewProps
                 <TrendingUp size={18} color={theme.colors.primary} />
                 <Text style={[typography.caption, { color: theme.colors.primary }]}>{t('mobileCore.insights.income')}</Text>
               </View>
-              <MoneyText platform={platform} amount={totals.income} style={styles.metricAmount} />
+              <MoneyText platform={platform} amount={snapshot.income} style={styles.metricAmount} />
               <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t('mobileCore.insights.scheduledDeposits')}</Text>
             </AdaptiveSurface>
             <AdaptiveSurface style={[styles.metric, { backgroundColor: theme.colors.accentContainer }]}>
@@ -108,7 +161,7 @@ export function InsightsHomeScreenView({ platform }: InsightsHomeScreenViewProps
                 <TrendingDown size={18} color={theme.colors.accent} />
                 <Text style={[typography.caption, { color: theme.colors.accent }]}>{t('mobileCore.insights.bills')}</Text>
               </View>
-              <MoneyText platform={platform} amount={totals.expenses} style={styles.metricAmount} />
+              <MoneyText platform={platform} amount={snapshot.expenses} style={styles.metricAmount} />
               <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t('mobileCore.insights.scheduledExpenses')}</Text>
             </AdaptiveSurface>
             <AdaptiveSurface style={[styles.metric, !layout.isTablet && styles.metricFull]}>
@@ -116,10 +169,10 @@ export function InsightsHomeScreenView({ platform }: InsightsHomeScreenViewProps
                 <WalletCards size={18} color={theme.colors.primary} />
                 <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t('mobileCore.insights.netCashFlow')}</Text>
               </View>
-              <MoneyText platform={platform} amount={totals.net} signed tone={totals.net >= 0 ? 'income' : 'expense'} style={styles.metricAmount} />
+              <MoneyText platform={platform} amount={snapshot.net} signed tone={snapshot.net >= 0 ? 'income' : 'expense'} style={styles.metricAmount} />
               <Text style={[typography.caption, { color: theme.colors.textMuted }]}>
-                {totals.income > 0
-                  ? t('mobileCore.insights.percentOfIncome', { percent: Math.round((totals.net / totals.income) * 100) })
+                {snapshot.income > 0
+                  ? t('mobileCore.insights.percentOfIncome', { percent: incomeShare })
                   : t('mobileCore.insights.addDeposits')}
               </Text>
             </AdaptiveSurface>
@@ -135,12 +188,12 @@ export function InsightsHomeScreenView({ platform }: InsightsHomeScreenViewProps
             <View style={styles.chartHeadline}>
               <View>
                 <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t('mobileCore.insights.projectedBalance')}</Text>
-                <MoneyText platform={platform} amount={totals.net} signed tone={totals.net >= 0 ? 'income' : 'expense'} style={styles.chartAmount} />
+                <MoneyText platform={platform} amount={snapshot.net} signed tone={snapshot.net >= 0 ? 'income' : 'expense'} style={styles.chartAmount} />
               </View>
               <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{rangeLabel}</Text>
             </View>
             <View onLayout={handleChartLayout}>
-              <PreviewLineChart platform={platform} width={chartWidth} values={forecast} />
+              <PreviewLineChart platform={platform} width={chartWidth} values={snapshot.forecast} />
             </View>
           </AdaptiveSurface>
 

@@ -10,16 +10,17 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.13.1
+## 🎉 What's New in v4.13.2
 
-**Billing Webhook Fix and Dependency Refresh** - Stripe webhooks are processed again, checkout follows the current Stripe API, and web/server dependencies are refreshed.
+**Insights Ranges and Shared-Bill Totals** - Mobile Insights and Analytics ranges now drive real totals and forecasts, shared-bill stats count payments in the correct direction, and dependencies are refreshed.
 
 ### Highlights
 
-- **Stripe webhooks fixed** - 4.13.0 rejected every verified Stripe webhook with a 500, so checkout completion, renewals, cancellations, and plan changes were never applied. 4.13.1 converts SDK objects at the boundary and reads billing periods from subscription items. After upgrading, review Stripe Dashboard → Webhooks for failed deliveries and resend any older than Stripe's retry window.
-- **Stripe 16 / API `2026-09-30.endive`** - Checkout uses `allowed_payment_method_types` to stay card-only.
-- **Dependency refresh** - Mantine 9.7.1, Vite 8.3.4, Playwright 1.64, resend 2.49.1, PyJWT 2.15.1, sentry-sdk 2.71, webauthn, and related patch releases.
-- **Mobile** - The Android app is in closed testing on Google Play; iOS is coming soon.
+- **Insights ranges** - 6-month, 12-month, and Yearly ranges project every recurrence. Income, bills, net cash flow, projected balance, and the forecast follow the selected window.
+- **Analytics ranges** - 6 and 12 months are the next 6 or 12 months from today. Yearly is the calendar year. Cash flow keeps payments already recorded this month.
+- **Shared-bill stats** - `/stats/yearly`, `/stats/monthly-comparison`, and `/stats/by-account` count a sharee's payment on the owner's expense as income for the owner and as the sharee's own expense.
+- **Dependency and CI refresh** - sentry-sdk 2.72.0, authlib 1.9.1, Mantine 9.7.2, Vitest 5.0.5, Node 24.22, and related patch releases. Dependabot server bumps refresh the Python lock. Mobile crash reporting is documented.
+- **Mobile** - The range fix reaches devices only through a future mobile build. This release publishes the server/web container. Android remains in closed testing on Google Play; iOS is coming soon.
 
 ---
 

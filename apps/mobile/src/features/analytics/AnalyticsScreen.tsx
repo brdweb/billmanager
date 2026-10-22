@@ -131,8 +131,20 @@ export default function AnalyticsScreen({
     return <StatusPanel platform={platform} heading={t('mobileParity.analytics.notEnoughTitle')} body={t('mobileParity.analytics.notEnoughBody')} />;
   }
 
+  const summaryTitle = model.range === 'year'
+    ? t('mobileParity.analytics.annualSummary')
+    : t('mobileParity.analytics.windowSummary');
+  const rangeCaption = model.range === '6m'
+    ? t('mobileParity.analytics.captionSix')
+    : model.range === '12m'
+      ? t('mobileParity.analytics.captionTwelve')
+      : model.selectedYear < new Date().getFullYear()
+        ? t('mobileParity.analytics.captionPastYear', { year: model.selectedYear })
+        : model.selectedYear > new Date().getFullYear()
+          ? t('mobileParity.analytics.captionFutureYear', { year: model.selectedYear })
+          : t('mobileParity.analytics.captionYear', { year: model.selectedYear });
   const maxMonthly = Math.max(...model.monthly.flatMap((point) => [point.income, point.expenses]), 1);
-  const annualLabel = t('mobileParity.analytics.annualA11y', { year: model.annual.year, income: formatMoney(model.annual.income, model), expenses: formatMoney(model.annual.expenses, model), net: formatMoney(model.annual.net, model), rate: model.annual.savingsRate.toFixed(1) });
+  const annualLabel = t('mobileParity.analytics.annualA11y', { title: `${summaryTitle}. ${rangeCaption}`, income: formatMoney(model.annual.income, model), expenses: formatMoney(model.annual.expenses, model), net: formatMoney(model.annual.net, model), rate: model.annual.savingsRate.toFixed(1) });
   const cashFlowLabel = model.cashFlow.length === 0 ? t('mobileParity.analytics.noCashFlowA11y') : t('mobileParity.analytics.cashFlowA11y', { count: model.cashFlow.filter((point) => point.forecast).length, first: model.cashFlow[0].label, last: model.cashFlow[model.cashFlow.length - 1].label, start: formatMoney(model.cashFlow[0].endingBalance, model), end: formatMoney(model.cashFlow[model.cashFlow.length - 1].endingBalance, model) });
 
   return (
@@ -171,9 +183,10 @@ export default function AnalyticsScreen({
           onChange={actions.onChangeRange}
           options={[{ value: '6m', label: t('mobileParity.analytics.sixMonths') }, { value: '12m', label: t('mobileParity.analytics.twelveMonths') }, { value: 'year', label: t('mobileParity.analytics.year') }]}
         />
+        <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{rangeCaption}</Text>
 
         <View style={styles.sectionHeading}>
-          <SectionHeader platform={platform} title={t('mobileParity.analytics.annualSummary')} />
+          <SectionHeader platform={platform} title={summaryTitle} />
         </View>
         <AdaptiveSurface accessibilityLabel={annualLabel} style={styles.annualSurface}>
           <View style={styles.annualPrimary}>
@@ -196,6 +209,7 @@ export default function AnalyticsScreen({
         <View style={styles.sectionHeading}>
           <SectionHeader platform={platform} title={t('mobileParity.analytics.yearOverYear')} />
         </View>
+        <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t('mobileParity.analytics.recordedComparison')}</Text>
         <View
           accessible
           accessibilityLabel={t('mobileParity.analytics.yoyA11y', { current: model.yearOverYear.currentYear, previous: model.yearOverYear.previousYear, incomeDirection: t(model.yearOverYear.incomeChangePercent >= 0 ? 'mobileParity.analytics.up' : 'mobileParity.analytics.down'), incomeValue: Math.abs(model.yearOverYear.incomeChangePercent).toFixed(1), expenseDirection: t(model.yearOverYear.expenseChangePercent >= 0 ? 'mobileParity.analytics.up' : 'mobileParity.analytics.down'), expenseValue: Math.abs(model.yearOverYear.expenseChangePercent).toFixed(1), net: formatMoney(model.yearOverYear.netChange, model) })}

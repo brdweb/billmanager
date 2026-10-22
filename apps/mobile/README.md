@@ -8,6 +8,7 @@ The current version is `1.1.1`. Automated store submissions were attempted and f
 
 - [Implementation status and release gates](docs/implementation-status.md)
 - [Development builds, CNG, EAS, and Mac workflow](docs/development-builds.md)
+- [Crash reporting (Sentry) setup, privacy contract, and troubleshooting](docs/crash-reporting.md)
 - [HTTPS, private CA, synchronization, reminder, and widget behavior](docs/runtime-and-deployment.md)
 - [Migration from the internal alpha](docs/alpha-migration.md)
 - [Maestro Android and iOS device-flow gates](.maestro/README.md)
