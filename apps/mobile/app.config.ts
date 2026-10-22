@@ -108,6 +108,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     plugins: [
       './plugins/withLocalNotificationsOnly',
+      './plugins/withReleaseLintDisabled',
       [
         '@sentry/react-native/expo',
         {

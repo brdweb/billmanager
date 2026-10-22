@@ -88,6 +88,10 @@ const requiredAndroidBuild = {
   buildToolsVersion: '37.0.0',
 };
 for (const [label, config] of Object.entries({ production, development })) {
+  const pluginNames = config.plugins.map((entry) => (Array.isArray(entry) ? entry[0] : entry));
+  if (!pluginNames.includes('./plugins/withReleaseLintDisabled')) {
+    throw new Error(`${label} must disable Android release lint vital so EAS medium workers can assembleRelease.`);
+  }
   const actual = buildProperties(config);
   for (const [property, expected] of Object.entries(requiredAndroidBuild)) {
     if (actual?.[property] !== expected) {
