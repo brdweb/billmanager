@@ -50,6 +50,22 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.2',
+    date: '2026-10-22',
+    title: 'Insights Ranges and Shared-Bill Totals',
+    sections: [
+      { heading: 'Bug Fixes', items: [
+        'Mobile Insights 6-month, 12-month, and Yearly ranges now drive real totals and forecasts, with every recurrence projected',
+        'Mobile Analytics ranges are the next 6 or 12 months, Yearly is the calendar year, and cash flow keeps payments already recorded this month',
+        'Yearly, monthly-comparison, and by-account stats count shared-bill payments in the correct direction',
+      ] },
+      { heading: 'Improvements', items: [
+        'Mobile crash reporting is documented for developers',
+        'Refreshed web, server, and mobile dependencies, including sentry-sdk 2.72, authlib 1.9.1, and security patch releases',
+      ] },
+    ],
+  },
+  {
     version: '4.13.1',
     date: '2026-10-13',
     title: 'Billing Webhook Fix and Dependency Refresh',
