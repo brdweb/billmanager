@@ -1314,7 +1314,11 @@ def parse_frequency_config(value):
 def forecast_bill_occurrences(
     bill, amount, start_date, end_date, source, db_name, currency, share=None
 ):
-    """Generate projected bill occurrences inside a date range."""
+    """Generate projected bill occurrences in the half-open window [start_date, end_date).
+
+    A one-time bill never advances. If its due date is still before the window
+    after the walk, it is outside the window and must not be emitted.
+    """
     due_date = parse_bill_due_date(bill.due_date)
     if not due_date:
         return []
@@ -1332,7 +1336,9 @@ def forecast_bill_occurrences(
 
     occurrences = []
     guard = 0
-    while due_date <= end_date and guard < 250:
+    while due_date < end_date and guard < 250:
+        if due_date < start_date:
+            break
         signed_amount = amount if bill.type == "deposit" else -amount
         occurrences.append(
             {
@@ -5267,8 +5273,9 @@ def jwt_get_monthly_stats():
         .all()
     )
 
-    # Get payments received FROM sharees on owner's bills (share_id IS NOT NULL = sharee paid)
-    # These count as deposits/income for the owner
+    # Payments other people made on bills in an accessible database are income.
+    # The current user's own share payment is classified below, so it must not
+    # also be counted here when that user can see the owner's database.
     received_from_sharees = (
         db.session.query(
             func.to_char(
@@ -5277,9 +5284,10 @@ def jwt_get_monthly_stats():
             func.sum(Payment.amount),
         )
         .join(Bill)
+        .join(BillShare, Payment.share_id == BillShare.id)
         .filter(
             Bill.database_id.in_(accessible_db_ids),
-            Payment.share_id != None,  # Payments made by sharees
+            BillShare.shared_with_user_id != g.jwt_user_id,
         )
         .group_by("month")
         .all()
