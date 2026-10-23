@@ -23,7 +23,6 @@ Thumbs.db
 .opencode/
 /.omo/
 /opencode.json
-CLAUDE.md
 
 # Data and backup directories
 /data/
@@ -69,7 +68,8 @@ TESTING_STATUS.md
 STORE-SUBMISSION.md
 
 # Local agent instructions / tool state
-AGENTS.md
+AGENTS.local.md
+CLAUDE.local.md
 .agents/
 .codex/
 .codex-remote-attachments/
