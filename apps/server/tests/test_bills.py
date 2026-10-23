@@ -873,6 +873,58 @@ class TestCashFlowForecast:
         assert forecast['summary']['total_expenses'] == 51
         assert forecast['summary']['ending_balance'] == 49
 
+    def test_cash_flow_forecast_counts_only_occurrences_inside_half_open_window(
+        self,
+        client,
+        auth_headers_with_db,
+        db_session,
+        test_database,
+    ):
+        """Occurrences count only for due dates in [start, end).
+
+        A one-time bill does not advance, so a due date before the window
+        must be dropped instead of projected on that past date. The window
+        end itself is exclusive.
+        """
+        today = datetime.date.today()
+        days = 7
+        end = today + datetime.timedelta(days=days)
+
+        def add_bill(name, amount, frequency, due_date):
+            db_session.add(Bill(
+                database_id=test_database.id,
+                name=name,
+                amount=amount,
+                frequency=frequency,
+                due_date=due_date.isoformat(),
+                type='expense',
+                account='Checking',
+            ))
+
+        add_bill('Past one-time', 40, 'once', today - datetime.timedelta(days=1))
+        add_bill('Window start', 10, 'once', today)
+        add_bill('Day before end', 15, 'once', end - datetime.timedelta(days=1))
+        add_bill('Window end', 20, 'once', end)
+        # Started before the window. The in-window occurrence counts; the
+        # occurrence that lands on the exclusive end does not.
+        add_bill('Weekly from last week', 8, 'weekly', today - datetime.timedelta(days=7))
+        db_session.commit()
+
+        response = client.get(
+            '/api/v2/forecast/cash-flow?starting_balance=0&days=7',
+            headers=auth_headers_with_db,
+        )
+
+        assert response.status_code == 200
+        forecast = response.get_json()['data']
+        dates = [item['date'] for item in forecast['occurrences']]
+        assert (today - datetime.timedelta(days=1)).isoformat() not in dates
+        assert today.isoformat() in dates
+        assert (end - datetime.timedelta(days=1)).isoformat() in dates
+        assert end.isoformat() not in dates
+        assert forecast['summary']['total_expenses'] == 33
+        assert forecast['summary']['occurrence_count'] == 3
+
 
 class TestBillValidation:
     """Test bill input validation."""

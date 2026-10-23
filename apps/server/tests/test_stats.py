@@ -219,3 +219,34 @@ class TestStatsClassification:
         assert sharee_row['bill_type'] == 'expense'
         assert sharee_row['is_received_payment'] is False
         assert sharee_row['amount'] == pytest.approx(30)
+
+    def test_monthly_stats_count_shared_payment_once_when_sharee_can_access_owner_database(
+        self, client, stats_fixture, db_session, regular_user, test_database
+    ):
+        """A sharee's payment is one expense, even if they can open the owner's database."""
+        regular_user.accessible_databases.append(test_database)
+        db_session.commit()
+
+        month = f"{stats_fixture['current_year']}-06"
+        owner = client.get('/api/v2/stats/monthly', headers=stats_fixture['owner_headers'])
+        assert owner.status_code == 200
+        owner_month = owner.get_json()['data'][month]
+        assert owner_month['deposits'] == pytest.approx(30)
+        assert owner_month['expenses'] == pytest.approx(0)
+
+        own_database = client.get(
+            '/api/v2/stats/monthly',
+            headers=stats_fixture['sharee_headers'],
+        )
+        assert own_database.status_code == 200
+        own_month = own_database.get_json()['data'][month]
+        assert own_month['expenses'] == pytest.approx(30)
+        assert own_month['deposits'] == pytest.approx(0)
+
+        sharee_headers = stats_fixture['sharee_headers'].copy()
+        sharee_headers['X-Database'] = test_database.name
+        shared_access = client.get('/api/v2/stats/monthly', headers=sharee_headers)
+        assert shared_access.status_code == 200
+        shared_month = shared_access.get_json()['data'][month]
+        assert shared_month['expenses'] == pytest.approx(30)
+        assert shared_month['deposits'] == pytest.approx(0)
