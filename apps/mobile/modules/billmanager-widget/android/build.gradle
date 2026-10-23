@@ -30,6 +30,12 @@ android {
 }
 
 dependencies {
-  implementation "androidx.glance:glance-appwidget:1.1.1"
-  implementation "androidx.glance:glance-material3:1.1.1"
+  // Match expo-widgets, which depends on androidx.glance:glance:1.2.0. Glance
+  // publishes these artifacts as one atomic group, so a lower request is
+  // upgraded during resolution. Gradle 9.4.1 (the SDK 58 wrapper) then fails
+  // to serialize that upgraded graph:
+  // "Problems writing to Binary store" /
+  // "No target component for edge ... glance-material3".
+  implementation "androidx.glance:glance-appwidget:1.2.0"
+  implementation "androidx.glance:glance-material3:1.2.0"
 }

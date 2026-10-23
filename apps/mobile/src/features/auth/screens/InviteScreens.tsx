@@ -165,7 +165,7 @@ export function TeamInviteAcceptanceScreen({
                 error={errors.confirmPassword?.message}
                 autoComplete="new-password"
                 secureTextEntry
-                onSubmitEditing={submit}
+                onSubmitEditing={() => { void submit(); }}
               />
             )}
           />

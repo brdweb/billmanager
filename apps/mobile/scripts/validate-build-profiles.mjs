@@ -83,16 +83,34 @@ if (!iosEntitlements || Object.hasOwn(iosEntitlements, 'aps-environment')) {
 }
 
 const requiredAndroidBuild = {
-  compileSdkVersion: 36,
+  compileSdkVersion: 37,
   targetSdkVersion: 36,
-  buildToolsVersion: '36.0.0',
+  buildToolsVersion: '37.0.0',
 };
-for (const [label, config] of Object.entries({ production, development })) {
+for (const [label, config] of Object.entries({ production, preview, development })) {
+  const pluginNames = config.plugins.map((entry) => (Array.isArray(entry) ? entry[0] : entry));
+  if (!pluginNames.includes('./plugins/withReleaseLintDisabled')) {
+    throw new Error(`${label} must disable Android release lint vital so EAS medium workers can assembleRelease.`);
+  }
+  if (!pluginNames.includes('./plugins/withAndroidBuildMemory')) {
+    throw new Error(`${label} must cap Android Gradle workers so EAS medium workers can assembleRelease.`);
+  }
   const actual = buildProperties(config);
   for (const [property, expected] of Object.entries(requiredAndroidBuild)) {
     if (actual?.[property] !== expected) {
       throw new Error(`${label} Android ${property} is ${String(actual?.[property])}; expected ${expected}.`);
     }
+  }
+}
+
+const previewArchs = buildProperties(preview)?.buildArchs;
+if (JSON.stringify(previewArchs) !== JSON.stringify(['arm64-v8a'])) {
+  throw new Error(`Preview Android ABIs are ${JSON.stringify(previewArchs)}; expected ["arm64-v8a"].`);
+}
+for (const [label, config] of Object.entries({ production, development, iosPreview })) {
+  const archs = buildProperties(config)?.buildArchs;
+  if (archs) {
+    throw new Error(`${label} must keep the default Android ABIs, but buildArchs is ${JSON.stringify(archs)}.`);
   }
 }
 
@@ -171,4 +189,4 @@ if (
   throw new Error('Android submissions must default to a draft internal-test release.');
 }
 
-console.log('Validated API 36 Android app-bundle builds, Sentry upload target, safe draft submission, and transport policy.');
+console.log('Validated API 37 compile / API 36 target Android app-bundle builds, Sentry upload target, safe draft submission, and transport policy.');

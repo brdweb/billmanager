@@ -156,7 +156,7 @@ export function EmailTwoFactorSetupScreen({
                 autoComplete="one-time-code"
                 keyboardType="number-pad"
                 maxLength={6}
-                onSubmitEditing={confirm}
+                onSubmitEditing={() => { void confirm(); }}
               />
             )}
           />

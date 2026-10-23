@@ -35,6 +35,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     process.env.EAS_BUILD_PROFILE === 'development' ||
     process.env.EAS_BUILD_PROFILE === 'development:device' ||
     process.env.BILLMANAGER_DEVELOPMENT_BUILD === 'true';
+  // Internal preview APKs are installed on phones, which are arm64. The other
+  // three ABIs are what push the native compile over the EAS medium worker's
+  // memory limit. Production keeps the default ABI list.
+  const previewAndroidApk = process.env.EAS_BUILD_PROFILE === 'preview';
 
   return {
     ...config,
@@ -108,6 +112,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     plugins: [
       './plugins/withLocalNotificationsOnly',
+      './plugins/withReleaseLintDisabled',
+      './plugins/withAndroidBuildMemory',
       [
         '@sentry/react-native/expo',
         {
@@ -180,13 +186,15 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         'expo-build-properties',
         {
           android: {
-            // Google Play requires API 36 for phone app submissions beginning
-            // August 31, 2026. Keep these explicit so an SDK/tooling change
-            // cannot silently lower the generated native target.
-            compileSdkVersion: 36,
+            // Google Play requires target API 36. SDK 58's Android libraries
+            // require compiling against API 37; that does not change the
+            // runtime target. Keep these explicit so a tooling change cannot
+            // silently lower them.
+            compileSdkVersion: 37,
             targetSdkVersion: 36,
-            buildToolsVersion: '36.0.0',
+            buildToolsVersion: '37.0.0',
             usesCleartextTraffic: developmentBuild,
+            ...(previewAndroidApk ? { buildArchs: ['arm64-v8a'] } : {}),
           },
         },
       ],

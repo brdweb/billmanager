@@ -199,7 +199,7 @@ export function TwoFactorChallengeScreen({
                 autoComplete="one-time-code"
                 keyboardType="number-pad"
                 maxLength={6}
-                onSubmitEditing={verifyEmail}
+                onSubmitEditing={() => { void verifyEmail(); }}
               />
             )}
           />
@@ -236,7 +236,7 @@ export function TwoFactorChallengeScreen({
                 error={recoveryForm.formState.errors.recoveryCode?.message}
                 autoCapitalize="characters"
                 autoCorrect={false}
-                onSubmitEditing={verifyRecovery}
+                onSubmitEditing={() => { void verifyRecovery(); }}
               />
             )}
           />

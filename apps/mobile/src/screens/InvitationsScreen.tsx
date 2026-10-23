@@ -271,7 +271,7 @@ export default function InvitationsScreen({ navigation }: Props) {
               <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>
                 {t('mobileParity.invitations.count', { count: invitations.length })}
               </Text>
-            ) : null
+            ) : undefined
           }
         />
       )}

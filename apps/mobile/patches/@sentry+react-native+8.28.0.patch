@@ -1,6 +1,6 @@
 diff --git a/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/BillManagerSentryPrivacy.java b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/BillManagerSentryPrivacy.java
 new file mode 100644
-index 0000000..7bba7ea
+index 0000000..be5a290
 --- /dev/null
 +++ b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/BillManagerSentryPrivacy.java
 @@ -0,0 +1,184 @@
@@ -188,18 +188,90 @@ index 0000000..7bba7ea
 +        : null;
 +  }
 +}
-diff --git a/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java
-index 11a4b40..ecc6f29 100644
---- a/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java
-+++ b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryModuleImpl.java
-@@ -363,6 +363,7 @@ public class RNSentryModuleImpl {
+diff --git a/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryStart.java b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryStart.java
+index de3ec60..baae48f 100644
+--- a/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryStart.java
++++ b/node_modules/@sentry/react-native/android/src/main/java/io/sentry/react/RNSentryStart.java
+@@ -266,8 +266,14 @@ final class RNSentryStart {
+                   || (devServerUrl != null && url.startsWith(devServerUrl)))) {
+             return null;
+           }
+-          return breadcrumb;
++          // Native breadcrumbs can carry request URLs and view names. Drop them
++          // all; the JS client also sets maxBreadcrumbs to 0.
++          return null;
+         });
++    options.setAttachScreenshot(false);
++    options.setAttachViewHierarchy(false);
++    options.setMaxAttachmentSize(0);
++    options.setMaxBreadcrumbs(0);
+ 
+     if (rnOptions.hasKey("enableNativeCrashHandling")
+         && !rnOptions.getBoolean("enableNativeCrashHandling")) {
+@@ -398,16 +404,25 @@ final class RNSentryStart {
+    * applied after the configureOptions callback during manual native initialization.
+    */
+   static void updateWithReactFinals(@NotNull SentryAndroidOptions options) {
++    // Native crashes are captured before the JS beforeSend scrubber runs.
++    options.setAttachScreenshot(false);
++    options.setAttachViewHierarchy(false);
++    options.setMaxAttachmentSize(0);
++    options.setMaxBreadcrumbs(0);
++    options.setBeforeBreadcrumb((breadcrumb, hint) -> null);
++
+     BeforeSendCallback userBeforeSend = options.getBeforeSend();
+     options.setBeforeSend(
          (event, hint) -> {
            setEventOriginTag(event);
-           addPackages(event, options.getSdkVersion());
-+          BillManagerSentryPrivacy.scrub(event, hint);
- 
-           return event;
+           // Note: In Sentry Android SDK v7, native SDK packages/integrations are already
+           // included in the SDK version set during initialization, so no need to copy them here.
+-          if (userBeforeSend != null) {
+-            return userBeforeSend.execute(event, hint);
++          final SentryEvent processed =
++              userBeforeSend != null ? userBeforeSend.execute(event, hint) : event;
++          if (processed != null) {
++            BillManagerSentryPrivacy.scrub(processed, hint);
+           }
+-          return event;
++          return processed;
          });
+   }
+ 
+diff --git a/node_modules/@sentry/react-native/dist/js/integrations/rewriteframes.js b/node_modules/@sentry/react-native/dist/js/integrations/rewriteframes.js
+index a7ec19a..91e4414 100644
+--- a/node_modules/@sentry/react-native/dist/js/integrations/rewriteframes.js
++++ b/node_modules/@sentry/react-native/dist/js/integrations/rewriteframes.js
+@@ -21,6 +21,12 @@ export function createReactNativeRewriteFrames() {
+                 return frame;
+             }
+             delete frame.abs_path;
++            // Hermes runtime bytecode is not part of the application sourcemap.
++            // Preserve its exact public identity before Expo rewrites bundle names.
++            if (frame.filename === 'InternalBytecode.js' || frame.filename === '/InternalBytecode.js') {
++                frame.in_app = false;
++                return frame;
++            }
+             frame.filename = frame.filename
+                 .replace(/^file:\/\//, '')
+                 .replace(/^address at /, '')
+@@ -46,10 +52,6 @@ export function createReactNativeRewriteFrames() {
+                 return frame;
+             }
+             const appPrefix = 'app://';
+-            // https://github.com/getsentry/sentry-react-native/issues/3348
+-            if (frame.filename === '/InternalBytecode.js') {
+-                frame.in_app = false;
+-            }
+             // We always want to have a triple slash
+             frame.filename =
+                 frame.filename.indexOf('/') === 0 ? `${appPrefix}${frame.filename}` : `${appPrefix}/${frame.filename}`;
+@@ -57,4 +59,3 @@ export function createReactNativeRewriteFrames() {
+         },
+     });
+ }
+\ No newline at end of file
+-//# sourceMappingURL=rewriteframes.js.map
+\ No newline at end of file
 diff --git a/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.h b/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.h
 new file mode 100644
 index 0000000..ce3dbd3
@@ -213,7 +285,7 @@ index 0000000..ce3dbd3
 +NS_ASSUME_NONNULL_END
 diff --git a/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.m b/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.m
 new file mode 100644
-index 0000000..c46144a
+index 0000000..2a535f1
 --- /dev/null
 +++ b/node_modules/@sentry/react-native/ios/BillManagerSentryPrivacy.m
 @@ -0,0 +1,105 @@
@@ -303,10 +375,10 @@ index 0000000..c46144a
 +    event.modules = nil;
 +    event.sdk = BillManagerScrubSdk(event.sdk);
 +    // Mach-O lookup uses the debug UUID, not private runtime paths. Relay still
-+    // requires code_file (or name for legacy apple images) to be nonempty.
++    // requires code_file to be nonempty. Cocoa 9 sends macho images only and
++    // no longer has the legacy apple `name` field.
 +    for (SentryDebugMeta *image in event.debugMeta) {
 +        image.codeFile = [image.type isEqualToString:@"macho"] ? BillManagerRedactedEventValue : nil;
-+        image.name = [image.type isEqualToString:@"apple"] ? BillManagerRedactedEventValue : nil;
 +    }
 +    BillManagerScrubStacktrace(event.stacktrace);
 +    for (SentryThread *thread in event.threads) {
@@ -322,81 +394,69 @@ index 0000000..c46144a
 +        BillManagerScrubStacktrace(exception.stacktrace);
 +    }
 +}
-diff --git a/node_modules/@sentry/react-native/ios/RNSentry.mm b/node_modules/@sentry/react-native/ios/RNSentry.mm
-index 3461af8..d73ff74 100644
---- a/node_modules/@sentry/react-native/ios/RNSentry.mm
-+++ b/node_modules/@sentry/react-native/ios/RNSentry.mm
-@@ -52,6 +52,7 @@
- #endif
- 
- #import "RNSentryExperimentalOptions.h"
+diff --git a/node_modules/@sentry/react-native/ios/RNSentryStart.m b/node_modules/@sentry/react-native/ios/RNSentryStart.m
+index 13c1230..88978f7 100644
+--- a/node_modules/@sentry/react-native/ios/RNSentryStart.m
++++ b/node_modules/@sentry/react-native/ios/RNSentryStart.m
+@@ -1,4 +1,5 @@
+ #import "RNSentryStart.h"
 +#import "BillManagerSentryPrivacy.h"
+ #import "RNSentryExperimentalOptions.h"
+ #import "RNSentryReplay.h"
  #import "RNSentryVersion.h"
- #import "SentrySDKWrapper.h"
- 
-@@ -119,6 +120,7 @@ static bool hasFetchedAppStart;
-             }
+@@ -137,9 +138,17 @@
+                 || (devServerUrl != nil && [url hasPrefix:devServerUrl]))) {
+             return nil;
          }
- 
-+        BillManagerSentryScrubEvent(event);
-         [self setEventOriginTag:event];
-         return event;
+-        return breadcrumb;
++        // Native breadcrumbs can carry request URLs and view names. Drop them
++        // all; the JS client also sets maxBreadcrumbs to 0.
++        return nil;
      };
-diff --git a/node_modules/@sentry/react-native/ios/SentrySDKWrapper.m b/node_modules/@sentry/react-native/ios/SentrySDKWrapper.m
-index c11782d..887678a 100644
---- a/node_modules/@sentry/react-native/ios/SentrySDKWrapper.m
-+++ b/node_modules/@sentry/react-native/ios/SentrySDKWrapper.m
-@@ -41,6 +41,11 @@
-         return nil;
-     }
  
++    // Native crashes are captured before the JS beforeSend scrubber runs.
 +    sentryOptions.attachScreenshot = NO;
 +    sentryOptions.attachViewHierarchy = NO;
 +    sentryOptions.maxAttachmentSize = 0;
 +    sentryOptions.maxBreadcrumbs = 0;
 +
-     // Exclude Dev Server and Sentry Dsn request from Breadcrumbs
-     NSString *devServerUrl = [options valueForKey:@"devServerUrl"];
-     sentryOptions.beforeBreadcrumb
-@@ -53,7 +58,7 @@
-                 || (devServerUrl != nil && [url hasPrefix:devServerUrl]))) {
-             return nil;
-         }
--        return breadcrumb;
+     // JS options.enableNativeCrashHandling equals to native options.enableCrashHandler
+     if ([mutableOptions valueForKey:@"enableNativeCrashHandling"] != nil) {
+         BOOL enableNativeCrashHandling = [mutableOptions[@"enableNativeCrashHandling"] boolValue];
+@@ -231,6 +240,15 @@
+  */
+ + (void)updateWithReactFinals:(SentryOptions *)options
+ {
++    // Native crashes are captured before the JS beforeSend scrubber runs.
++    options.attachScreenshot = NO;
++    options.attachViewHierarchy = NO;
++    options.maxAttachmentSize = 0;
++    options.maxBreadcrumbs = 0;
++    options.beforeBreadcrumb = ^SentryBreadcrumb *_Nullable(SentryBreadcrumb *_Nonnull breadcrumb) {
 +        return nil;
++    };
++
+     SentryBeforeSendEventCallback userBeforeSend = options.beforeSend;
+     options.beforeSend = ^SentryEvent *(SentryEvent *event) {
+         // Unhandled JS Exception are processed by the SDK on JS layer
+@@ -249,12 +267,15 @@
+             }
+         }
+ 
+-        [self setEventOriginTag:event];
+-        if (userBeforeSend == nil) {
+-            return event;
+-        } else {
+-            return userBeforeSend(event);
++        if (userBeforeSend != nil) {
++            event = userBeforeSend(event);
++            if (event == nil) {
++                return nil;
++            }
+         }
++        BillManagerSentryScrubEvent(event);
++        [self setEventOriginTag:event];
++        return event;
      };
  
-     if ([options valueForKey:@"enableNativeCrashHandling"] != nil) {
-diff --git a/node_modules/@sentry/react-native/dist/js/integrations/rewriteframes.js b/node_modules/@sentry/react-native/dist/js/integrations/rewriteframes.js
---- a/node_modules/@sentry/react-native/dist/js/integrations/rewriteframes.js
-+++ b/node_modules/@sentry/react-native/dist/js/integrations/rewriteframes.js
-@@ -21,6 +21,12 @@ export function createReactNativeRewriteFrames() {
-                 return frame;
-             }
-             delete frame.abs_path;
-+            // Hermes runtime bytecode is not part of the application sourcemap.
-+            // Preserve its exact public identity before Expo rewrites bundle names.
-+            if (frame.filename === 'InternalBytecode.js' || frame.filename === '/InternalBytecode.js') {
-+                frame.in_app = false;
-+                return frame;
-+            }
-             frame.filename = frame.filename
-                 .replace(/^file:\/\//, '')
-                 .replace(/^address at /, '')
-@@ -46,10 +52,6 @@ export function createReactNativeRewriteFrames() {
-                 return frame;
-             }
-             const appPrefix = 'app://';
--            // https://github.com/getsentry/sentry-react-native/issues/3348
--            if (frame.filename === '/InternalBytecode.js') {
--                frame.in_app = false;
--            }
-             // We always want to have a triple slash
-             frame.filename =
-                 frame.filename.indexOf('/') === 0 ? `${appPrefix}${frame.filename}` : `${appPrefix}/${frame.filename}`;
-@@ -57,4 +59,3 @@ export function createReactNativeRewriteFrames() {
-         },
-     });
- }
--//# sourceMappingURL=rewriteframes.js.map
-\ No newline at end of file
+     // App Start Hybrid mode doesn't wait for didFinishLaunchNotification and the
