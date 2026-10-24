@@ -7,10 +7,10 @@
     // expo-updates code signing, which this app does not configure. Remove
     // when node-forge or Expo ships a fix.
     "GHSA-86w9-cpqp-85rv",
-    // braces <=3.0.3 stack exhaustion on deeply nested patterns; no patched
-    // release exists. Reached only through micromatch in build tooling
-    // (Metro file map, patch-package) with developer-controlled globs, not
-    // in the app bundle. Remove when braces ships a fix.
-    "GHSA-vfj7-8cjw-p6xm"
+    // zod 3.25.76 (nested at expo > @expo/cli > zod); @expo/cli 58.x needs
+    // zod ^3.25.76 and no patched zod 3 release exists. A zod 3 copy used
+    // only by Expo build tooling (@expo/cli), not bundled into the app.
+    // Remove when Expo ships a fixed version.
+    "GHSA-mrhx-c7xc-m3w5"
   ]
 }

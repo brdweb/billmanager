@@ -40,7 +40,7 @@ defusedxml==0.7.1
     # via py-serializable
 deprecated==1.3.1
     # via limits
-filelock==4.0.1
+filelock==4.2.4
     # via cachecontrol
 flask==3.1.3
     # via
