@@ -40,7 +40,7 @@ defusedxml==0.7.1
     # via py-serializable
 deprecated==1.3.1
     # via limits
-filelock==4.0.1
+filelock==4.2.4
     # via cachecontrol
 flask==3.1.3
     # via
@@ -164,7 +164,7 @@ requests==2.34.2
     #   resend
     #   responses
     #   stripe
-resend==2.49.1
+resend==2.50.0
     # via -r apps/server/requirements.txt
 responses==0.26.3
     # via -r apps/server/requirements.txt
