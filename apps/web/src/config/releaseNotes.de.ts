@@ -2,6 +2,22 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.3',
+    date: '2026-10-29',
+    title: 'Kontotrennung und Sitzungswiederherstellung',
+    sections: [
+      { heading: 'Fehlerbehebungen', items: [
+        'Alle Anmeldeverfahren erkennen Kontoinhaber einheitlich; verwaltete Benutzer sehen keine Bedienelemente nur für Kontoinhaber mehr',
+        'Beim Wechsel von Konto oder Rechnungsgruppe werden alte Rechnungen entfernt und verspätete Antworten der vorherigen Ansicht ignoriert',
+        'Sitzungen werden wiederhergestellt, wenn die ausgewählte Rechnungsgruppe entfernt wurde oder sich Zugriffsrechte geändert haben',
+        'Abonnementänderungen melden ihre bereits bestehende sofortige Wirkung und aktualisieren den lokalen Tarif nach Bestätigung des Zahlungsanbieters',
+      ] },
+      { heading: 'Sicherheit', items: [
+        'Die msgpack-Abhängigkeit des Servers wurde aktualisiert',
+      ] },
+    ],
+  },
+  {
     version: '4.13.2',
     date: '2026-10-22',
     title: 'Insights-Zeiträume und Summen geteilter Rechnungen',

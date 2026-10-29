@@ -10,17 +10,18 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.13.2
+## 🎉 What's New in v4.13.3
 
-**Insights Ranges and Shared-Bill Totals** - Mobile Insights and Analytics ranges now drive real totals and forecasts, shared-bill stats count payments in the correct direction, and dependencies are refreshed.
+**Account Boundaries and Session Recovery** — Consistent owner permissions, safe bill-group switching, and recovery from removed saved groups.
 
 ### Highlights
 
-- **Insights ranges** - 6-month, 12-month, and Yearly ranges project every recurrence. Income, bills, net cash flow, projected balance, and the forecast follow the selected window.
-- **Analytics ranges** - 6 and 12 months are the next 6 or 12 months from today. Yearly is the calendar year. Cash flow keeps payments already recorded this month.
-- **Shared-bill stats** - `/stats/yearly`, `/stats/monthly-comparison`, and `/stats/by-account` count a sharee's payment on the owner's expense as income for the owner and as the sharee's own expense.
-- **Dependency and CI refresh** - sentry-sdk 2.72.0, authlib 1.9.1, Mantine 9.7.2, Vitest 5.0.5, Node 24.22, and related patch releases. Dependabot server bumps refresh the Python lock. Mobile crash reporting is documented.
-- **Mobile** - The range fix reaches devices only through a future mobile build. This release publishes the server/web container. Android remains in closed testing on Google Play; iOS is coming soon.
+- **Owner permissions** — Password, OAuth, password-change, and two-factor sign-in identify account owners consistently. Managed users do not see owner-only administration or whole-account deletion controls.
+- **Safe bill switching** — Changing accounts or bill groups clears previous bills and rejects late responses from the old view.
+- **Session recovery** — A removed or revoked saved bill group no longer interrupts session restoration; the web app selects an accessible group.
+- **Billing accuracy** — The published plan-change endpoint reports its existing immediate behavior accurately and updates local plan details after provider confirmation. Stripe request and proration behavior are unchanged.
+- **Security** — Patched the server msgpack dependency.
+- **Mobile delivery** — This release publishes the server/web container. Native mobile changes require a separate signed build and store release; these notes do not confirm store approval or public availability.
 
 ---
 
