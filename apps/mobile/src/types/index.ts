@@ -256,6 +256,7 @@ export interface UserSearchResult {
 }
 
 export interface SettlementLedgerItem {
+  share_updated_at?: string | null;
   share_id: number;
   direction: 'owed_to_me' | 'i_owe';
   bill_id: number;

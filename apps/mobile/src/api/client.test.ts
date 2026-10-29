@@ -1668,4 +1668,15 @@ describe('BillManagerApi security behavior', () => {
     });
   });
 
+  it('sends the original version and due occurrence with a guarded settlement intent', async () => {
+    const { api } = createApi();
+    testMocks.mockClient.post.mockResolvedValue({ data: { success: true } });
+    await api.markSharePaid(4, undefined, 'stable-uuid', {
+      baseUpdatedAt: '2026-10-29T12:00:00.123456+00:00', expectedDueDate: '2026-10-29',
+    });
+    expect(testMocks.mockClient.post).toHaveBeenCalledWith('/shares/4/mark-paid', {
+      client_mutation_id: 'stable-uuid', base_updated_at: '2026-10-29T12:00:00.123456+00:00', expected_due_date: '2026-10-29',
+    }, expect.any(Object));
+  });
+
 });

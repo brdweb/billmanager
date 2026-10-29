@@ -42,6 +42,7 @@ describe('server capability negotiation', () => {
       administration: true,
       sharing: true,
       settlements: true,
+      settlementPaymentPreconditions: false,
     });
   });
 
@@ -76,4 +77,12 @@ describe('server capability negotiation', () => {
       });
     }
   });
+  it('does not infer guarded settlement support from the legacy settlements feature', () => {
+    const payload = { mobile: { mobile_contract_version: 1, features: { settlements: true } } };
+    expect(parseServerCapabilities(payload).settlementPaymentPreconditions).toBe(false);
+    expect(parseServerCapabilities({ mobile: { ...payload.mobile, features: {
+      settlements: true, settlement_payment_preconditions: true,
+    } } }).settlementPaymentPreconditions).toBe(true);
+  });
+
 });
