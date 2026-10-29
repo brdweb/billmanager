@@ -92,6 +92,20 @@ describe('Settings page tabs', () => {
     expect(screen.queryByRole('tab', { name: 'Bill Groups' })).not.toBeInTheDocument();
   });
 
+  it('hides whole-account deletion from managed administrators', () => {
+    mockAuth(false);
+    const auth = useAuth();
+    vi.mocked(useAuth).mockReturnValue({ ...auth, role: 'admin', user: { id: 1, username: 'managed', role: 'admin', is_account_owner: false } });
+    renderSettings();
+    expect(screen.queryByText('Account danger zone')).not.toBeInTheDocument();
+  });
+
+  it('shows whole-account deletion to owners', () => {
+    mockAuth(true);
+    renderSettings();
+    expect(screen.getByText('Account danger zone')).toBeVisible();
+  });
+
   it('exposes Users and Bill Groups tabs to administrators', () => {
     mockAuth(true);
 

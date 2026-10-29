@@ -235,12 +235,12 @@ def get_subscription(subscription_id: str) -> dict:
 
 def update_subscription(subscription_id: str, new_price_id: str, prorate: bool = True) -> dict:
     """
-    Update a subscription to a new price (upgrade/downgrade).
+    Update a subscription to a new price immediately.
 
     Args:
         subscription_id: Stripe subscription ID
         new_price_id: New Stripe price ID to switch to
-        prorate: If True, prorate charges (for upgrades). If False, change at period end (for downgrades).
+        prorate: If True, create prorations. If False, update without prorations.
 
     Returns dict with subscription details or 'error'.
     """
@@ -266,7 +266,7 @@ def update_subscription(subscription_id: str, new_price_id: str, prorate: bool =
         item_id = items[0]['id']
 
         if prorate:
-            # Immediate change with proration (for upgrades)
+            # Immediate change with proration
             updated = stripe.Subscription.modify(
                 subscription_id,
                 items=[{
@@ -277,7 +277,7 @@ def update_subscription(subscription_id: str, new_price_id: str, prorate: bool =
                 proration_behavior='create_prorations'
             )
         else:
-            # Schedule change at period end (for downgrades)
+            # Apply immediately without prorations; this does not create a schedule.
             updated = stripe.Subscription.modify(
                 subscription_id,
                 items=[{

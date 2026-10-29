@@ -21,6 +21,7 @@ describe('mobile database migrations', () => {
   it('creates every profile-scoped offline table in one migration', async () => {
     const statements: string[] = [];
     const database = {
+      runAsync: vi.fn().mockResolvedValue(undefined),
       getFirstAsync: vi.fn().mockResolvedValue({ user_version: 0 }),
       execAsync: vi.fn(async (sql: string) => { statements.push(sql); }),
       withTransactionAsync: vi.fn(async (callback: () => Promise<void>) => callback()),
@@ -45,12 +46,13 @@ describe('mobile database migrations', () => {
     }
     expect(schema).toContain('ALTER TABLE reminder_state ADD COLUMN dismissed_due_date TEXT');
     expect(schema).toContain('PRAGMA user_version = 3');
-    expect(mobileDatabaseSchemaVersion).toBe(3);
+    expect(mobileDatabaseSchemaVersion).toBe(4);
   });
 
   it('adds the authenticated session cache when upgrading schema version one', async () => {
     const statements: string[] = [];
     const database = {
+      runAsync: vi.fn().mockResolvedValue(undefined),
       getFirstAsync: vi.fn().mockResolvedValue({ user_version: 1 }),
       execAsync: vi.fn(async (sql: string) => { statements.push(sql); }),
       withTransactionAsync: vi.fn(async (callback: () => Promise<void>) => callback()),
@@ -68,6 +70,7 @@ describe('mobile database migrations', () => {
   it('adds durable reminder dismissal state when upgrading schema version two', async () => {
     const statements: string[] = [];
     const database = {
+      runAsync: vi.fn().mockResolvedValue(undefined),
       getFirstAsync: vi.fn().mockResolvedValue({ user_version: 2 }),
       execAsync: vi.fn(async (sql: string) => { statements.push(sql); }),
       withTransactionAsync: vi.fn(async (callback: () => Promise<void>) => callback()),
@@ -83,6 +86,7 @@ describe('mobile database migrations', () => {
 
   it('configures a busy timeout before exposing the shared database connection', async () => {
     const database = {
+      runAsync: vi.fn().mockResolvedValue(undefined),
       getFirstAsync: vi.fn().mockResolvedValue({ user_version: mobileDatabaseSchemaVersion }),
       execAsync: vi.fn().mockResolvedValue(undefined),
       withTransactionAsync: vi.fn(async (callback: () => Promise<void>) => callback()),

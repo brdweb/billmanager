@@ -24,6 +24,7 @@ export interface OutboxMutation<TPayload = unknown> {
   id: string;
   serverProfileId: string;
   databaseId: string;
+  principalId?: string;
   entity: SyncEntity;
   entityId: string | null;
   operation: SyncOperation;
@@ -43,6 +44,7 @@ export interface SyncConflict<TLocal = unknown, TServer = unknown> {
   mutationId: string;
   serverProfileId: string;
   databaseId: string;
+  principalId?: string;
   entity: SyncEntity;
   entityId: string | null;
   local: TLocal;
@@ -85,7 +87,7 @@ export interface OutboxMutationExecutor {
 
 export interface OutboxStore {
   enqueue(mutation: OutboxMutation): Promise<void>;
-  getReady(serverProfileId: string, databaseId: string, now: string): Promise<OutboxMutation[]>;
+  getReady(serverProfileId: string, databaseId: string, now: string, principalId?: string): Promise<OutboxMutation[]>;
   applyResult?(mutation: OutboxMutation, result: OutboxMutationResult): Promise<void>;
   markProcessing(id: string): Promise<void>;
   markCompleted(id: string): Promise<void>;
