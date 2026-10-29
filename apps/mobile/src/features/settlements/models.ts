@@ -42,6 +42,7 @@ export interface SettlementsViewModel {
   people: SettlementPersonRollup[];
   recentHistory: SettlementHistoryItem[];
   refreshing?: boolean;
+  actionBusy?: boolean;
 }
 
 export interface SettlementsActions {

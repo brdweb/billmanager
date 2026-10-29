@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { Alert } from 'react-native';
+import { randomUUID } from 'expo-crypto';
 
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -10,6 +11,7 @@ import { MobileCacheRepository } from '../../data/cacheRepository';
 import { formatDate, getFormattingConfig } from '../../i18n/format';
 import type { SettlementsResponse } from '../../types';
 import SettlementsScreen from './SettlementsScreen';
+import { settleOutstandingShares } from './actions';
 import { useTranslation } from 'react-i18next';
 
 const cacheRepository = new MobileCacheRepository();
@@ -17,15 +19,19 @@ const snapshotKey = 'settlements-v1';
 
 export default function SettlementsContainer() {
   const { t } = useTranslation();
-  const { currentDatabase, databases } = useAuth();
+  const { user, currentDatabase, databases } = useAuth();
   const { activeProfile } = useServerProfiles();
   const runtime = useMobileRuntime();
   const formatting = getFormattingConfig();
   const supported = activeProfile.capabilities?.settlements ?? false;
-  const scope = { serverProfileId: activeProfile.id, databaseId: currentDatabase ?? '' };
+  const scope = { serverProfileId: activeProfile.id, principalId: user ? String(user.id) : undefined, databaseId: currentDatabase ?? '' };
+  const pending = useRef(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const confirmations = useRef(new Set<string>());
+  const mutationIds = useRef(new Map<string, string>());
   const query = useQuery({
-    queryKey: ['settlements', activeProfile.id, currentDatabase, runtime.online],
-    enabled: supported && Boolean(currentDatabase),
+    queryKey: ['settlements', activeProfile.id, user?.id, currentDatabase, runtime.online],
+    enabled: supported && Boolean(currentDatabase) && Boolean(user),
     queryFn: async () => {
       if (!runtime.online) {
         const saved = await cacheRepository.getAnalyticsSnapshot<SettlementsResponse>(scope, snapshotKey);
@@ -39,6 +45,7 @@ export default function SettlementsContainer() {
     },
   });
   const data = query.data;
+  const requestedScope = api.captureAuthSessionScope();
   const bucketLabel = currentDatabase === '_all_'
     ? t('mobileCore.common.allBuckets')
     : databases.find((database) => database.name === currentDatabase)?.display_name ?? t('mobileParity.analytics.currentBucket');
@@ -77,6 +84,7 @@ export default function SettlementsContainer() {
           settledAtLabel: formatDate(item.paid_date ?? item.due_date),
         })),
         refreshing: query.isFetching,
+        actionBusy: actionBusy || query.isFetching,
       }}
       actions={{
         onOpenPerson: (name) => {
@@ -84,16 +92,38 @@ export default function SettlementsContainer() {
           Alert.alert(name, bills.length > 0 ? bills.map((item) => `${item.bill_name}: ${new Intl.NumberFormat(formatting.locale, { style: 'currency', currency: formatting.currency }).format(item.amount)}`).join('\n') : t('mobileParity.settlements.noOpenBills'));
         },
         onMarkPaid: (name) => {
-          const items = (data?.i_owe ?? []).filter((candidate) => candidate.counterparty_name === name);
+          if (pending.current || !runtime.online || query.isFetching) return;
+          const itemKey = (item: NonNullable<typeof data>['i_owe'][number]) => JSON.stringify([scope, item.share_id, item.due_date]);
+          const items = (data?.i_owe ?? []).filter((candidate) => candidate.counterparty_name === name && !confirmations.current.has(itemKey(candidate)));
           if (items.length === 0) return;
+          pending.current = true;
+          setActionBusy(true);
+          const finish = () => { pending.current = false; setActionBusy(false); };
           const total = items.reduce((sum, item) => sum + item.amount, 0);
           Alert.alert(t('mobileParity.settlements.settleTitle'), t('mobileParity.settlements.settleBody', { count: items.length, amount: new Intl.NumberFormat(formatting.locale, { style: 'currency', currency: formatting.currency }).format(total) }), [
-            { text: t('mobileParity.common.cancel'), style: 'cancel' },
+            { text: t('mobileParity.common.cancel'), style: 'cancel', onPress: finish },
             {
               text: t('settlementsPage.markPaidButton'),
-              onPress: () => void Promise.all(items.map((item) => api.markSharePaid(item.share_id))).then(() => query.refetch()),
+              onPress: () => void (async () => {
+                try {
+                  const result = await settleOutstandingShares(items.map((item) => item.share_id), new Set<number>(),
+                    (id) => {
+                      const key = itemKey(items.find((item) => item.share_id === id)!);
+                      const mutationId = mutationIds.current.get(key) ?? randomUUID();
+                      mutationIds.current.set(key, mutationId);
+                      return api.markSharePaid(id, requestedScope, mutationId);
+                    }, () => api.isPrincipalScopeAuthenticated(requestedScope));
+                  for (const item of items) if (result.succeeded.includes(item.share_id)) confirmations.current.add(itemKey(item));
+                  if (!await api.isPrincipalScopeAuthenticated(requestedScope)) return;
+                  if (result.failed.length) Alert.alert(t('settlementsPage.markPaidFailedTitle'),
+                    `${t('settlementsPage.markPaidSuccess')}: ${result.succeeded.length}/${items.length}\n${t('settlementsPage.markPaidFailedBody')}\n${items.filter((item) => result.failed.includes(item.share_id)).map((item) => item.bill_name).join('\n')}`);
+                  await query.refetch();
+                } catch {
+                  if (await api.isPrincipalScopeAuthenticated(requestedScope)) Alert.alert(t('settlementsPage.markPaidFailedTitle'), t('settlementsPage.markPaidFailedBody'));
+                } finally { finish(); }
+              })(),
             },
-          ]);
+          ], { cancelable: false });
         },
         onOpenHistory: () => Alert.alert(t('mobileParity.settlements.historyTitle'), t('mobileParity.settlements.historyBody', { count: data?.settled.length ?? 0 })),
         onRefresh: () => void query.refetch(),

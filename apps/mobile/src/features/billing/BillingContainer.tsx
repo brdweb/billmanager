@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
-import React from 'react';
-import { Alert } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Alert, Platform } from 'react-native';
 
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -11,6 +11,7 @@ import { formatDate, getFormattingConfig } from '../../i18n/format';
 import BillingScreen from './BillingScreen';
 import type { SubscriptionState } from './models';
 import { proPlans } from './pricing';
+import { allowsExternalPurchases, runBillingAction } from './actions';
 import { useTranslation } from 'react-i18next';
 
 export default function BillingContainer() {
@@ -21,8 +22,8 @@ export default function BillingContainer() {
   const formatting = getFormattingConfig();
   const selfHosted = activeProfile.deploymentMode !== 'saas' || !activeProfile.capabilities?.billing;
   const query = useQuery({
-    queryKey: ['billing', activeProfile.id],
-    enabled: !selfHosted && runtime.online,
+    queryKey: ['billing', activeProfile.id, user?.id],
+    enabled: !selfHosted && runtime.online && Boolean(user),
     queryFn: async () => {
       const [status, usage] = await Promise.all([api.getSubscriptionStatus(), api.getBillingUsage()]);
       if (!status.success || !usage.success) throw new Error(status.error ?? usage.error ?? t('mobileParity.billing.unavailableBody'));
@@ -36,19 +37,27 @@ export default function BillingContainer() {
     : subscription?.is_trialing
       ? 'trialing'
       : subscription?.status ?? (subscription?.has_subscription ? 'active' : 'free');
+  const actionGate = useRef(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const requestedScope = api.captureAuthSessionScope();
+  const purchasesAllowed = allowsExternalPurchases(Platform.OS);
   const plans = proPlans(t, tier, subscription?.billing_interval);
 
-  const openCheckout = async (planId: string) => {
-    const [tierName, interval] = planId.split('-') as ['pro', 'month' | 'year'];
-    const response = await api.createCheckoutSession(tierName, interval === 'month' ? 'monthly' : 'annual');
-    if (response.success && response.data?.url) await Linking.openURL(response.data.url);
-    else Alert.alert(t('mobileParity.billing.unavailableTitle'), response.error ?? t('mobileParity.billing.checkoutFailed'));
+  const runAction = (request: () => ReturnType<typeof api.createPortalSession>, failureKey: string) => runBillingAction({
+    gate: actionGate,
+    allowed: purchasesAllowed && Boolean(user?.is_account_owner) && runtime.online && !selfHosted,
+    isCurrent: () => api.isPrincipalScopeAuthenticated(requestedScope),
+    request,
+    openUrl: Linking.openURL,
+    onBusy: setActionBusy,
+    onError: (message) => Alert.alert(t('mobileParity.billing.unavailableTitle'), message ?? t(failureKey)),
+  });
+  const openCheckout = (planId: string) => {
+    if (!/^pro-(month|year)$/.test(planId)) return;
+    const interval = planId.endsWith('-month') ? 'monthly' : 'annual';
+    return runAction(() => api.createCheckoutSession('pro', interval, requestedScope), 'mobileParity.billing.checkoutFailed');
   };
-  const openPortal = async () => {
-    const response = await api.createPortalSession();
-    if (response.success && response.data?.url) await Linking.openURL(response.data.url);
-    else Alert.alert(t('mobileParity.billing.unavailableTitle'), response.error ?? t('mobileParity.billing.portalFailed'));
-  };
+  const openPortal = () => runAction(() => api.createPortalSession(requestedScope), 'mobileParity.billing.portalFailed');
 
   return (
     <BillingScreen
@@ -79,8 +88,9 @@ export default function BillingContainer() {
           limit: value.unlimited ? null : value.limit,
           unitLabel: id.replace('_', ' '),
         })),
-        plans: selfHosted ? [] : plans,
-        canManageBilling: Boolean(user?.is_account_owner),
+        plans: selfHosted || !purchasesAllowed ? [] : plans,
+        canManageBilling: purchasesAllowed && Boolean(user?.is_account_owner),
+        actionBusy,
         refreshing: query.isFetching,
       }}
       actions={{
