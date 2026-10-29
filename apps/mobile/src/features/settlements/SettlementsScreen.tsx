@@ -74,7 +74,7 @@ function PersonRow({ person, model, actions, platform, isLast }: { person: Settl
         </View>
         <ChevronRight size={19} color={theme.colors.textMuted} />
       </Pressable>
-      {person.direction === 'you-owe' ? (
+      {person.canMarkPaid ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('mobileParity.settlements.markBalanceA11y', { name: person.displayName })}

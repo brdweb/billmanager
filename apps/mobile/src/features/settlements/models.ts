@@ -8,6 +8,7 @@ export interface SettlementPersonRollup {
   email?: string;
   balance: number;
   direction: SettlementDirection;
+  canMarkPaid: boolean;
   sharedBillCount: number;
   lastActivityLabel: string;
   pendingSync?: boolean;
