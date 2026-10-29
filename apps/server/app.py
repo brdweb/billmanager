@@ -4679,7 +4679,8 @@ def jwt_mark_share_paid(share_id):
             return _error_response("invalid_base_bill_updated_at", "base_bill_updated_at must be an RFC3339 timestamp with a UTC offset", 400)
         conflict = _optimistic_conflict(
             {"base_updated_at": data["base_bill_updated_at"]}, "bill", share.bill.id,
-            share.bill.last_updated, _bill_conflict_data(share.bill),
+            share.bill.last_updated, {"id": share.bill.id, "due_date": share.bill.due_date,
+                "last_updated": _isoformat_utc(share.bill.last_updated)},
         )
         if conflict:
             return conflict

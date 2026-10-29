@@ -229,3 +229,17 @@ def test_guarded_payment_requires_bill_version(client, settlement):
     del payload["base_bill_updated_at"]
     assert post(client, settlement, payload).status_code == 400
     assert Payment.query.filter_by(share_id=settlement[0]).count() == 0
+
+
+def test_bill_version_conflict_does_not_disclose_owner_private_fields(client, settlement, db_session):
+    bill = db_session.get(Bill, settlement[1])
+    bill.notes = "owner-private-notes-sentinel"
+    bill.account = "owner-private-account-sentinel"
+    bill.category = "owner-private-category-sentinel"
+    db_session.commit()
+    response = post(client, settlement)
+    assert response.status_code == 409
+    snapshot = response.get_json()["conflict"]["server"]
+    assert set(snapshot) == {"id", "due_date", "last_updated"}
+    assert "owner-private" not in response.get_data(as_text=True)
+    assert Payment.query.filter_by(share_id=settlement[0]).count() == 0
