@@ -17,13 +17,13 @@ function loadConfig({ development, profile = '' }) {
   return JSON.parse(output);
 }
 
-function loadIntrospectedProductionConfig() {
+function loadIntrospectedProductionConfig(profile = 'production') {
   const output = execFileSync(npx, ['expo', 'config', '--type', 'introspect', '--json'], {
     cwd: new URL('..', import.meta.url),
     encoding: 'utf8',
     env: {
       ...process.env,
-      EAS_BUILD_PROFILE: 'production',
+      EAS_BUILD_PROFILE: profile,
       BILLMANAGER_DEVELOPMENT_BUILD: 'false',
       NO_COLOR: '1',
     },
@@ -67,13 +67,42 @@ const production = loadConfig({ development: false, profile: 'production' });
 const preview = loadConfig({ development: false, profile: 'preview' });
 const iosPreview = loadConfig({ development: false, profile: 'preview:ios' });
 const development = loadConfig({ development: true, profile: 'development' });
+const deviceDevelopment = loadConfig({ development: true, profile: 'development:device' });
+const localRelease = loadConfig({ development: false });
 const introspectedProduction = loadIntrospectedProductionConfig();
+const introspectedPreview = loadIntrospectedProductionConfig('preview');
 assertPolicy(production, false, 'Preview/release');
 assertPolicy(development, true, 'Development');
 
 for (const [label, config] of Object.entries({ production, preview, iosPreview, development })) {
   if (Object.hasOwn(config.extra ?? {}, 'sentryTestCrashEnabled')) {
     throw new Error(`${label} must not contain the removed Sentry native-crash harness.`);
+  }
+}
+
+for (const [label, config] of Object.entries({ production, preview, iosPreview, localRelease })) {
+  if (config.updates?.enabled !== false || config.updates?.checkAutomatically !== 'NEVER'
+    || config.updates?.useEmbeddedUpdate !== true || config.updates?.url !== undefined) {
+    throw new Error(`${label} must disable OTA and launch only its embedded store-delivered bundle.`);
+  }
+  const expected = label === 'preview' || label === 'iosPreview' ? 'preview' : 'production';
+  if (config.extra?.buildEnvironment !== expected) throw new Error(`${label} has an invalid embedded build environment.`);
+}
+for (const [label, config] of Object.entries({ development, deviceDevelopment })) {
+  if (config.updates?.enabled !== true || config.extra?.buildEnvironment !== 'development') {
+    throw new Error(`${label} must retain development-client updates and an explicit development environment.`);
+  }
+}
+for (const [label, config] of Object.entries({ production: introspectedProduction, preview: introspectedPreview })) {
+  const mods = config._internal?.modResults;
+  const metadata = mods?.android?.manifest?.manifest?.application?.[0]?.['meta-data'] ?? [];
+  const enabled = metadata.find((item) => item.$?.['android:name'] === 'expo.modules.updates.ENABLED');
+  if (enabled?.$?.['android:value'] !== 'false' || mods?.ios?.expoPlist?.EXUpdatesEnabled !== false) {
+    throw new Error(`${label} generated Android/iOS native configuration must disable Expo Updates.`);
+  }
+  if (metadata.some((item) => item.$?.['android:name'] === 'expo.modules.updates.EXPO_UPDATE_URL')
+    || Object.hasOwn(mods?.ios?.expoPlist ?? {}, 'EXUpdatesURL')) {
+    throw new Error(`${label} native configuration must omit the remote update endpoint.`);
   }
 }
 
@@ -189,4 +218,4 @@ if (
   throw new Error('Android submissions must default to a draft internal-test release.');
 }
 
-console.log('Validated API 37 compile / API 36 target Android app-bundle builds, Sentry upload target, safe draft submission, and transport policy.');
+console.log('Validated API 37 compile / API 36 target Android app-bundle builds, Sentry upload target, safe draft submission, embedded-only release updates, and transport policy.');

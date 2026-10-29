@@ -322,7 +322,7 @@ DEFAULT_LOCALE = os.environ.get("DEFAULT_LOCALE", "en-US")
 # version: it only changes when a mobile client must handle a breaking contract
 # change. An unset minimum version means that any client implementing the
 # advertised contract is accepted.
-SERVER_VERSION = os.environ.get("APP_VERSION", "4.13.2")
+SERVER_VERSION = os.environ.get("APP_VERSION", "4.13.3")
 MOBILE_CONTRACT_VERSION = 1
 MINIMUM_MOBILE_VERSION = os.environ.get("MINIMUM_MOBILE_VERSION") or None
 
@@ -426,6 +426,7 @@ def get_mobile_capabilities(enabled_providers=None):
             "administration": True,
             "sharing": True,
             "settlements": True,
+            "settlement_payment_preconditions": True,
             "telemetry": True,
             "delta_sync": True,
             "idempotent_mutations": True,

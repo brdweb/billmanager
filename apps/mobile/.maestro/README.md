@@ -69,3 +69,13 @@ npm run maestro:validate
 ```
 
 The validator parses every flow as strict YAML, checks the correct Android/iOS app identifier, rejects unrecognized commands, requires isolated `clearState` launches, and verifies that both platform suites retain auth, five-tab, and offline/conflict coverage. It does not substitute for an executed device run.
+
+## Manual native Simulator lane
+
+The credential-free [iOS Simulator QA workflow](../docs/ios-simulator-qa.md)
+executes the iOS `auth` flow on a native Release Simulator app from reviewed
+`main`, with production HTTPS policy and explicit generated OTA/Sentry
+exceptions. It captures login/recovery screenshots and build/test evidence.
+For local runs, use `--test-output-dir /tmp/billmanager-maestro` to keep
+screenshots outside the source tree. This does not replace signed physical
+candidate acceptance or authenticated device flows.

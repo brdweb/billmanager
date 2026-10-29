@@ -4,10 +4,12 @@ import * as Updates from 'expo-updates';
 import { Platform } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 
+import { resolveBuildEnvironment } from './buildEnvironment';
 import { createSentryOptions } from './sentryPrivacy';
 
 type MobileExtra = {
   releaseVersion?: unknown;
+  buildEnvironment?: unknown;
   sentryDsn?: unknown;
 };
 
@@ -16,8 +18,7 @@ function configuredExtra(): MobileExtra {
 }
 
 function runtimeEnvironment(): string {
-  if (Updates.channel) return Updates.channel;
-  return __DEV__ ? 'development' : 'production';
+  return resolveBuildEnvironment(configuredExtra().buildEnvironment, Updates.channel, __DEV__);
 }
 
 /**

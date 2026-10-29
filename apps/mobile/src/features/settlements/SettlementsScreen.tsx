@@ -74,20 +74,20 @@ function PersonRow({ person, model, actions, platform, isLast }: { person: Settl
         </View>
         <ChevronRight size={19} color={theme.colors.textMuted} />
       </Pressable>
-      {!settled ? (
+      {person.canMarkPaid ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('mobileParity.settlements.markBalanceA11y', { name: person.displayName })}
-          accessibilityState={{ disabled: model.offline }}
+          accessibilityState={{ disabled: model.offline || model.actionBusy, busy: model.actionBusy }}
           accessibilityHint={model.offline ? t('mobileParity.settlements.connectHint') : t('mobileParity.settlements.markHint')}
-          disabled={model.offline}
+          disabled={model.offline || model.actionBusy}
           onPress={() => actions.onMarkPaid(person.userId)}
           style={({ pressed }) => [
             styles.markPaid,
             {
               minHeight: theme.minimumHitSize,
               borderColor: theme.colors.border,
-              opacity: model.offline ? 0.42 : pressed ? 0.56 : 1,
+              opacity: model.offline || model.actionBusy ? 0.42 : pressed ? 0.56 : 1,
             },
           ]}
         >

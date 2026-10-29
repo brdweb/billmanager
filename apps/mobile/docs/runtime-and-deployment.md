@@ -2,6 +2,22 @@
 
 This document defines the support boundary for self-hosted transport security, offline synchronization, local reminders, and widgets. Store/support copy must not promise behavior beyond this boundary.
 
+## Application updates
+
+New preview and production binaries disable Expo Updates and run only the code
+and assets embedded in the installed binary. Fixes arrive through a new
+TestFlight, Google Play, App Store, or explicitly installed preview binary;
+there is no production OTA hotfix/download/rollback path at launch. Development
+clients retain their development update configuration and Metro workflow.
+
+This removes the release app's automatic Expo Update requests, whose client ID,
+update metadata and previous fatal-error header are independent of Sentry's
+payload filtering. It does not change already-installed older binaries and does
+not establish wire-level privacy proof. Validate the final candidate's embedded
+Android/iOS flags and actual startup/crash/relaunch traffic before closing that
+release gate. Expo build services and the remaining approved runtime services
+retain their separate boundaries.
+
 ## Production server transport
 
 Production mobile connections require:
@@ -17,7 +33,7 @@ Release builds reject cleartext HTTP in both the profile validator and native tr
 
 ## Development HTTP
 
-Development builds may connect to a local HTTP server. This exception exists only for emulator/device development and is controlled by `BILLMANAGER_RELEASE_BUILD=false`.
+Development builds may connect to a local HTTP server. This exception exists only for emulator/device development and is controlled by `BILLMANAGER_DEVELOPMENT_BUILD=true`.
 
 Never use a development or preview binary to certify production transport behavior. The release gate must exercise a `production`-profile binary and confirm that an HTTP URL is rejected.
 
@@ -69,6 +85,22 @@ Routine transfers and retries are automatic and do not require a decision. When 
 - **Keep my changes**: rebase and retry the local mutation against the server update timestamp.
 
 Security, OAuth, sharing changes, settlements, administration, and SaaS billing remain online-only and require a fresh server response.
+
+### Safe shared-bill payment recording
+
+Mark Paid from Settlements requires the server's
+`settlement_payment_preconditions` feature plus each row's `share_updated_at`,
+`bill_updated_at` and due date. Earlier servers remain readable, but the app asks for a server
+update and refresh rather than sending an unguarded toggle.
+
+Each payment intent sends its original `client_mutation_id`, `base_updated_at`,
+`base_bill_updated_at` and `expected_due_date` together. An uncertain retry keeps
+all four values;
+it never silently substitutes a newer version into an old intent. A definite
+409 conflict blocks that intent until a real, causally fresh server read lets
+the user review the current amount/date and explicitly try again. A reopened
+or renewed occurrence receives a new intent only after current server state
+has been observed. Cached data and late pre-mutation reads cannot reset retries.
 
 ## Synchronization timing
 

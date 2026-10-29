@@ -688,9 +688,11 @@ def _commit_with_client_mutation(mutation, response_payload, status_code=200):
     return None
 
 
-def _get_bill_for_mutation(bill_id, *, required=True):
+def _get_bill_for_mutation(bill_id, *, required=True, refresh=False, no_key_update=False):
     """Lock a bill row so a timestamp check and write are atomic."""
-    query = Bill.query.filter_by(id=bill_id).with_for_update()
+    query = Bill.query.filter_by(id=bill_id).with_for_update(key_share=no_key_update)
+    if refresh:
+        query = query.populate_existing()
     return query.first_or_404() if required else query.first()
 
 
@@ -700,9 +702,12 @@ def _get_payment_for_mutation(payment_id, *, required=True):
     return query.first_or_404() if required else query.first()
 
 
-def _get_share_for_mutation(share_id):
+def _get_share_for_mutation(share_id, *, refresh=False):
     """Lock a share row so a timestamp check and write are atomic."""
-    return BillShare.query.filter_by(id=share_id).with_for_update().first_or_404()
+    query = BillShare.query.filter_by(id=share_id).with_for_update()
+    if refresh:
+        query = query.populate_existing()
+    return query.first_or_404()
 
 
 def resolve_accessible_db_ids():
@@ -809,6 +814,7 @@ def serialize_settlement_share(share, direction, currency, db_name_lookup=None):
         "created_at": share.created_at.isoformat() if share.created_at else None,
         "accepted_at": share.accepted_at.isoformat() if share.accepted_at else None,
         "share_updated_at": _isoformat_utc(share.updated_at),
+        "bill_updated_at": _isoformat_utc(bill.last_updated),
     }
 
 
@@ -4606,8 +4612,23 @@ def jwt_leave_share(share_id):
 @jwt_required
 def jwt_mark_share_paid(share_id):
     """Mark recipient's portion of shared bill as paid and create payment record."""
-    data = request.get_json(silent=True) or {}
-    share = _get_share_for_mutation(share_id)
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        return _error_response("invalid_request_body", "Request body must be an object", 400)
+    guarded = "expected_due_date" in data
+    # NO KEY UPDATE blocks due-date edits but permits FK KEY SHARE locks from
+    # existing share-first audit/payment inserts, avoiding a lock-order cycle.
+    # Read columns only, then explicitly refresh any preloaded ORM state after
+    # waiting for each row lock.
+    identity = BillShare.query.with_entities(
+        BillShare.bill_id, BillShare.shared_with_user_id
+    ).filter_by(id=share_id).first_or_404()
+    if identity.shared_with_user_id != g.jwt_user_id:
+        return jsonify({"success": False, "error": "Access denied"}), 403
+    _get_bill_for_mutation(identity.bill_id, refresh=True, no_key_update=True)
+    share = _get_share_for_mutation(share_id, refresh=True)
 
     # Only the share recipient can mark their portion as paid
     if share.shared_with_user_id != g.jwt_user_id:
@@ -4618,6 +4639,8 @@ def jwt_mark_share_paid(share_id):
     )
     if mutation_response:
         return mutation_response
+    if guarded and "base_updated_at" not in data:
+        return _error_response("invalid_base_updated_at", "base_updated_at is required with expected_due_date", 400)
     conflict = _optimistic_conflict(
         data,
         "share",
@@ -4627,6 +4650,40 @@ def jwt_mark_share_paid(share_id):
     )
     if conflict:
         return conflict
+
+    if guarded:
+        expected_due = data["expected_due_date"]
+        if (not isinstance(expected_due, str)
+                or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", expected_due)
+                or parse_bill_due_date(expected_due) is None):
+            return _error_response("invalid_expected_due_date", "expected_due_date must be a YYYY-MM-DD date", 400)
+        reason = "occurrence_changed" if expected_due != share.bill.due_date else (
+            "already_paid" if share.recipient_paid_date else None
+        )
+        if reason:
+            return jsonify({
+                "success": False, "error": "Settlement changed; refresh before marking paid",
+                "code": "resource_conflict", "conflict": {
+                    "entity": "share", "entity_id": share.id, "reason": reason,
+                    "base_updated_at": data["base_updated_at"],
+                    "server_updated_at": _isoformat_utc(share.updated_at),
+                    "server": {**_share_conflict_data(share), "due_date": share.bill.due_date},
+                },
+            }), 409
+
+    if guarded:
+        if "base_bill_updated_at" not in data:
+            return _error_response("invalid_base_bill_updated_at", "base_bill_updated_at is required with expected_due_date", 400)
+        _, error = _parse_base_updated_at({"base_updated_at": data["base_bill_updated_at"]})
+        if error:
+            return _error_response("invalid_base_bill_updated_at", "base_bill_updated_at must be an RFC3339 timestamp with a UTC offset", 400)
+        conflict = _optimistic_conflict(
+            {"base_updated_at": data["base_bill_updated_at"]}, "bill", share.bill.id,
+            share.bill.last_updated, {"id": share.bill.id, "due_date": share.bill.due_date,
+                "last_updated": _isoformat_utc(share.bill.last_updated)},
+        )
+        if conflict:
+            return conflict
 
     if share.status != "accepted":
         return jsonify({"success": False, "error": "Share is not active"}), 400

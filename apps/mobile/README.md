@@ -46,6 +46,11 @@ the local Android version code remains the preview/sideload baseline. Final
 bundles must also be checked for 16 KB page alignment before promotion in Play
 Console.
 
+New preview and production builds use only their embedded JavaScript and assets;
+Expo OTA updates are disabled for launch. App changes require a new installed or
+store-delivered binary. Existing older installations are unaffected until users
+install the new build. See [application update behavior](docs/runtime-and-deployment.md#application-updates).
+
 ## Source-of-truth rules
 
 - `package.json` owns the semantic mobile release version, including any prerelease marker.
