@@ -2707,6 +2707,7 @@ def jwt_get_bills():
             "is_shared": True,
             "share_info": {
                 "share_id": share.id,
+                "share_updated_at": _isoformat_utc(share.updated_at),
                 "owner_name": owner_name,
                 "my_portion": my_portion,
                 "my_portion_paid": share.is_recipient_paid,
@@ -2910,6 +2911,7 @@ def jwt_get_bill(bill_id):
         b_dict["is_shared"] = True
         b_dict["share_info"] = {
             "share_id": share.id,
+            "share_updated_at": _isoformat_utc(share.updated_at),
             "owner_name": owner.username if owner else "Unknown",
             "my_portion": my_portion,
             "my_portion_paid": share.is_recipient_paid,
@@ -4639,8 +4641,22 @@ def jwt_mark_share_paid(share_id):
     )
     if mutation_response:
         return mutation_response
+    desired_paid = data.get("desired_paid", True)
+    if "desired_paid" in data:
+        if not isinstance(desired_paid, bool):
+            return _error_response("invalid_desired_paid", "desired_paid must be a boolean", 400)
+        if not guarded:
+            return _error_response("invalid_expected_due_date", "expected_due_date is required with desired_paid", 400)
+        if "client_mutation_id" not in data:
+            return _error_response("invalid_client_mutation_id", "client_mutation_id is required with desired_paid", 400)
     if guarded and "base_updated_at" not in data:
         return _error_response("invalid_base_updated_at", "base_updated_at is required with expected_due_date", 400)
+    if guarded:
+        if "base_bill_updated_at" not in data:
+            return _error_response("invalid_base_bill_updated_at", "base_bill_updated_at is required with expected_due_date", 400)
+        _, error = _parse_base_updated_at({"base_updated_at": data["base_bill_updated_at"]})
+        if error:
+            return _error_response("invalid_base_bill_updated_at", "base_bill_updated_at must be an RFC3339 timestamp with a UTC offset", 400)
     conflict = _optimistic_conflict(
         data,
         "share",
@@ -4658,7 +4674,8 @@ def jwt_mark_share_paid(share_id):
                 or parse_bill_due_date(expected_due) is None):
             return _error_response("invalid_expected_due_date", "expected_due_date must be a YYYY-MM-DD date", 400)
         reason = "occurrence_changed" if expected_due != share.bill.due_date else (
-            "already_paid" if share.recipient_paid_date else None
+            ("already_paid" if desired_paid else "already_unpaid")
+            if bool(share.recipient_paid_date) == desired_paid else None
         )
         if reason:
             return jsonify({
@@ -4672,11 +4689,6 @@ def jwt_mark_share_paid(share_id):
             }), 409
 
     if guarded:
-        if "base_bill_updated_at" not in data:
-            return _error_response("invalid_base_bill_updated_at", "base_bill_updated_at is required with expected_due_date", 400)
-        _, error = _parse_base_updated_at({"base_updated_at": data["base_bill_updated_at"]})
-        if error:
-            return _error_response("invalid_base_bill_updated_at", "base_bill_updated_at must be an RFC3339 timestamp with a UTC offset", 400)
         conflict = _optimistic_conflict(
             {"base_updated_at": data["base_bill_updated_at"]}, "bill", share.bill.id,
             share.bill.last_updated, {"id": share.bill.id, "due_date": share.bill.due_date,

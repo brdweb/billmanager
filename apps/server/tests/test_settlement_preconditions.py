@@ -243,3 +243,86 @@ def test_bill_version_conflict_does_not_disclose_owner_private_fields(client, se
     assert set(snapshot) == {"id", "due_date", "last_updated"}
     assert "owner-private" not in response.get_data(as_text=True)
     assert Payment.query.filter_by(share_id=settlement[0]).count() == 0
+
+
+def fresh_intent(client, fixture, desired_paid):
+    row = client.get('/api/v2/settlements', headers=fixture[2]).get_json()['data']
+    item = next(item for key in ('i_owe', 'settled') for item in row[key] if item['share_id'] == fixture[0])
+    return {"client_mutation_id": str(uuid.uuid4()), "base_updated_at": item['share_updated_at'],
+        "base_bill_updated_at": item['bill_updated_at'], "expected_due_date": item['due_date'],
+        "desired_paid": desired_paid}
+
+
+@pytest.mark.parametrize('desired', [True, False])
+def test_explicit_state_retry_replays_without_reversing_later_payment_state(client, settlement, desired):
+    if not desired:
+        assert post(client, settlement, {}).status_code == 200
+    intent = fresh_intent(client, settlement, desired)
+    first = post(client, settlement, intent)
+    assert first.status_code == 200
+    assert Payment.query.filter_by(share_id=settlement[0]).count() == int(desired)
+    # Another client intentionally changes the state after the first response was lost.
+    assert post(client, settlement, {}).status_code == 200
+    retry = post(client, settlement, intent)
+    assert retry.status_code == 200
+    assert retry.headers['Idempotency-Replayed'] == 'true'
+    assert retry.get_json() == first.get_json()
+    assert Payment.query.filter_by(share_id=settlement[0]).count() == int(not desired)
+
+
+@pytest.mark.parametrize('desired', [True, False])
+def test_explicit_matching_state_never_toggles(client, settlement, desired):
+    if desired:
+        assert post(client, settlement, {}).status_code == 200
+    response = post(client, settlement, fresh_intent(client, settlement, desired))
+    assert response.status_code == 409
+    assert response.get_json()['conflict']['reason'] == ('already_paid' if desired else 'already_unpaid')
+    assert Payment.query.filter_by(share_id=settlement[0]).count() == int(desired)
+
+
+@pytest.mark.parametrize('omitted', ['client_mutation_id', 'base_updated_at', 'base_bill_updated_at', 'expected_due_date'])
+def test_explicit_state_requires_complete_guarded_intent(client, settlement, omitted):
+    payload = {**settlement[3], 'desired_paid': False}
+    del payload[omitted]
+    assert post(client, settlement, payload).status_code == 400
+    assert Payment.query.filter_by(share_id=settlement[0]).count() == 0
+
+
+@pytest.mark.parametrize('desired', [None, 0, 1, 'false', []])
+def test_explicit_state_rejects_non_boolean_values(client, settlement, desired):
+    response = post(client, settlement, {**settlement[3], 'desired_paid': desired})
+    assert response.status_code == 400
+    assert response.get_json()['code'] == 'invalid_desired_paid'
+    assert Payment.query.filter_by(share_id=settlement[0]).count() == 0
+
+
+@pytest.mark.parametrize('desired', [True, False])
+@pytest.mark.parametrize('duplicate', [True, False])
+def test_competing_explicit_state_intents_change_payment_once(app, client, settlement, monkeypatch, desired, duplicate):
+    if not desired:
+        assert post(client, settlement, {}).status_code == 200
+    payload = fresh_intent(client, settlement, desired)
+    barrier = threading.Barrier(2)
+    original_lock = server._get_bill_for_mutation
+    def lock_bill(bill_id, **kwargs):
+        barrier.wait(timeout=5)
+        return original_lock(bill_id, **kwargs)
+    monkeypatch.setattr(server, '_get_bill_for_mutation', lock_bill)
+    def change(index):
+        intent = dict(payload) if duplicate else {**payload, 'client_mutation_id': str(uuid.uuid4())}
+        with app.test_client() as other:
+            return post(other, settlement, intent).status_code
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(change, range(2))) == ([200, 200] if duplicate else [200, 409])
+    assert Payment.query.filter_by(share_id=settlement[0]).count() == int(desired)
+
+
+def test_bill_recipient_views_expose_only_share_version_addition(client, settlement):
+    config = client.get('/api/v2/config').get_json()['data']
+    assert config['mobile']['features']['settlement_payment_desired_state'] is True
+    detail = client.get(f'/api/v2/bills/{settlement[1]}', headers=settlement[2])
+    assert detail.status_code == 200
+    assert detail.get_json()['data']['share_info']['share_updated_at'] == settlement[3]['base_updated_at']
+    listing = client.get('/api/v2/bills', headers=settlement[2]).get_json()['data']
+    bill = next(item for item in listing if item['id'] == settlement[1])
+    assert bill['share_info']['share_updated_at'] == settlement[3]['base_updated_at']
