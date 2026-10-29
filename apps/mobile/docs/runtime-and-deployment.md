@@ -2,6 +2,22 @@
 
 This document defines the support boundary for self-hosted transport security, offline synchronization, local reminders, and widgets. Store/support copy must not promise behavior beyond this boundary.
 
+## Application updates
+
+New preview and production binaries disable Expo Updates and run only the code
+and assets embedded in the installed binary. Fixes arrive through a new
+TestFlight, Google Play, App Store, or explicitly installed preview binary;
+there is no production OTA hotfix/download/rollback path at launch. Development
+clients retain their development update configuration and Metro workflow.
+
+This removes the release app's automatic Expo Update requests, whose client ID,
+update metadata and previous fatal-error header are independent of Sentry's
+payload filtering. It does not change already-installed older binaries and does
+not establish wire-level privacy proof. Validate the final candidate's embedded
+Android/iOS flags and actual startup/crash/relaunch traffic before closing that
+release gate. Expo build services and the remaining approved runtime services
+retain their separate boundaries.
+
 ## Production server transport
 
 Production mobile connections require:
@@ -17,7 +33,7 @@ Release builds reject cleartext HTTP in both the profile validator and native tr
 
 ## Development HTTP
 
-Development builds may connect to a local HTTP server. This exception exists only for emulator/device development and is controlled by `BILLMANAGER_RELEASE_BUILD=false`.
+Development builds may connect to a local HTTP server. This exception exists only for emulator/device development and is controlled by `BILLMANAGER_DEVELOPMENT_BUILD=true`.
 
 Never use a development or preview binary to certify production transport behavior. The release gate must exercise a `production`-profile binary and confirm that an HTTP URL is rejected.
 

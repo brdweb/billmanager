@@ -42,8 +42,11 @@ token `SENTRY_AUTH_TOKEN` is build-time only and is never put in app config.
 - **Disable for a build:** remove `SENTRY_DSN` from that EAS environment and
   rebuild. Already-installed binaries keep the DSN they were built with until
   users install a new build.
-- **Environment label:** the EAS update channel (`Updates.channel`) when
-  present, otherwise `development` in `__DEV__` and `production` elsewhere.
+- **Environment label:** a build-time allowlisted `buildEnvironment` extra
+  (`development`, `preview`, or `production`) preserves release identity even
+  with Expo Updates disabled. Development runtimes stay `development`; known
+  legacy update channels are a fallback. Arbitrary channel/extra values are not
+  used as diagnostic environment labels.
 
 ## Release identity
 
