@@ -33,8 +33,8 @@ describe('authenticated query cache lifetime', () => {
   it('mounts the cache inside both profile and authenticated identity boundaries', () => {
     const app = readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
     expect(app).toContain('<AuthProvider key={activeProfile.id}>');
-    expect(app).toContain('<SessionQueryProvider key={sessionKey}>');
-    expect(app).toContain("const sessionKey = isAuthenticated ? `user:${user?.id}` : 'anonymous'");
+    expect(app).toContain('<SessionQueryProvider sessionKey={sessionKey}>');
+    expect(app).toContain("const sessionKey = `${activeProfile.id}:${isAuthenticated ? `user:${user?.id}` : 'anonymous'}`");
     expect(app).not.toContain('const queryClient = new QueryClient');
   });
 });
