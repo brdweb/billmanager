@@ -95,7 +95,7 @@ markupsafe==3.0.3
     #   werkzeug
 mdurl==0.1.2
     # via markdown-it-py
-msgpack==1.2.2
+msgpack==1.2.4
     # via cachecontrol
 ordered-set==4.1.0
     # via flask-limiter
