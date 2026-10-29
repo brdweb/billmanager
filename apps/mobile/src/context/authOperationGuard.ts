@@ -11,6 +11,7 @@ export interface DatabaseOperationToken extends AuthOperationToken {
 export interface RuntimeScope {
   serverProfileId: string;
   databaseId: string | null;
+  principalId?: string;
 }
 
 /**
@@ -95,5 +96,6 @@ export function runtimeScopeIsAligned(
   apiScope: RuntimeScope,
 ): boolean {
   return contextScope.serverProfileId === apiScope.serverProfileId
-    && contextScope.databaseId === apiScope.databaseId;
+    && contextScope.databaseId === apiScope.databaseId
+    && (!contextScope.principalId || contextScope.principalId === apiScope.principalId);
 }

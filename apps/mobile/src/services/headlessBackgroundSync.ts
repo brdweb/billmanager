@@ -36,7 +36,10 @@ function uniqueScopes(
   const scopes = new Map<string, CacheScope>();
   for (const scope of [...sessionScopes, ...mutationScopes]) {
     if (!scope.serverProfileId || !scope.databaseId) continue;
-    scopes.set(`${scope.serverProfileId}\u0000${scope.databaseId}`, scope);
+    // Unqualified legacy data and another principal's queued work never run
+    // with the current profile token.
+    if (!scope.principalId || !sessionScopes.some((session) => session.serverProfileId === scope.serverProfileId && session.principalId === scope.principalId)) continue;
+    scopes.set(`${scope.serverProfileId}\u0000${scope.principalId}\u0000${scope.databaseId}`, scope);
   }
   return [...scopes.values()];
 }
@@ -81,16 +84,17 @@ export async function runHeadlessBackgroundSync(
     const existing = await dependencies.syncRepository.getSyncState(
       scope.serverProfileId,
       scope.databaseId,
+      scope.principalId,
     );
     await dependencies.syncRepository.setSyncState(scope.serverProfileId, scope.databaseId, {
       cursor: existing?.cursor ?? null,
       lastSyncedAt: existing?.lastSyncedAt ?? null,
       status: 'syncing',
       lastError: null,
-    });
+    }, scope.principalId);
 
     try {
-      await processor.process(scope.serverProfileId, scope.databaseId);
+      await processor.process(scope.serverProfileId, scope.databaseId, scope.principalId);
       const [billEnvelope, paymentEnvelope] = await Promise.all([
         dependencies.api.requestScopedGet<ApiResponse<Bill[]>>('/bills', scope, {
           include_archived: true,
@@ -115,7 +119,7 @@ export async function runHeadlessBackgroundSync(
         lastSyncedAt: existing?.lastSyncedAt ?? null,
         status: 'error',
         lastError: message,
-      });
+      }, scope.principalId);
     }
   }
 

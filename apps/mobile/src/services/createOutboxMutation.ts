@@ -8,6 +8,7 @@ import * as Crypto from 'expo-crypto';
 export interface NewOutboxMutation<TPayload> {
   serverProfileId: string;
   databaseId: string;
+  principalId?: string;
   entity: SyncEntity;
   entityId: string | null;
   operation: SyncOperation;
@@ -28,6 +29,7 @@ export function createOutboxMutation<TPayload>(
     id: options.id ?? newMutationId(),
     serverProfileId: input.serverProfileId,
     databaseId: input.databaseId,
+    ...(input.principalId ? { principalId: input.principalId } : {}),
     entity: input.entity,
     entityId: input.entityId,
     operation: input.operation,

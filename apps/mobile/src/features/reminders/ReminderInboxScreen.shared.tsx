@@ -35,12 +35,13 @@ export function ReminderInboxScreenView({ platform }: { platform: AdaptivePlatfo
   const { t } = useTranslation();
   const layout = useAdaptiveLayout();
   const { bills, recordPayment } = useBillPresentation();
-  const { currentDatabase } = useAuth();
+  const { user, currentDatabase } = useAuth();
   const { activeProfile } = useServerProfiles();
   const scope = useMemo(() => ({
     serverProfileId: activeProfile.id,
     databaseId: currentDatabase ?? '',
-  }), [activeProfile.id, currentDatabase]);
+    principalId: user ? String(user.id) : undefined,
+  }), [activeProfile.id, currentDatabase, user]);
   const [reminderStates, setReminderStates] = useState<ReminderState[]>([]);
   const [lastAction, setLastAction] = useState<string | null>(null);
   const stateByBill = useMemo(

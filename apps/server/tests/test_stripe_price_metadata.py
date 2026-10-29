@@ -112,6 +112,11 @@ def test_plan_change_updates_metadata_with_price(billing, tier, interval, prorat
     assert payload["items"] == [{"id": "si_synthetic", "price": price_id}]
     assert payload["metadata"] == {"tier": tier, "interval": interval}
     assert payload["proration_behavior"] == ("create_prorations" if prorate else "none")
+    assert set(payload) == {"items", "metadata", "proration_behavior"} | (
+        set() if prorate else {"billing_cycle_anchor"}
+    )
+    if not prorate:
+        assert payload["billing_cycle_anchor"] == "unchanged"
 
 
 def test_plan_change_rejects_unrecognized_price_before_provider_calls(billing):

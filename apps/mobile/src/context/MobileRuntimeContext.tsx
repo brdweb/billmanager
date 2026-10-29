@@ -103,13 +103,13 @@ interface MobileRuntimeContextValue {
 
 const MobileRuntimeContext = createContext<MobileRuntimeContextValue | null>(null);
 
-function queryKeys(profileId: string, databaseId: string) {
+function queryKeys(profileId: string, databaseId: string, principalId?: string) {
   return {
-    bills: ['mobile-cache', profileId, databaseId, 'bills'] as const,
-    payments: ['mobile-cache', profileId, databaseId, 'payments'] as const,
-    groups: ['mobile-cache', profileId, 'groups'] as const,
-    conflicts: ['mobile-cache', profileId, databaseId, 'conflicts'] as const,
-    sync: ['mobile-cache', profileId, databaseId, 'sync'] as const,
+    bills: ['mobile-cache', profileId, principalId, databaseId, 'bills'] as const,
+    payments: ['mobile-cache', profileId, principalId, databaseId, 'payments'] as const,
+    groups: ['mobile-cache', profileId, principalId, 'groups'] as const,
+    conflicts: ['mobile-cache', profileId, principalId, databaseId, 'conflicts'] as const,
+    sync: ['mobile-cache', profileId, principalId, databaseId, 'sync'] as const,
   };
 }
 
@@ -120,7 +120,7 @@ function todayIso(): string {
 
 export function MobileRuntimeProvider({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
-  const { isAuthenticated, currentDatabase, selectDatabase } = useAuth();
+  const { isAuthenticated, user, currentDatabase, selectDatabase } = useAuth();
   const { activeProfile, switchProfile } = useServerProfiles();
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
@@ -132,10 +132,12 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
   const nativeSurfaceLeaseRef = useRef<ForegroundNativeSurfaceLease | null>(null);
 
   const databaseId = currentDatabase ?? '';
+  const principalId = user ? String(user.id) : undefined;
   const contextRuntimeScope = useMemo(() => ({
     serverProfileId: activeProfile.id,
     databaseId: currentDatabase,
-  }), [activeProfile.id, currentDatabase]);
+    principalId,
+  }), [activeProfile.id, currentDatabase, principalId]);
   const scopeAligned = runtimeScopeIsAligned(
     contextRuntimeScope,
     api.captureAuthSessionScope(),
@@ -143,10 +145,11 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
   const scope = useMemo<CacheScope>(() => ({
     serverProfileId: activeProfile.id,
     databaseId,
-  }), [activeProfile.id, databaseId]);
+    principalId,
+  }), [activeProfile.id, databaseId, principalId]);
   const keys = useMemo(
-    () => queryKeys(activeProfile.id, databaseId),
-    [activeProfile.id, databaseId],
+    () => queryKeys(activeProfile.id, databaseId, principalId),
+    [activeProfile.id, databaseId, principalId],
   );
   const enabled = isAuthenticated && Boolean(databaseId) && scopeAligned;
 
@@ -174,19 +177,19 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
   });
   const groupsQuery = useQuery({
     queryKey: keys.groups,
-    queryFn: () => cacheRepository.getGroups(activeProfile.id),
+    queryFn: () => cacheRepository.getGroups(activeProfile.id, principalId),
     enabled: isAuthenticated,
     initialData: [],
   });
   const conflictsQuery = useQuery({
     queryKey: keys.conflicts,
-    queryFn: () => syncRepository.getConflicts(activeProfile.id, databaseId),
+    queryFn: () => syncRepository.getConflicts(activeProfile.id, databaseId, principalId),
     enabled,
     initialData: [],
   });
   const syncStateQuery = useQuery({
     queryKey: keys.sync,
-    queryFn: () => syncRepository.getSyncState(activeProfile.id, databaseId),
+    queryFn: () => syncRepository.getSyncState(activeProfile.id, databaseId, principalId),
     enabled,
   });
 
@@ -281,20 +284,18 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
     if (isStillActive()) setError(null);
     const existingSyncState = await syncRepository.getSyncState(
       syncScope.serverProfileId,
-      syncScope.databaseId,
-    );
+      syncScope.databaseId, syncScope.principalId);
     await syncRepository.setSyncState(syncScope.serverProfileId, syncScope.databaseId, {
       cursor: existingSyncState?.cursor ?? null,
       lastSyncedAt: existingSyncState?.lastSyncedAt ?? null,
       status: 'syncing',
       lastError: null,
-    });
+    }, syncScope.principalId);
 
     try {
       const summary = await outboxProcessor.process(
         syncScope.serverProfileId,
-        syncScope.databaseId,
-      );
+        syncScope.databaseId, syncScope.principalId);
       const snapshot = await fetchForegroundSyncSnapshot(api, syncScope);
       await syncRepository.pruneCompleted(
         new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -319,7 +320,7 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
         lastSyncedAt: existingSyncState?.lastSyncedAt ?? null,
         status: 'error',
         lastError: message,
-      });
+      }, syncScope.principalId);
       await refreshLocalQueries();
       throw reason;
     }
@@ -352,18 +353,17 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
         ? await syncRepository.findLatestPendingForBill(
             activeProfile.id,
             databaseId,
-            input.entityId,
-          )
+            input.entityId, principalId)
         : await syncRepository.findLatestPendingForEntity(
             activeProfile.id,
             databaseId,
             input.entity,
-            input.entityId,
-          )
+            input.entityId, principalId)
       : null;
     const mutation = createOutboxMutation({
       serverProfileId: activeProfile.id,
       databaseId,
+      principalId,
       ...input,
       dependsOn: sameEntityDependency ?? input.dependsOn ?? null,
     });
@@ -413,8 +413,7 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
     const dependsOn = await syncRepository.findLatestPendingForBill(
       activeProfile.id,
       databaseId,
-      String(bill.id),
-    );
+      String(bill.id), principalId);
     await queueMutation({
       entity: 'payment',
       entityId: String(temporaryPaymentId),
@@ -491,8 +490,7 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
           activeProfile.id,
           databaseId,
           'bill',
-          String(bill.id),
-        )
+          String(bill.id), principalId)
       : null;
     await queueMutation({
       entity: 'bill',
@@ -520,8 +518,7 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
           activeProfile.id,
           databaseId,
           'bill',
-          String(bill.id),
-        )
+          String(bill.id), principalId)
       : null;
     await queueMutation({
       entity: 'bill_archive',
@@ -549,8 +546,7 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
           activeProfile.id,
           databaseId,
           'bill',
-          String(bill.id),
-        )
+          String(bill.id), principalId)
       : null;
     await queueMutation({
       entity: 'bill_restore',
@@ -586,8 +582,7 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
           activeProfile.id,
           databaseId,
           'payment',
-          String(payment.id),
-        )
+          String(payment.id), principalId)
       : null;
     await queueMutation({
       entity: 'payment',
@@ -622,8 +617,7 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
           activeProfile.id,
           databaseId,
           'payment',
-          String(payment.id),
-        )
+          String(payment.id), principalId)
       : null;
     await queueMutation({
       entity: 'payment',
@@ -714,10 +708,12 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
     const activateScope = (target: CacheScope) => activateNotificationScope(target, {
       getActiveProfileId: () => api.getActiveProfile().id,
       getCurrentDatabase: () => api.getCurrentDatabase(),
+      getPrincipalId: () => api.captureAuthSessionScope().principalId,
       switchProfile,
       selectDatabase,
     });
     const unsubscribe = subscribeToNotificationActions({
+      isScopeAuthorized: (target) => api.isPrincipalScopeAuthenticated(target),
       onOpenBill: async (billId, target) => {
         await activateScope(target);
         await Linking.openURL(`billmanager://bills/${billId}`);
@@ -744,11 +740,11 @@ export function MobileRuntimeProvider({ children }: { children: React.ReactNode 
         const dependsOn = await syncRepository.findLatestPendingForBill(
           target.serverProfileId,
           target.databaseId,
-          String(bill.id),
-        );
+          String(bill.id), target.principalId);
         await syncRepository.enqueue(createOutboxMutation({
           serverProfileId: target.serverProfileId,
           databaseId: target.databaseId,
+          principalId: target.principalId,
           entity: 'payment',
           entityId: String(temporaryId),
           operation: 'create',

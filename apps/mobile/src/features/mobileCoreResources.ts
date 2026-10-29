@@ -1,5 +1,12 @@
 export const mobileCoreResources = {
   en: {
+    recovery: {
+      verifyAccount: 'Reconnect and sign in to verify this account after the update.',
+      reconnect: 'Reconnect to reload your bills after this update.',
+      recovery: 'Earlier offline changes are kept on this device and need account verification before recovery.',
+      help: 'Recovery help',
+      guidance: 'Connect to the internet and refresh to reload your account. Earlier offline changes will not be sent automatically. Contact your server administrator or BillManager support to verify which account made those changes. Keep this app installed and do not clear its data until the changes have been recovered.',
+    },
     navigation: {
       home: 'Home',
       bills: 'Bills',
@@ -197,6 +204,13 @@ export const mobileCoreResources = {
     },
   },
   de: {
+    recovery: {
+      verifyAccount: 'Verbinde dich mit dem Internet und melde dich an, um das Konto nach dem Update zu überprüfen.',
+      reconnect: 'Verbinde dich mit dem Internet, um deine Rechnungen nach diesem Update neu zu laden.',
+      recovery: 'Frühere Offline-Änderungen bleiben auf diesem Gerät. Vor der Wiederherstellung muss das Konto überprüft werden.',
+      help: 'Hilfe zur Wiederherstellung',
+      guidance: 'Verbinde dich mit dem Internet und aktualisiere deine Kontodaten. Frühere Offline-Änderungen werden nicht automatisch gesendet. Wende dich an deine Serveradministration oder den BillManager-Support, um das zugehörige Konto zu überprüfen. Deinstalliere die App nicht und lösche keine App-Daten, bis die Änderungen wiederhergestellt wurden.',
+    },
     navigation: {
       home: 'Start',
       bills: 'Rechnungen',
