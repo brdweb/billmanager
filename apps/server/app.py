@@ -688,9 +688,9 @@ def _commit_with_client_mutation(mutation, response_payload, status_code=200):
     return None
 
 
-def _get_bill_for_mutation(bill_id, *, required=True, refresh=False):
+def _get_bill_for_mutation(bill_id, *, required=True, refresh=False, no_key_update=False):
     """Lock a bill row so a timestamp check and write are atomic."""
-    query = Bill.query.filter_by(id=bill_id).with_for_update()
+    query = Bill.query.filter_by(id=bill_id).with_for_update(key_share=no_key_update)
     if refresh:
         query = query.populate_existing()
     return query.first_or_404() if required else query.first()
@@ -4617,8 +4617,8 @@ def jwt_mark_share_paid(share_id):
     if not isinstance(data, dict):
         return _error_response("invalid_request_body", "Request body must be an object", 400)
     guarded = "expected_due_date" in data
-    # Every caller locks bill before share, including legacy toggles whose
-    # Payment insert takes a bill FK lock. Mixing the opposite orders deadlocks.
+    # NO KEY UPDATE blocks due-date edits but permits FK KEY SHARE locks from
+    # existing share-first audit/payment inserts, avoiding a lock-order cycle.
     # Read columns only, then explicitly refresh any preloaded ORM state after
     # waiting for each row lock.
     identity = BillShare.query.with_entities(
@@ -4626,7 +4626,7 @@ def jwt_mark_share_paid(share_id):
     ).filter_by(id=share_id).first_or_404()
     if identity.shared_with_user_id != g.jwt_user_id:
         return jsonify({"success": False, "error": "Access denied"}), 403
-    _get_bill_for_mutation(identity.bill_id, refresh=True)
+    _get_bill_for_mutation(identity.bill_id, refresh=True, no_key_update=True)
     share = _get_share_for_mutation(share_id, refresh=True)
 
     # Only the share recipient can mark their portion as paid

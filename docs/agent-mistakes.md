@@ -33,3 +33,7 @@ Repeatable mistakes reviewers catch in this repository. Read this file before st
 - **PR:** https://github.com/brdweb/billmanager/pull/243
 - **Mistake:** Used a person's net balance to decide whether outgoing shares could be paid, and permanently suppressed successful occurrences without reconciling a later server reopen.
 - **Rule going forward:** Derive payable actions from the directional unpaid ledger. Retain mutation IDs across uncertain failures, and retire them only after causally fresh server state; a late pre-mutation read or cached refetch is not payment-state evidence. Test mixed-direction balances, partial failure, paid/reopened occurrences and delayed reads.
+
+### 2026-10-29 — Verify foreign-key locks when adding payment row locks (#236)
+
+A bill `FOR UPDATE` followed by a share lock can deadlock with an existing share-first action inserting a bill-referencing audit row. Use a scoped `FOR NO KEY UPDATE` bill lock when only non-key bill fields must remain stable; it blocks renewal edits while allowing foreign-key `KEY SHARE` checks. Reproduce the exact competing route schedule with real PostgreSQL, including its audit insert, rather than only testing two instances of the new route.

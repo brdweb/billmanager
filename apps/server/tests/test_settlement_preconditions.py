@@ -167,3 +167,35 @@ def test_non_object_body_cannot_toggle_existing_payment(client, settlement, db_s
     db_session.expire_all()
     assert Payment.query.filter_by(share_id=settlement[0]).one().id == payment_id
     assert db_session.get(BillShare, settlement[0]).recipient_paid_date is not None
+
+
+def test_mark_paid_and_share_first_leave_do_not_deadlock(app, settlement, db_session, monkeypatch):
+    share_locked = threading.Event()
+    bill_locked = threading.Event()
+    original_lock = server._get_share_for_mutation
+
+    def lock_share(share_id, **kwargs):
+        if kwargs.get("refresh"):
+            # Mark paid already holds its bill lock and now waits for share.
+            bill_locked.set()
+            return original_lock(share_id, **kwargs)
+        share = original_lock(share_id, **kwargs)
+        share_locked.set()
+        assert bill_locked.wait(timeout=5)
+        return share  # Leave inserts an audit row requiring bill FK KEY SHARE.
+
+    monkeypatch.setattr(server, "_get_share_for_mutation", lock_share)
+    def leave():
+        with app.test_client() as other:
+            return other.post(f"/api/v2/shares/{settlement[0]}/leave", headers=settlement[2], json={}).status_code
+    def pay():
+        assert share_locked.wait(timeout=5)
+        with app.test_client() as other:
+            return post(other, settlement).status_code
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        leaving, paying = pool.submit(leave), pool.submit(pay)
+        assert leaving.result(timeout=10) == 200
+        assert paying.result(timeout=10) == 409
+    db_session.expire_all()
+    assert db_session.get(BillShare, settlement[0]).status == "revoked"
+    assert Payment.query.filter_by(share_id=settlement[0]).count() == 0
