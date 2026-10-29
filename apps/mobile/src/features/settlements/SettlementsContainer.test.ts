@@ -167,3 +167,27 @@ it('does not treat a successful cached refetch result as fresh server payment st
   expect(mocks.markPaid.mock.calls.map(([id]) => id)).toEqual([2]);
   expect(mocks.markPaid.mock.calls[0][2]).toBe(uncertainId);
 });
+
+it('does not use a read started during an entirely uncertain batch as post-batch proof', async () => {
+  mocks.data = serverSnapshot([1]);
+  await act(async () => { root.update(React.createElement(SettlementsContainer)); });
+  let finishPayment!: (value: { success: boolean }) => void;
+  let finishRead!: (value: { success: boolean; data: SettlementsResponse }) => void;
+  let finishRefetch!: (value: unknown) => void;
+  mocks.markPaid.mockImplementationOnce(() => new Promise((resolve) => { finishPayment = resolve; }));
+  mocks.read.mockImplementationOnce(() => new Promise((resolve) => { finishRead = resolve; }));
+  mocks.refetch.mockImplementationOnce(() => new Promise((resolve) => { finishRefetch = resolve; }));
+  await act(async () => { mocks.actions!.onMarkPaid('Alex'); confirmLatest(); });
+  const duringDispatch = mocks.queryFn!();
+  await act(async () => { finishPayment({ success: false });
+    await vi.waitFor(() => expect(mocks.refetch).toHaveBeenCalledOnce()); });
+  const originalId = mocks.markPaid.mock.calls[0][2];
+  finishRead({ success: true, data: serverSnapshot([], [1]) });
+  await duringDispatch;
+  await act(async () => { finishRefetch({ isSuccess: true }); });
+  mocks.markPaid.mockClear().mockResolvedValue({ success: false });
+  mocks.refetch.mockResolvedValue({});
+  await act(async () => { mocks.actions!.onMarkPaid('Alex'); confirmLatest();
+    await vi.waitFor(() => expect(mocks.refetch).toHaveBeenCalledTimes(2)); });
+  expect(mocks.markPaid.mock.calls[0][2]).toBe(originalId);
+});

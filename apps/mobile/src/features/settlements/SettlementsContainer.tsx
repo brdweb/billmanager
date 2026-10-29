@@ -132,6 +132,7 @@ export default function SettlementsContainer() {
                         return api.markSharePaid(id, requestedScope, mutationId);
                       }, () => api.isPrincipalScopeAuthenticated(requestedScope), isActionCurrent);
                     for (const item of items) if (result.succeeded.includes(item.share_id)) attempts.current.confirm(scopeKey, item);
+                    attempts.current.finishDispatches();
                     if (!await api.isPrincipalScopeAuthenticated(requestedScope) || !isActionCurrent()) return;
                     if (result.failed.length) Alert.alert(t('settlementsPage.markPaidFailedTitle'),
                       `${t('settlementsPage.markPaidSuccess')}: ${result.succeeded.length}/${items.length}\n${t('settlementsPage.markPaidFailedBody')}\n${items.filter((item) => result.failed.includes(item.share_id)).map((item) => item.bill_name).join('\n')}`);

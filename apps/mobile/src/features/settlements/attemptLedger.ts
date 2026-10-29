@@ -10,6 +10,7 @@ export class SettlementAttemptLedger {
   revision = 0;
 
   beginAction(): void { this.revision += 1; }
+  finishDispatches(): void { this.revision += 1; }
 
   private key(scope: string, item: Occurrence): string { return JSON.stringify([scope, occurrenceKey(item)]); }
 
