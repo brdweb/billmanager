@@ -1,3 +1,4 @@
+import { storageDatabaseId } from './principalScope';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { Bill, DatabaseInfo, Payment } from '../types';
@@ -10,6 +11,7 @@ import {
 export interface CacheScope {
   serverProfileId: string;
   databaseId: string;
+  principalId?: string;
 }
 
 export interface MobileSyncSnapshot {
@@ -40,10 +42,12 @@ async function replaceGroupsInTransaction(
   serverProfileId: string,
   groups: DatabaseInfo[],
   cachedAt: string,
+  principalId?: string,
 ): Promise<void> {
   await database.runAsync(
-    'DELETE FROM bill_groups WHERE server_profile_id = ?',
+    'DELETE FROM bill_groups WHERE server_profile_id = ? AND database_id LIKE ?',
     serverProfileId,
+    principalId ? storageDatabaseId({ databaseId: '', principalId }) + '%' : '%',
   );
   for (const group of groups) {
     await database.runAsync(
@@ -51,7 +55,7 @@ async function replaceGroupsInTransaction(
          server_profile_id, database_id, name, display_name, payload_json, updated_at
        ) VALUES (?, ?, ?, ?, ?, ?)`,
       serverProfileId,
-      String(group.id),
+      storageDatabaseId({ databaseId: String(group.id), principalId }),
       group.name,
       group.display_name,
       JSON.stringify(group),
@@ -67,12 +71,12 @@ async function markScopeCleanInTransaction(
   await database.runAsync(
     'UPDATE bills SET is_dirty = 0 WHERE server_profile_id = ? AND database_id = ?',
     scope.serverProfileId,
-    scope.databaseId,
+    storageDatabaseId(scope),
   );
   await database.runAsync(
     'UPDATE payments SET is_dirty = 0 WHERE server_profile_id = ? AND database_id = ?',
     scope.serverProfileId,
-    scope.databaseId,
+    storageDatabaseId(scope),
   );
 }
 
@@ -86,7 +90,7 @@ async function replaceBillsInTransaction(
     `DELETE FROM bills
      WHERE server_profile_id = ? AND database_id = ? AND is_dirty = 0`,
     scope.serverProfileId,
-    scope.databaseId,
+    storageDatabaseId(scope),
   );
   for (const bill of bills) {
     await database.runAsync(
@@ -101,7 +105,7 @@ async function replaceBillsInTransaction(
          is_archived = excluded.is_archived
        WHERE bills.is_dirty = 0`,
       scope.serverProfileId,
-      scope.databaseId,
+      storageDatabaseId(scope),
       String(bill.id),
       JSON.stringify(bill),
       bill.last_updated ?? null,
@@ -121,7 +125,7 @@ async function replacePaymentsInTransaction(
     `DELETE FROM payments
      WHERE server_profile_id = ? AND database_id = ? AND is_dirty = 0`,
     scope.serverProfileId,
-    scope.databaseId,
+    storageDatabaseId(scope),
   );
   for (const payment of payments) {
     await database.runAsync(
@@ -137,7 +141,7 @@ async function replacePaymentsInTransaction(
          is_deleted = 0
        WHERE payments.is_dirty = 0`,
       scope.serverProfileId,
-      scope.databaseId,
+      storageDatabaseId(scope),
       String(payment.id),
       String(payment.bill_id),
       JSON.stringify(payment),
@@ -162,7 +166,7 @@ async function commitIdleSyncStateInTransaction(
        status = 'idle',
        last_error = NULL`,
     scope.serverProfileId,
-    scope.databaseId,
+    storageDatabaseId(scope),
     synchronizedAt,
   );
 }
@@ -170,20 +174,21 @@ async function commitIdleSyncStateInTransaction(
 export class MobileCacheRepository {
   constructor(private readonly databaseProvider = getMobileDatabase) {}
 
-  async replaceGroups(serverProfileId: string, groups: DatabaseInfo[]): Promise<void> {
+  async replaceGroups(serverProfileId: string, groups: DatabaseInfo[], principalId?: string): Promise<void> {
     const database = await this.databaseProvider();
     const now = new Date().toISOString();
     await withSerializedMobileTransaction(database, async () => {
-      await replaceGroupsInTransaction(database, serverProfileId, groups, now);
+      await replaceGroupsInTransaction(database, serverProfileId, groups, now, principalId);
     });
   }
 
-  async getGroups(serverProfileId: string): Promise<DatabaseInfo[]> {
+  async getGroups(serverProfileId: string, principalId?: string): Promise<DatabaseInfo[]> {
     const database = await this.databaseProvider();
     const rows = await database.getAllAsync<EntityRow>(
       `SELECT payload_json FROM bill_groups
-       WHERE server_profile_id = ? ORDER BY display_name COLLATE NOCASE`,
+       WHERE server_profile_id = ? AND database_id LIKE ? ORDER BY display_name COLLATE NOCASE`,
       serverProfileId,
+      principalId ? storageDatabaseId({ databaseId: '', principalId }) + '%' : '%',
     );
     return rows.map((row) => JSON.parse(row.payload_json) as DatabaseInfo);
   }
@@ -209,7 +214,7 @@ export class MobileCacheRepository {
              is_dirty = excluded.is_dirty,
              is_archived = excluded.is_archived`,
           scope.serverProfileId,
-          scope.databaseId,
+          storageDatabaseId(scope),
           String(bill.id),
           JSON.stringify(bill),
           bill.last_updated ?? null,
@@ -237,7 +242,7 @@ export class MobileCacheRepository {
          AND (? = 1 OR is_archived = 0)
        ORDER BY json_extract(payload_json, '$.next_due'), entity_id`,
       scope.serverProfileId,
-      scope.databaseId,
+      storageDatabaseId(scope),
       includeArchived ? 1 : 0,
     );
     return rows.map((row) => JSON.parse(row.payload_json) as Bill);
@@ -266,7 +271,7 @@ export class MobileCacheRepository {
              is_dirty = excluded.is_dirty,
              is_deleted = excluded.is_deleted`,
           scope.serverProfileId,
-          scope.databaseId,
+          storageDatabaseId(scope),
           String(payment.id),
           String(payment.bill_id),
           JSON.stringify(payment),
@@ -306,7 +311,7 @@ export class MobileCacheRepository {
          WHERE server_profile_id = ? AND database_id = ?
            AND status IN ('pending', 'processing', 'retry', 'conflict')`,
         scope.serverProfileId,
-        scope.databaseId,
+        storageDatabaseId(scope),
       );
       const hadUnresolvedMutations = Number(unresolved?.count ?? 0) > 0;
 
@@ -321,6 +326,7 @@ export class MobileCacheRepository {
           scope.serverProfileId,
           snapshot.groups,
           synchronizedAt,
+          scope.principalId,
         );
       }
       await commitIdleSyncStateInTransaction(database, scope, synchronizedAt);
@@ -341,7 +347,7 @@ export class MobileCacheRepository {
         `UPDATE ${table} SET is_dirty = 0
          WHERE server_profile_id = ? AND database_id = ? AND entity_id = ?`,
         scope.serverProfileId,
-        scope.databaseId,
+        storageDatabaseId(scope),
         entityId,
       );
     });
@@ -355,7 +361,7 @@ export class MobileCacheRepository {
            WHERE server_profile_id = ? AND database_id = ? AND bill_id = ? AND is_deleted = 0
            ORDER BY json_extract(payload_json, '$.payment_date') DESC`,
           scope.serverProfileId,
-          scope.databaseId,
+          storageDatabaseId(scope),
           billId,
         )
       : await database.getAllAsync<EntityRow>(
@@ -363,7 +369,7 @@ export class MobileCacheRepository {
            WHERE server_profile_id = ? AND database_id = ? AND is_deleted = 0
            ORDER BY json_extract(payload_json, '$.payment_date') DESC`,
           scope.serverProfileId,
-          scope.databaseId,
+          storageDatabaseId(scope),
         );
     return rows.map((row) => JSON.parse(row.payload_json) as Payment);
   }
@@ -385,7 +391,7 @@ export class MobileCacheRepository {
            expires_at = excluded.expires_at,
            updated_at = excluded.updated_at`,
         scope.serverProfileId,
-        scope.databaseId,
+        storageDatabaseId(scope),
         key,
         JSON.stringify(payload),
         expiresAt,
@@ -409,7 +415,7 @@ export class MobileCacheRepository {
            dismissed_due_date = excluded.dismissed_due_date,
            updated_at = excluded.updated_at`,
         scope.serverProfileId,
-        scope.databaseId,
+        storageDatabaseId(scope),
         state.billId,
         JSON.stringify(state.notificationIds),
         state.nextScheduledAt,
@@ -433,7 +439,7 @@ export class MobileCacheRepository {
       `SELECT bill_id, notification_ids_json, next_scheduled_at, snoozed_until, dismissed_due_date, updated_at
        FROM reminder_state WHERE server_profile_id = ? AND database_id = ?`,
       scope.serverProfileId,
-      scope.databaseId,
+      storageDatabaseId(scope),
     );
     return rows.map((row) => ({
       billId: row.bill_id,
@@ -452,7 +458,7 @@ export class MobileCacheRepository {
        WHERE server_profile_id = ? AND database_id = ? AND snapshot_key = ?
          AND (expires_at IS NULL OR expires_at > ?)`,
       scope.serverProfileId,
-      scope.databaseId,
+      storageDatabaseId(scope),
       key,
       new Date().toISOString(),
     );

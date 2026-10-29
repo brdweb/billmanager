@@ -41,10 +41,9 @@ export async function migrateProfileIdentities(
       tokenStore.load(profile.id),
       tokenStore.load(nextId),
     ]);
-    const migratedTokens = {
-      accessToken: destinationTokens.accessToken ?? sourceTokens.accessToken,
-      refreshToken: destinationTokens.refreshToken ?? sourceTokens.refreshToken,
-    };
+    // Credentials and principal are one envelope: never mix a destination
+    // account's access token with a source account's refresh token.
+    const migratedTokens = destinationTokens.accessToken ? destinationTokens : sourceTokens;
     if (migratedTokens.accessToken || migratedTokens.refreshToken) {
       await tokenStore.save(nextId, migratedTokens);
     }

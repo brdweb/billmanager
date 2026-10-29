@@ -1,3 +1,4 @@
+import { SecureProfileTokenStore } from '../api/tokenStore';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
@@ -26,6 +27,7 @@ Notifications.setNotificationHandler({
 });
 
 export interface NotificationActionHandlers {
+  isScopeAuthorized?: (scope: NotificationScope) => boolean | Promise<boolean>;
   onOpenBill: (billId: number, scope: NotificationScope) => void | Promise<void>;
   onMarkPaid: (billId: number, scope: NotificationScope) => void | Promise<void>;
   onSnooze?: (billId: number, scope: NotificationScope, snoozedUntil: string, notificationId: string, dueDate: string | null) => void | Promise<void>;
@@ -34,6 +36,7 @@ export interface NotificationActionHandlers {
 export interface NotificationScope {
   serverProfileId: string;
   databaseId: string;
+  principalId?: string;
 }
 
 export async function configureLocalNotifications(): Promise<void> {
@@ -86,7 +89,9 @@ export function subscribeToNotificationActions(handlers: NotificationActionHandl
     const serverProfileId = typeof data?.serverProfileId === 'string' ? data.serverProfileId : '';
     const databaseId = typeof data?.databaseId === 'string' ? data.databaseId : '';
     if (!Number.isInteger(billId) || !serverProfileId || !databaseId) return;
-    const scope = { serverProfileId, databaseId };
+    const principalId = typeof data?.principalId === 'string' ? data.principalId : undefined;
+    const scope = { serverProfileId, databaseId, ...(principalId ? { principalId } : {}) };
+    if (!await ownsReminderScope(scope) || (handlers.isScopeAuthorized && !await handlers.isScopeAuthorized(scope))) return;
 
     if (response.actionIdentifier === NOTIFICATION_ACTIONS.snooze) {
       const content = response.notification.request.content;
@@ -106,6 +111,10 @@ export function subscribeToNotificationActions(handlers: NotificationActionHandl
           channelId: BILL_REMINDER_CHANNEL,
         },
       });
+      if (!await ownsReminderScope(scope) || (handlers.isScopeAuthorized && !await handlers.isScopeAuthorized(scope))) {
+        await Notifications.cancelScheduledNotificationAsync(notificationId);
+        return;
+      }
       const dueDate = typeof data?.dueDate === 'string' ? data.dueDate : null;
       await handlers.onSnooze?.(billId, scope, snoozedUntil.toISOString(), notificationId, dueDate);
       return;
@@ -127,10 +136,10 @@ export async function snoozeLocalBillReminder(
   scope: NotificationScope,
   snoozedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000),
 ): Promise<string | null> {
-  if (Platform.OS === 'web') return null;
+  if (Platform.OS === 'web' || !await ownsReminderScope(scope)) return null;
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) return null;
-  return Notifications.scheduleNotificationAsync({
+  const identifier = await Notifications.scheduleNotificationAsync({
     content: {
       title: bill.name,
       body: i18n.t('mobileCore.notifications.snoozedBody'),
@@ -142,6 +151,7 @@ export async function snoozeLocalBillReminder(
         dueDate: bill.next_due,
         serverProfileId: scope.serverProfileId,
         databaseId: scope.databaseId,
+        ...(scope.principalId ? { principalId: scope.principalId } : {}),
         url: `billmanager://bills/${bill.id}`,
       },
     },
@@ -151,6 +161,41 @@ export async function snoozeLocalBillReminder(
       channelId: BILL_REMINDER_CHANNEL,
     },
   });
+  if (!await ownsReminderScope(scope)) {
+    await Notifications.cancelScheduledNotificationAsync(identifier);
+    return null;
+  }
+  return identifier;
+}
+
+export async function cancelPrincipalReminders(serverProfileId: string, principalId?: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+  const existing = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(existing.filter((item) => item.content.data?.source === NOTIFICATION_SOURCE
+    && item.content.data?.serverProfileId === serverProfileId
+    && item.content.data?.principalId === principalId)
+    .map((item) => Notifications.cancelScheduledNotificationAsync(item.identifier)));
+}
+
+export async function cancelOtherPrincipalReminders(serverProfileId: string, principalId: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+  const scope = { serverProfileId, databaseId: '', principalId };
+  if (!await ownsReminderScope(scope)) return;
+  const existing = await Notifications.getAllScheduledNotificationsAsync();
+  for (const item of existing) {
+    if (!await ownsReminderScope(scope)) return;
+    if (item.content.data?.source === NOTIFICATION_SOURCE
+      && item.content.data?.serverProfileId === serverProfileId
+      && item.content.data?.principalId !== principalId) {
+      await Notifications.cancelScheduledNotificationAsync(item.identifier);
+    }
+  }
+}
+
+async function ownsReminderScope(scope: NotificationScope): Promise<boolean> {
+  if (!scope.principalId) return false; // Unowned legacy reminders must not execute.
+  const tokens = await new SecureProfileTokenStore().load(scope.serverProfileId);
+  return Boolean(tokens.accessToken && tokens.principalId === scope.principalId);
 }
 
 export async function scheduleLocalBillReminders(
@@ -158,6 +203,7 @@ export async function scheduleLocalBillReminders(
   options: { scope: NotificationScope; showAmounts?: boolean; horizonDays?: number; now?: Date },
 ): Promise<number> {
   if (Platform.OS === 'web') return 0;
+  if (!await ownsReminderScope(options.scope)) return 0;
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) return 0;
 
@@ -168,6 +214,7 @@ export async function scheduleLocalBillReminders(
         notification.content.data?.source === NOTIFICATION_SOURCE
         && notification.content.data?.serverProfileId === options.scope.serverProfileId
         && notification.content.data?.databaseId === options.scope.databaseId
+        && notification.content.data?.principalId === options.scope.principalId
       ))
       .map((notification) => Notifications.cancelScheduledNotificationAsync(notification.identifier)),
   );
@@ -178,8 +225,9 @@ export async function scheduleLocalBillReminders(
     options.horizonDays ?? 60,
   );
 
-  await Promise.all(
-    reminders.map((reminder) => {
+  const scheduledIds = await Promise.all(
+    reminders.map(async (reminder) => {
+      if (!await ownsReminderScope(options.scope)) return null;
       const dueLabel =
         reminder.daysBefore === 0
           ? reminder.billType === 'deposit'
@@ -191,7 +239,7 @@ export async function scheduleLocalBillReminders(
         : '';
 
       return Notifications.scheduleNotificationAsync({
-        identifier: `${options.scope.serverProfileId}:${options.scope.databaseId}:${reminder.id}`,
+        identifier: `${options.scope.serverProfileId}:${options.scope.principalId ? `${options.scope.principalId}:` : ''}${options.scope.databaseId}:${reminder.id}`,
         content: {
           title: reminder.billName,
           body: `${dueLabel}${amountLabel}`,
@@ -202,6 +250,7 @@ export async function scheduleLocalBillReminders(
             billId: reminder.billId,
             serverProfileId: options.scope.serverProfileId,
             databaseId: options.scope.databaseId,
+            ...(options.scope.principalId ? { principalId: options.scope.principalId } : {}),
             dueDate: reminder.dueDate,
             url: `billmanager://bills/${reminder.billId}`,
           },
@@ -215,5 +264,10 @@ export async function scheduleLocalBillReminders(
     }),
   );
 
-  return reminders.length;
+  if (!await ownsReminderScope(options.scope)) {
+    await Promise.all(scheduledIds.filter((id): id is string => Boolean(id))
+      .map((id) => Notifications.cancelScheduledNotificationAsync(id)));
+    return 0;
+  }
+  return scheduledIds.filter(Boolean).length;
 }

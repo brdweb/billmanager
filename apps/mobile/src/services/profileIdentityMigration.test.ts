@@ -94,3 +94,17 @@ describe('profile identity migration', () => {
     expect(stores.cachedScopes.has(attackerId)).toBe(false);
   });
 });
+
+describe('profile migration credential ownership', () => {
+  it('never combines a partial destination account with a source account refresh token', async () => {
+    const url = 'https://owner.example/api/v2';
+    const oldId = legacyProfileIdForBaseUrl(url);
+    const nextId = await profileIdForBaseUrl(url);
+    const stores = storesFor({ id: oldId, displayName: 'Owner', baseUrl: url, deploymentMode: 'self_hosted',
+      lastVerifiedAt: null, capabilities: null, selectedDatabase: 'family', isActive: true });
+    stores.tokens.set(oldId, { accessToken: 'alice', refreshToken: 'alice-refresh', principalId: '1' });
+    stores.tokens.set(nextId, { accessToken: 'bob', refreshToken: null, principalId: '2' });
+    await migrateProfileIdentities(stores.profileStore, stores.tokenStore);
+    expect(stores.tokens.get(nextId)).toEqual({ accessToken: 'bob', refreshToken: null, principalId: '2' });
+  });
+});
