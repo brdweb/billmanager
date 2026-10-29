@@ -10,6 +10,11 @@ Repeatable mistakes reviewers catch in this repository. Read this file before st
 - **Rule going forward:** what to do instead
 
 - **Date:** 2026-10-29
+- **PR:** https://github.com/brdweb/billmanager/pull/243
+- **Mistake:** Used stored-profile credential validity as a screen-action freshness check. Inactive profiles retain valid credentials for background work, so an old screen callback could still mutate that profile or open its checkout after a switch.
+- **Rule going forward:** UI actions need a mounted scope lease and an active profile/principal/group check before dispatch and after asynchronous work. Keep stored-auth checks for authorization, and test profile switches with the old credentials still valid, including unmounts and native alert callbacks.
+
+- **Date:** 2026-10-29
 - **PR:** https://github.com/brdweb/billmanager/pull/245
 - **Mistake:** Persisted requested subscription labels even when configured price IDs alias a different canonical interval.
 - **Rule going forward:** Resolve the selected Stripe price through the canonical price-to-plan mapping before persisting billing state, and test aliased price configuration.
@@ -23,3 +28,8 @@ Repeatable mistakes reviewers catch in this repository. Read this file before st
 - **PR:** https://github.com/brdweb/billmanager/issues/236
 - **Mistake:** Wired a Mark paid intent to a legacy toggle without binding the action to the share version and bill occurrence. Another client or recurrence can change the intended state.
 - **Rule going forward:** Send immutable version/occurrence preconditions with idempotency identity, verify server capability, and check them atomically under consistent row locks before any guarded state change.
+
+- **Date:** 2026-10-29
+- **PR:** https://github.com/brdweb/billmanager/pull/243
+- **Mistake:** Used a person's net balance to decide whether outgoing shares could be paid, and permanently suppressed successful occurrences without reconciling a later server reopen.
+- **Rule going forward:** Derive payable actions from the directional unpaid ledger. Retain mutation IDs across uncertain failures, and retire them only after causally fresh server state; a late pre-mutation read or cached refetch is not payment-state evidence. Test mixed-direction balances, partial failure, paid/reopened occurrences and delayed reads.

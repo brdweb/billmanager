@@ -25,6 +25,7 @@ import {
   usagePercent,
 } from './models';
 import { useTranslation } from 'react-i18next';
+import { allowsExternalPurchases } from './actions';
 import type { TFunction } from 'i18next';
 
 function localizedSubscriptionState(t: TFunction, state: SubscriptionState): string {
@@ -79,7 +80,7 @@ function UsageRow({ usage, platform }: { usage: BillingUsageItem; platform: Adap
 function PlanRow({ plan, model, actions, platform, isLast }: { plan: BillingPlanItem; model: BillingViewModel; actions: BillingActions; platform: AdaptivePlatform; isLast: boolean }) {
   const { t } = useTranslation();
   const theme = useAdaptiveTheme(platform);
-  const disabled = model.offline || !model.canManageBilling || plan.current;
+  const disabled = model.offline || model.actionBusy || !model.canManageBilling || plan.current;
   const priceLabel = `${new Intl.NumberFormat(model.locale, { style: 'currency', currency: plan.currency }).format(plan.amount)} ${t(plan.interval === 'month' ? 'mobileParity.billing.perMonth' : 'mobileParity.billing.perYear')}`;
   return (
     <View style={[styles.planRow, !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border }]}>
@@ -103,8 +104,8 @@ function PlanRow({ plan, model, actions, platform, isLast }: { plan: BillingPlan
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('mobileParity.billing.choose', { name: plan.name })}
-          accessibilityState={{ disabled }}
-          disabled={disabled}
+          accessibilityState={{ disabled: Boolean(disabled), busy: model.actionBusy }}
+          disabled={Boolean(disabled)}
           onPress={() => actions.onSelectPlan(plan.id)}
           style={({ pressed }) => [styles.chooseButton, { minHeight: theme.minimumHitSize, borderColor: theme.colors.primary, backgroundColor: plan.recommended ? theme.colors.primary : 'transparent', opacity: disabled ? 0.4 : pressed ? 0.65 : 1 }]}
         >
@@ -167,14 +168,14 @@ export default function BillingScreen({ model, actions, platform = Platform.OS =
                 <View style={styles.titleWithIcon}><Text style={[typography.section, { color: theme.colors.text }]}>{model.subscription.planName}</Text><View style={[styles.badge, { backgroundColor: model.subscription.state === 'past_due' ? theme.colors.accentContainer : theme.colors.surfaceMuted }]}><Text style={[typography.caption, { color: model.subscription.state === 'past_due' ? theme.colors.accent : theme.colors.textSecondary }]}>{localizedSubscriptionState(t, model.subscription.state)}</Text></View></View>
                 <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{model.subscription.renewalLabel ?? model.subscription.cancelAtLabel ?? t('mobileParity.billing.noRenewal')}</Text>
               </View>
-              {model.canManageBilling ? (
+              {allowsExternalPurchases(platform) && model.canManageBilling ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('mobileParity.billing.openPortalA11y')}
-                  accessibilityState={{ disabled: model.offline }}
-                  disabled={model.offline}
+                  accessibilityState={{ disabled: model.offline || model.actionBusy, busy: model.actionBusy }}
+                  disabled={model.offline || model.actionBusy}
                   onPress={actions.onOpenPortal}
-                  style={({ pressed }) => [styles.portalButton, { minHeight: theme.minimumHitSize, opacity: model.offline ? 0.4 : pressed ? 0.55 : 1 }]}
+                  style={({ pressed }) => [styles.portalButton, { minHeight: theme.minimumHitSize, opacity: model.offline || model.actionBusy ? 0.4 : pressed ? 0.55 : 1 }]}
                 ><ExternalLink size={18} color={theme.colors.primary} /><Text style={[typography.callout, { color: theme.colors.primary }]}>{t('mobileParity.billing.manage')}</Text></Pressable>
               ) : null}
             </AdaptiveSurface>
@@ -184,7 +185,7 @@ export default function BillingScreen({ model, actions, platform = Platform.OS =
         <SectionHeader platform={platform} title={t('mobileParity.billing.usage')} />
         {model.usage.length ? <AdaptiveSurface style={styles.usageSurface}>{model.usage.map((usage) => <UsageRow key={usage.id} usage={usage} platform={platform} />)}</AdaptiveSurface> : <AdaptiveSurface style={styles.empty}><Text accessibilityRole="header" style={[typography.headline, { color: theme.colors.text }]}>{t('mobileParity.billing.noUsage')}</Text><Text style={[typography.body, styles.centered, { color: theme.colors.textMuted }]}>{t('mobileParity.billing.noUsageBody')}</Text></AdaptiveSurface>}
 
-        {!selfHosted ? (
+        {!selfHosted && allowsExternalPurchases(platform) ? (
           <>
             <SectionHeader platform={platform} title={t('mobileParity.billing.availablePlans')} />
             {model.plans.length ? <AdaptiveSurface>{model.plans.map((plan, index) => <PlanRow key={plan.id} plan={plan} model={model} actions={actions} platform={platform} isLast={index === model.plans.length - 1} />)}</AdaptiveSurface> : <AdaptiveSurface style={styles.empty}><Text accessibilityRole="header" style={[typography.headline, { color: theme.colors.text }]}>{t('mobileParity.billing.plansUnavailable')}</Text><Text style={[typography.body, styles.centered, { color: theme.colors.textMuted }]}>{t('mobileParity.billing.plansUnavailableBody')}</Text></AdaptiveSurface>}
