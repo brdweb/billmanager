@@ -38,6 +38,16 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     expect(script).toContain('embeddedJavaScriptSha256:hash');
   });
 
+  it('builds and verifies only the active ARM64 Simulator binary and exposes phases', () => {
+    expect(script).toContain('ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO');
+    expect(script).toContain('Print :CFBundleExecutable');
+    expect(script).toContain('xcrun lipo -archs "$app/$executable"');
+    expect(script).toContain('[[ "$(cat "$output/binary-architectures.txt")" == arm64 ]]');
+    expect(script).toContain("binaryArchitectures:fs.readFileSync(`${output}/binary-architectures.txt`,'utf8')");
+    const phases = [...script.matchAll(/QA phase: ([^\\\n']+)/g)].map(match => match[1]);
+    expect(phases.map(phase => phase.split(' ')[0])).toEqual(['prebuild', 'pods', 'compile', 'install', 'Maestro']);
+  });
+
   it('captures actual anonymous navigation without credentials or submissions', () => {
     const commands = flow[1].toJS();
     expect(commands[0]).toEqual({ launchApp: { clearState: true } });
