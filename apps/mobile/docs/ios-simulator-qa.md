@@ -9,7 +9,8 @@ No larger runner, EAS build, production environment or account credential is use
 
 The workflow generates the iOS project from the committed Expo configuration,
 installs CocoaPods, and builds a **Release iOS Simulator** `.app` without device
-signing. SQLCipher, widgets and local Expo modules are compiled. The installed
+signing. Only the active ARM64 Simulator architecture is compiled, and the actual
+app executable must report exactly `arm64` before installation. SQLCipher, widgets and local Expo modules are compiled. The installed
 app runs its embedded JavaScript without Metro or design-preview fixtures.
 
 Production HTTPS-only transport is checked both before and after compilation.
@@ -29,9 +30,14 @@ service can fail the smoke run and must be reported, not bypassed.
 Download the workflow artifact to inspect `manifest.json`, `result.json`, the
 JUnit report, screenshots, native build logs, Simulator logs and the unsigned
 `.app.zip`. The manifest records source commit/tree, mobile version, toolchain,
-Simulator identity, exceptions and SHA-256 hashes of the app archive and embedded
+Simulator identity, actual binary architectures, exceptions and SHA-256 hashes of the app archive and embedded
 JavaScript. Check the job result and report; logs or screenshots alone do not
 establish a passing run. Failed builds still upload available diagnostic output.
+
+The job prints phase starts for prebuild, CocoaPods, native compilation, installation
+and Maestro; full compiler output remains in the retained build log. Before
+dispatching another run, inspect workflow concurrency: `cancel-in-progress: true`
+means a new run can cancel an existing build rather than queue behind it.
 
 This lane does not establish physical-device, App Store signing, authenticated
 bill/payment synchronization, OAuth/passkeys, real notifications, accessibility
