@@ -8,6 +8,7 @@ import AdaptiveSurface from '../../components/adaptive/AdaptiveSurface';
 import { useServerProfiles } from '../../context/ServerProfileContext';
 import { AdaptivePlatform, typography } from '../../design/tokens';
 import { useAdaptiveTheme } from '../../design/useAdaptiveTheme';
+import { resolveBuildEnvironment } from '../../telemetry/buildEnvironment';
 import { buildMobileVersionInfo } from './settingsModel';
 import {
   SettingsAction,
@@ -33,7 +34,7 @@ export function ReleaseNotesScreenView({
       : Constants.expoConfig?.version,
     nativeBuild: Constants.nativeBuildVersion,
     runtimeVersion: Updates.runtimeVersion,
-    channel: Updates.channel,
+    channel: resolveBuildEnvironment(Constants.expoConfig?.extra?.buildEnvironment, Updates.channel, __DEV__),
     serverVersion: activeProfile.capabilities?.serverVersion,
     contractVersion: activeProfile.capabilities?.mobileContractVersion,
   });

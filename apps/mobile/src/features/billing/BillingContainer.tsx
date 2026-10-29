@@ -1,16 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useMobileRuntime } from '../../context/MobileRuntimeContext';
 import { useServerProfiles } from '../../context/ServerProfileContext';
 import { formatDate, getFormattingConfig } from '../../i18n/format';
+import type { ApiResponse, BillingUsage, SubscriptionStatus } from '../../types';
 import BillingScreen from './BillingScreen';
 import type { SubscriptionState } from './models';
 import { proPlans } from './pricing';
+import { allowsExternalPurchases, runBillingAction } from './actions';
+import { useActionScope } from '../useActionScope';
 import { useTranslation } from 'react-i18next';
 
 export default function BillingContainer() {
@@ -20,11 +23,16 @@ export default function BillingContainer() {
   const runtime = useMobileRuntime();
   const formatting = getFormattingConfig();
   const selfHosted = activeProfile.deploymentMode !== 'saas' || !activeProfile.capabilities?.billing;
+  const authScope = api.captureAuthSessionScope();
+  const requestedScope = { ...authScope, serverProfileId: activeProfile.id, principalId: user ? String(user.id) : undefined, databaseId: authScope.databaseId ?? '' };
   const query = useQuery({
-    queryKey: ['billing', activeProfile.id],
-    enabled: !selfHosted && runtime.online,
+    queryKey: ['billing', activeProfile.id, user?.id],
+    enabled: !selfHosted && runtime.online && Boolean(user),
     queryFn: async () => {
-      const [status, usage] = await Promise.all([api.getSubscriptionStatus(), api.getBillingUsage()]);
+      const [status, usage] = await Promise.all([
+        api.requestScopedGet<ApiResponse<SubscriptionStatus>>('/billing/status', requestedScope),
+        api.requestScopedGet<ApiResponse<BillingUsage>>('/billing/usage', requestedScope),
+      ]);
       if (!status.success || !usage.success) throw new Error(status.error ?? usage.error ?? t('mobileParity.billing.unavailableBody'));
       return { status: status.data!, usage: usage.data! };
     },
@@ -36,19 +44,31 @@ export default function BillingContainer() {
     : subscription?.is_trialing
       ? 'trialing'
       : subscription?.status ?? (subscription?.has_subscription ? 'active' : 'free');
+  const actionScope = useActionScope(JSON.stringify([activeProfile.id, user?.id]));
+  const isActionCurrent = () => {
+    const active = api.captureAuthSessionScope();
+    return actionScope.isActive() && active.serverProfileId === requestedScope.serverProfileId
+      && active.principalId === requestedScope.principalId;
+  };
+  const purchasesAllowed = allowsExternalPurchases(Platform.OS);
   const plans = proPlans(t, tier, subscription?.billing_interval);
 
-  const openCheckout = async (planId: string) => {
-    const [tierName, interval] = planId.split('-') as ['pro', 'month' | 'year'];
-    const response = await api.createCheckoutSession(tierName, interval === 'month' ? 'monthly' : 'annual');
-    if (response.success && response.data?.url) await Linking.openURL(response.data.url);
-    else Alert.alert(t('mobileParity.billing.unavailableTitle'), response.error ?? t('mobileParity.billing.checkoutFailed'));
+  const runAction = (request: () => ReturnType<typeof api.createPortalSession>, failureKey: string) => runBillingAction({
+    gate: actionScope.gate,
+    isActive: isActionCurrent,
+    allowed: purchasesAllowed && Boolean(user?.is_account_owner) && runtime.online && !selfHosted,
+    isCurrent: () => api.isPrincipalScopeAuthenticated(requestedScope),
+    request,
+    openUrl: Linking.openURL,
+    onBusy: actionScope.setBusy,
+    onError: (message) => Alert.alert(t('mobileParity.billing.unavailableTitle'), message ?? t(failureKey)),
+  });
+  const openCheckout = (planId: string) => {
+    if (!/^pro-(month|year)$/.test(planId)) return;
+    const interval = planId.endsWith('-month') ? 'monthly' : 'annual';
+    return runAction(() => api.createCheckoutSession('pro', interval, requestedScope), 'mobileParity.billing.checkoutFailed');
   };
-  const openPortal = async () => {
-    const response = await api.createPortalSession();
-    if (response.success && response.data?.url) await Linking.openURL(response.data.url);
-    else Alert.alert(t('mobileParity.billing.unavailableTitle'), response.error ?? t('mobileParity.billing.portalFailed'));
-  };
+  const openPortal = () => runAction(() => api.createPortalSession(requestedScope), 'mobileParity.billing.portalFailed');
 
   return (
     <BillingScreen
@@ -79,15 +99,16 @@ export default function BillingContainer() {
           limit: value.unlimited ? null : value.limit,
           unitLabel: id.replace('_', ' '),
         })),
-        plans: selfHosted ? [] : plans,
-        canManageBilling: Boolean(user?.is_account_owner),
+        plans: selfHosted || !purchasesAllowed ? [] : plans,
+        canManageBilling: purchasesAllowed && Boolean(user?.is_account_owner),
+        actionBusy: actionScope.busy,
         refreshing: query.isFetching,
       }}
       actions={{
         onSelectPlan: (id) => void openCheckout(id),
         onOpenPortal: () => void openPortal(),
-        onRefresh: () => void query.refetch(),
-        onRetry: () => void query.refetch(),
+        onRefresh: () => { if (isActionCurrent()) void query.refetch(); },
+        onRetry: () => { if (isActionCurrent()) void query.refetch(); },
       }}
     />
   );
