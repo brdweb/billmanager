@@ -2,11 +2,6 @@
   "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
   "high": true,
   "allowlist": [
-    // node-forge <=1.4.0 RSA PKCS#1 v1.5 signature verification; no patched
-    // release exists. Reached only through Expo tooling (@expo/cli) and
-    // expo-updates code signing, which this app does not configure. Remove
-    // when node-forge or Expo ships a fix.
-    "GHSA-86w9-cpqp-85rv",
     // zod 3.25.76 (nested at expo > @expo/cli > zod); @expo/cli 58.x needs
     // zod ^3.25.76 and no patched zod 3 release exists. A zod 3 copy used
     // only by Expo build tooling (@expo/cli), not bundled into the app.
