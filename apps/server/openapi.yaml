@@ -3515,12 +3515,16 @@ components:
         - $ref: '#/components/schemas/MutationControl'
         - type: object
           properties:
+            base_bill_updated_at:
+              type: string
+              format: date-time
+              description: Original bill_updated_at version; required with expected_due_date.
             expected_due_date:
               type: string
               format: date
               description: >-
                 Optional guarded mark-paid intent for this occurrence. Requires
-                base_updated_at. Checks the current bill due date under row locks
+                base_updated_at and base_bill_updated_at. Checks the current bill due date and version under row locks
                 and never unmarks an already-paid share. Omission preserves legacy
                 toggle behavior. Requires settlement_payment_preconditions support.
 
@@ -4380,6 +4384,7 @@ components:
         created_at: {type: string, format: date-time, nullable: true}
         accepted_at: {type: string, format: date-time, nullable: true}
         share_updated_at: {type: string, format: date-time, nullable: true}
+        bill_updated_at: {type: string, format: date-time, nullable: true}
 
     CategoryBudget:
       type: object

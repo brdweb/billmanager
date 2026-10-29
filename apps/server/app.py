@@ -814,6 +814,7 @@ def serialize_settlement_share(share, direction, currency, db_name_lookup=None):
         "created_at": share.created_at.isoformat() if share.created_at else None,
         "accepted_at": share.accepted_at.isoformat() if share.accepted_at else None,
         "share_updated_at": _isoformat_utc(share.updated_at),
+        "bill_updated_at": _isoformat_utc(bill.last_updated),
     }
 
 
@@ -4669,6 +4670,19 @@ def jwt_mark_share_paid(share_id):
                     "server": {**_share_conflict_data(share), "due_date": share.bill.due_date},
                 },
             }), 409
+
+    if guarded:
+        if "base_bill_updated_at" not in data:
+            return _error_response("invalid_base_bill_updated_at", "base_bill_updated_at is required with expected_due_date", 400)
+        _, error = _parse_base_updated_at({"base_updated_at": data["base_bill_updated_at"]})
+        if error:
+            return _error_response("invalid_base_bill_updated_at", "base_bill_updated_at must be an RFC3339 timestamp with a UTC offset", 400)
+        conflict = _optimistic_conflict(
+            {"base_updated_at": data["base_bill_updated_at"]}, "bill", share.bill.id,
+            share.bill.last_updated, _bill_conflict_data(share.bill),
+        )
+        if conflict:
+            return conflict
 
     if share.status != "accepted":
         return jsonify({"success": False, "error": "Share is not active"}), 400

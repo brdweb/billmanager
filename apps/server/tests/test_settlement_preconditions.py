@@ -21,7 +21,8 @@ def settlement(client, db_session, test_bill, admin_user, regular_user, user_aut
     row = client.get("/api/v2/settlements", headers=headers).get_json()["data"]["i_owe"][0]
     return share.id, test_bill.id, headers, {
         "client_mutation_id": str(uuid.uuid4()),
-        "base_updated_at": row["share_updated_at"], "expected_due_date": row["due_date"],
+        "base_updated_at": row["share_updated_at"], "base_bill_updated_at": row["bill_updated_at"],
+        "expected_due_date": row["due_date"],
     }
 
 
@@ -34,6 +35,7 @@ def post(client, fixture, payload=None):
 def test_settlement_payment_capability_and_version_are_advertised(client, settlement):
     assert client.get("/api/v2/config").get_json()["data"]["mobile"]["features"]["settlement_payment_preconditions"] is True
     assert settlement[3]["base_updated_at"].endswith("Z")
+    assert settlement[3]["base_bill_updated_at"].endswith("Z")
 
 
 def test_stale_mark_paid_cannot_unpay_another_client_payment(client, settlement, db_session):
@@ -62,7 +64,9 @@ def test_current_paid_snapshot_is_not_a_guarded_unmark_intent(client, settlement
 def test_lost_response_retry_replays_before_new_version_or_occurrence_checks(client, settlement, db_session):
     first = post(client, settlement)
     assert first.status_code == 200
-    db_session.get(Bill, settlement[1]).due_date = "2026-02-15"
+    bill = db_session.get(Bill, settlement[1])
+    bill.due_date = "2026-02-15"
+    bill.amount = float(bill.amount) + 10
     db_session.commit()
     retry = post(client, settlement)
     assert retry.status_code == 200
@@ -198,4 +202,30 @@ def test_mark_paid_and_share_first_leave_do_not_deadlock(app, settlement, db_ses
         assert paying.result(timeout=10) == 409
     db_session.expire_all()
     assert db_session.get(BillShare, settlement[0]).status == "revoked"
+    assert Payment.query.filter_by(share_id=settlement[0]).count() == 0
+
+
+def test_same_due_bill_amount_edit_requires_new_payment_intent(client, settlement, db_session):
+    bill = db_session.get(Bill, settlement[1])
+    bill.amount = float(bill.amount) + 10
+    db_session.commit()
+    response = post(client, settlement)
+    assert response.status_code == 409
+    assert response.get_json()["conflict"]["entity"] == "bill"
+    assert response.get_json()["conflict"]["reason"] == "modified"
+    assert Payment.query.filter_by(share_id=settlement[0]).count() == 0
+
+
+@pytest.mark.parametrize("value", [None, "", "2026-01-01", 0, []])
+def test_guarded_payment_rejects_invalid_bill_version(client, settlement, value):
+    response = post(client, settlement, {**settlement[3], "base_bill_updated_at": value})
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "invalid_base_bill_updated_at"
+    assert Payment.query.filter_by(share_id=settlement[0]).count() == 0
+
+
+def test_guarded_payment_requires_bill_version(client, settlement):
+    payload = dict(settlement[3])
+    del payload["base_bill_updated_at"]
+    assert post(client, settlement, payload).status_code == 400
     assert Payment.query.filter_by(share_id=settlement[0]).count() == 0

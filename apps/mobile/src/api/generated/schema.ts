@@ -1950,8 +1950,13 @@ export interface components {
         };
         SharePaidMutationInput: components["schemas"]["MutationControl"] & {
             /**
+             * Format: date-time
+             * @description Original bill_updated_at version; required with expected_due_date.
+             */
+            base_bill_updated_at?: string;
+            /**
              * Format: date
-             * @description Optional guarded mark-paid intent for this occurrence. Requires base_updated_at. Checks the current bill due date under row locks and never unmarks an already-paid share. Omission preserves legacy toggle behavior. Requires settlement_payment_preconditions support.
+             * @description Optional guarded mark-paid intent for this occurrence. Requires base_updated_at and base_bill_updated_at. Checks the current bill due date and version under row locks and never unmarks an already-paid share. Omission preserves legacy toggle behavior. Requires settlement_payment_preconditions support.
              */
             expected_due_date?: string;
         };
@@ -2453,6 +2458,8 @@ export interface components {
             accepted_at?: string | null;
             /** Format: date-time */
             share_updated_at?: string | null;
+            /** Format: date-time */
+            bill_updated_at?: string | null;
         };
         CategoryBudget: {
             id: number;
