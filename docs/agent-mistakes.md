@@ -1,6 +1,6 @@
 # Agent mistakes
 
-Repeatable mistakes reviewers catch in this repository. Read this file before starting work. Add an entry when a reviewer catches a mistake that should not be repeated. Entries follow the format below.
+Repeatable mistakes reviewers catch in this repository. Read this file before starting work. Add an entry when a reviewer catches a mistake that should not be repeated.
 
 ## Entry format
 
@@ -13,6 +13,11 @@ Repeatable mistakes reviewers catch in this repository. Read this file before st
 - **PR:** https://github.com/brdweb/billmanager/pull/243
 - **Mistake:** Used stored-profile credential validity as a screen-action freshness check. Inactive profiles retain valid credentials for background work, so an old screen callback could still mutate that profile or open its checkout after a switch.
 - **Rule going forward:** UI actions need a mounted scope lease and an active profile/principal/group check before dispatch and after asynchronous work. Keep stored-auth checks for authorization, and test profile switches with the old credentials still valid, including unmounts and native alert callbacks.
+
+- **Date:** 2026-10-29
+- **PR:** https://github.com/brdweb/billmanager/pull/245
+- **Mistake:** Persisted requested subscription labels even when configured price IDs alias a different canonical interval.
+- **Rule going forward:** Resolve the selected Stripe price through the canonical price-to-plan mapping before persisting billing state, and test aliased price configuration.
 
 - **Date:** 2026-10-29
 - **PR:** https://github.com/brdweb/billmanager/issues/236
