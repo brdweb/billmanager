@@ -2004,7 +2004,7 @@ def billing_portal():
 @jwt_required
 def change_plan():
     """Change the subscription immediately without creating prorations."""
-    from config import get_stripe_price_id, normalize_paid_tier
+    from config import get_stripe_price_id, get_plan_for_stripe_price_id, normalize_paid_tier
 
     user = db.session.get(User, g.jwt_user_id)
     if not user:
@@ -2050,6 +2050,13 @@ def change_plan():
 
     if "error" in result:
         return jsonify({"success": False, "error": result["error"]}), 400
+
+    # The configured annual/monthly IDs can alias the same provider price.
+    # Match the service's canonical price mapping rather than request labels.
+    resolved_plan = get_plan_for_stripe_price_id(new_price_id)
+    if not resolved_plan:
+        return jsonify({"success": False, "error": "Stripe price ID is not recognized"}), 400
+    new_tier, new_interval = resolved_plan
 
     # Reflect the provider-confirmed change only after the update succeeds.
     user.subscription.tier = new_tier
