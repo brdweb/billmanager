@@ -9,7 +9,7 @@ import { useMobileRuntime } from '../../context/MobileRuntimeContext';
 import { useServerProfiles } from '../../context/ServerProfileContext';
 import { MobileCacheRepository } from '../../data/cacheRepository';
 import { formatDate, getFormattingConfig } from '../../i18n/format';
-import type { SettlementsResponse } from '../../types';
+import type { ApiResponse, SettlementsResponse } from '../../types';
 import SettlementsScreen from './SettlementsScreen';
 import { settleOutstandingShares } from './actions';
 import { useTranslation } from 'react-i18next';
@@ -38,14 +38,14 @@ export default function SettlementsContainer() {
         if (!saved) throw new Error(t('mobileParity.settlements.noSavedData'));
         return saved;
       }
-      const response = await api.getSettlements();
+      const response = await api.requestScopedGet<ApiResponse<SettlementsResponse>>('/settlements', scope);
       if (!response.success || !response.data) throw new Error(response.error ?? t('mobileParity.settlements.unavailableBody'));
       await cacheRepository.putAnalyticsSnapshot(scope, snapshotKey, response.data, null);
       return response.data;
     },
   });
   const data = query.data;
-  const requestedScope = api.captureAuthSessionScope();
+  const requestedScope = { ...api.captureAuthSessionScope(), ...scope };
   const bucketLabel = currentDatabase === '_all_'
     ? t('mobileCore.common.allBuckets')
     : databases.find((database) => database.name === currentDatabase)?.display_name ?? t('mobileParity.analytics.currentBucket');

@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useMobileRuntime } from '../../context/MobileRuntimeContext';
 import { useServerProfiles } from '../../context/ServerProfileContext';
 import { formatDate, getFormattingConfig } from '../../i18n/format';
+import type { ApiResponse, BillingUsage, SubscriptionStatus } from '../../types';
 import BillingScreen from './BillingScreen';
 import type { SubscriptionState } from './models';
 import { proPlans } from './pricing';
@@ -21,11 +22,16 @@ export default function BillingContainer() {
   const runtime = useMobileRuntime();
   const formatting = getFormattingConfig();
   const selfHosted = activeProfile.deploymentMode !== 'saas' || !activeProfile.capabilities?.billing;
+  const authScope = api.captureAuthSessionScope();
+  const requestedScope = { ...authScope, serverProfileId: activeProfile.id, principalId: user ? String(user.id) : undefined, databaseId: authScope.databaseId ?? '' };
   const query = useQuery({
     queryKey: ['billing', activeProfile.id, user?.id],
     enabled: !selfHosted && runtime.online && Boolean(user),
     queryFn: async () => {
-      const [status, usage] = await Promise.all([api.getSubscriptionStatus(), api.getBillingUsage()]);
+      const [status, usage] = await Promise.all([
+        api.requestScopedGet<ApiResponse<SubscriptionStatus>>('/billing/status', requestedScope),
+        api.requestScopedGet<ApiResponse<BillingUsage>>('/billing/usage', requestedScope),
+      ]);
       if (!status.success || !usage.success) throw new Error(status.error ?? usage.error ?? t('mobileParity.billing.unavailableBody'));
       return { status: status.data!, usage: usage.data! };
     },
@@ -39,7 +45,6 @@ export default function BillingContainer() {
       : subscription?.status ?? (subscription?.has_subscription ? 'active' : 'free');
   const actionGate = useRef(false);
   const [actionBusy, setActionBusy] = useState(false);
-  const requestedScope = api.captureAuthSessionScope();
   const purchasesAllowed = allowsExternalPurchases(Platform.OS);
   const plans = proPlans(t, tier, subscription?.billing_interval);
 
