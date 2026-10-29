@@ -1,4 +1,5 @@
 """The public plan-change response must match its existing provider behavior."""
+import datetime
 from unittest.mock import Mock
 
 import pytest
@@ -16,6 +17,8 @@ def test_plan_change_is_immediate_only_after_provider_success(
         user_id=admin_user.id, tier="plus", status="active",
         billing_interval="annual" if interval == "monthly" else "monthly",
         stripe_customer_id="cus_synthetic", stripe_subscription_id="sub_synthetic",
+        trial_ends_at=datetime.datetime(2027, 1, 1),
+        current_period_end=datetime.datetime(2027, 2, 1),
     )
     db_session.add(subscription)
     db_session.commit()
@@ -41,5 +44,5 @@ def test_plan_change_is_immediate_only_after_provider_success(
         assert (subscription.tier, subscription.billing_interval) == ("pro", interval)
     assert subscription.stripe_customer_id == "cus_synthetic"
     assert subscription.stripe_subscription_id == "sub_synthetic"
-    assert subscription.trial_ends_at is None
-    assert subscription.current_period_end is None
+    assert subscription.trial_ends_at == datetime.datetime(2027, 1, 1)
+    assert subscription.current_period_end == datetime.datetime(2027, 2, 1)
