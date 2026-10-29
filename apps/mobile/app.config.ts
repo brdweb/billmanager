@@ -39,6 +39,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   // three ABIs are what push the native compile over the EAS medium worker's
   // memory limit. Production keeps the default ABI list.
   const previewAndroidApk = process.env.EAS_BUILD_PROFILE === 'preview';
+  const buildEnvironment = developmentBuild ? 'development'
+    : process.env.EAS_BUILD_PROFILE?.startsWith('preview') ? 'preview' : 'production';
 
   return {
     ...config,
@@ -52,8 +54,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     userInterfaceStyle: 'automatic',
     runtimeVersion: { policy: 'appVersion' },
     updates: {
-      url: `https://u.expo.dev/${EAS_PROJECT_ID}`,
-      checkAutomatically: 'ON_LOAD',
+      // Store-delivered releases run only their embedded bundle. Expo Update
+      // requests have a diagnostic path outside our Sentry payload scrubber.
+      enabled: developmentBuild,
+      ...(developmentBuild ? { url: `https://u.expo.dev/${EAS_PROJECT_ID}` } : {}),
+      checkAutomatically: developmentBuild ? 'ON_LOAD' : 'NEVER',
+      useEmbeddedUpdate: true,
       fallbackToCacheTimeout: 0,
     },
     ios: {
@@ -209,6 +215,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ...config.extra,
       allowCleartextDevelopmentServers: developmentBuild,
       releaseVersion: MOBILE_RELEASE_VERSION,
+      buildEnvironment,
       releaseLabel: MOBILE_RELEASE_LABEL,
       // Sentry DSNs are public client routing keys. The upload token is never
       // included in app config; EAS supplies SENTRY_AUTH_TOKEN at build time.
