@@ -8,7 +8,7 @@ import { useMobileRuntime } from '../../context/MobileRuntimeContext';
 import { useServerProfiles } from '../../context/ServerProfileContext';
 import { MobileCacheRepository } from '../../data/cacheRepository';
 import { formatDate, getFormattingConfig } from '../../i18n/format';
-import type { SettlementsResponse } from '../../types';
+import type { ApiResponse, SettlementsResponse } from '../../types';
 import SettlementsScreen from './SettlementsScreen';
 import { useTranslation } from 'react-i18next';
 
@@ -17,12 +17,12 @@ const snapshotKey = 'settlements-v1';
 
 export default function SettlementsContainer() {
   const { t } = useTranslation();
-  const { currentDatabase, databases } = useAuth();
+  const { user, currentDatabase, databases } = useAuth();
   const { activeProfile } = useServerProfiles();
   const runtime = useMobileRuntime();
   const formatting = getFormattingConfig();
   const supported = activeProfile.capabilities?.settlements ?? false;
-  const scope = { serverProfileId: activeProfile.id, databaseId: currentDatabase ?? '' };
+  const scope = { serverProfileId: activeProfile.id, databaseId: currentDatabase ?? '', principalId: user ? String(user.id) : undefined };
   const query = useQuery({
     queryKey: ['settlements', activeProfile.id, currentDatabase, runtime.online],
     enabled: supported && Boolean(currentDatabase),
@@ -32,7 +32,7 @@ export default function SettlementsContainer() {
         if (!saved) throw new Error(t('mobileParity.settlements.noSavedData'));
         return saved;
       }
-      const response = await api.getSettlements();
+      const response = await api.requestScopedGet<ApiResponse<SettlementsResponse>>('/settlements', scope);
       if (!response.success || !response.data) throw new Error(response.error ?? t('mobileParity.settlements.unavailableBody'));
       await cacheRepository.putAnalyticsSnapshot(scope, snapshotKey, response.data, null);
       return response.data;

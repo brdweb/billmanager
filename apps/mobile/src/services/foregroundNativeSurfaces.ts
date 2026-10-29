@@ -2,7 +2,8 @@ import type { CacheScope } from '../data/cacheRepository';
 
 function sameScope(left: CacheScope, right: CacheScope): boolean {
   return left.serverProfileId === right.serverProfileId
-    && left.databaseId === right.databaseId;
+    && left.databaseId === right.databaseId
+    && left.principalId === right.principalId;
 }
 
 interface ActiveLease {

@@ -13,6 +13,7 @@ interface AuthSessionRow {
 export interface StoredSessionScope {
   serverProfileId: string;
   databaseId: string;
+  principalId?: string;
 }
 
 export interface AuthSessionStore {
@@ -87,8 +88,9 @@ export class SQLiteAuthSessionStore implements AuthSessionStore {
     const rows = await database.getAllAsync<{
       server_profile_id: string;
       current_database: string;
+      user_json?: string;
     }>(
-      `SELECT server_profile_id, current_database
+      `SELECT server_profile_id, current_database, user_json
        FROM auth_sessions
        WHERE current_database IS NOT NULL AND current_database <> ''
        ORDER BY server_profile_id`,
@@ -96,6 +98,7 @@ export class SQLiteAuthSessionStore implements AuthSessionStore {
     return rows.map((row) => ({
       serverProfileId: row.server_profile_id,
       databaseId: row.current_database,
+      ...(row.user_json ? { principalId: String(JSON.parse(row.user_json).id) } : {}),
     }));
   }
 }

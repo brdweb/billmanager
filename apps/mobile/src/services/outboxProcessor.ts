@@ -34,12 +34,12 @@ export class OutboxProcessor {
     this.maxRetryDelayMs = options.maxRetryDelayMs ?? 15 * 60 * 1000;
   }
 
-  process(serverProfileId: string, databaseId: string): Promise<OutboxProcessSummary> {
-    const scopeKey = `${serverProfileId}\u0000${databaseId}`;
+  process(serverProfileId: string, databaseId: string, principalId?: string): Promise<OutboxProcessSummary> {
+    const scopeKey = `${serverProfileId}\u0000${principalId ?? ''}\u0000${databaseId}`;
     const current = this.activeScopes.get(scopeKey);
     if (current) return current;
 
-    const processing = this.processScope(serverProfileId, databaseId).finally(() => {
+    const processing = this.processScope(serverProfileId, databaseId, principalId).finally(() => {
       this.activeScopes.delete(scopeKey);
     });
     this.activeScopes.set(scopeKey, processing);
@@ -49,6 +49,7 @@ export class OutboxProcessor {
   private async processScope(
     serverProfileId: string,
     databaseId: string,
+    principalId?: string,
   ): Promise<OutboxProcessSummary> {
     const summary: OutboxProcessSummary = {
       attempted: 0,
@@ -60,6 +61,7 @@ export class OutboxProcessor {
       serverProfileId,
       databaseId,
       this.now().toISOString(),
+      ...(principalId ? [principalId] : []),
     );
 
     for (const mutation of mutations) {
