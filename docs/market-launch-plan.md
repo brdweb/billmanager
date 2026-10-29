@@ -31,7 +31,7 @@ All application code is assigned to GPT-6.1 Sol sub-agents. The coordinating age
 
 Prioritize confirmed correctness and release blockers over redesign or speculative features. Remote push, receipt OCR, attachments and Live Activities remain outside this launch. The internal operator dashboard needs validation and demonstrated fixes only. Do not change prices, charge real customers in testing, erase production data, accept new legal terms on the owner's behalf, disable approval gates, or claim native acceptance from unit tests.
 
-The unused billing change-plan endpoint appears to promise deferred changes while applying them immediately. Investigate reachability and add an explicit correction or disable unsupported behavior in a separate reviewed change; avoid expanding subscription scope unnecessarily.
+The published billing change-plan endpoint promises deferred changes while applying them immediately. PR #245 preserves its public API and existing provider request, reports immediate changes accurately, and updates local plan state only after provider success. It does not add a new billing integration or change prices.
 
 ## Validation strategy
 
@@ -45,7 +45,7 @@ The unused billing change-plan endpoint appears to promise deferred changes whil
 
 GitHub reviewer approval may be needed when the protected release job reaches its gate. Apple/Google sign-in or 2FA, owner declarations, real reviewer credentials and an iPhone may need owner participation. Prepare the concrete candidate and forms before asking for decisions. Do not expose keys, passwords, session data or review credentials in chat or tracked files.
 
-Google's current personal-account policy requires 12 testers opted in continuously for at least 14 days before applying for production access. The live account's current eligibility still needs verification. This elapsed-time requirement cannot be replaced with simulated users or automated tests. [Google testing requirements](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en)
+Google's current personal-account policy requires 12 testers opted in continuously for at least 14 days before applying for production access. The live Console on October 29 shows zero opted-in testers and production access unavailable. This elapsed-time requirement cannot be replaced with simulated users or automated tests. The owner must recruit real testers through the existing beta group and Play opt-in link. [Google testing requirements](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en)
 
 Apple currently permits external purchase links in US-storefront apps; confirm US-only availability and the final candidate's behavior. Google external purchase links require program enrollment and integration, so the launch plan uses consumption-only Android behavior until those are verified. [Apple review guidelines](https://developer.apple.com/app-store/review/guidelines/), [Google external content links](https://support.google.com/googleplay/android-developer/answer/16470497?hl=en)
 
@@ -54,3 +54,8 @@ Implementation and store-access checks run in parallel. Signed builds follow int
 ## Progress record
 
 - October 29: initial audits completed; confirmed account-isolation, web identity/race, deletion-route and release-metadata work scoped. Main CI at the synchronized baseline is green. Live store inspection and implementation are in progress.
+- Backend dependency fix #242 and mobile in-memory account isolation #239 are merged after required checks passed. Durable account partitions (#244), web ownership/group recovery (#241), mobile action handling (#243), and billing response accuracy (#245) are separate review units. Independent review found additional legacy-identity and stale-dialog cases; these must be fixed before their PRs merge.
+- Marketing `f40557a`, documentation `48e9946`, and dashboard `90123f9` are integrated into their default branches. Builds, route/browser checks and relevant tests passed. New production deployment remains pending; source integration is not live deployment.
+- Apple and Google Console access and local Expo authentication work. Apple free pricing and United States-only availability were saved and read back. Apple privacy remains a nine-type draft; review contact and reusable demo access remain incomplete. The existing Google reviewer instructions require registration and must be replaced with reusable review credentials.
+- No Apple device is available, confirmed by the owner. A fresh Android API 36 emulator is booted for candidate testing. Neither fact closes physical-device or production diagnostics acceptance.
+- Production SSH currently fails because the local signing agent is unavailable. Owner unlock is pending. Preserve the existing dirty/rebasing homelab workspaces; any deployment definition changes require an isolated checkout, exact image pins and rollback evidence.
