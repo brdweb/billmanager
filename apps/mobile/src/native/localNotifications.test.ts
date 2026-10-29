@@ -158,4 +158,22 @@ describe('profile-scoped local notifications', () => {
     expect(mocks.schedule).not.toHaveBeenCalled();
   });
 
+  it('cancels a notification-action snooze that completes after logout', async () => {
+    let finish!: (id: string) => void;
+    mocks.schedule.mockImplementation(() => new Promise<string>((resolve) => { finish = resolve; }));
+    const onSnooze = vi.fn();
+    subscribeToNotificationActions({ onOpenBill: vi.fn(), onMarkPaid: vi.fn(), onSnooze });
+    const listener = mocks.addResponseListener.mock.calls[0][0];
+    const pending = listener({ actionIdentifier: NOTIFICATION_ACTIONS.snooze,
+      notification: { request: { content: { title: 'Alice bill', data: {
+        billId: 41, serverProfileId: 'server', databaseId: 'family', principalId: '1',
+      } } } } });
+    await vi.waitFor(() => expect(mocks.schedule).toHaveBeenCalled());
+    mocks.loadTokens.mockResolvedValue({ accessToken: null, refreshToken: null });
+    finish('late-action-snooze');
+    await pending;
+    expect(mocks.cancelScheduled).toHaveBeenCalledWith('late-action-snooze');
+    expect(onSnooze).not.toHaveBeenCalled();
+  });
+
 });
