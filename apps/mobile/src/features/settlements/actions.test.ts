@@ -23,3 +23,8 @@ it('does not dispatch a stale dialog or continue a batch after account switch', 
   await settleOutstandingShares([1], new Set(), markPaid, async () => false, () => true);
   expect(markPaid).not.toHaveBeenCalled();
 });
+it('distinguishes definite state conflicts from uncertain transport failures', async () => {
+  const markPaid = vi.fn().mockResolvedValueOnce({ success: false, httpStatus: 409 }).mockResolvedValueOnce({ success: false });
+  expect(await settleOutstandingShares([1, 2], new Set(), markPaid, async () => true, () => true))
+    .toEqual({ succeeded: [], failed: [1, 2], conflicted: [1] });
+});

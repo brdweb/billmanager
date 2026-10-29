@@ -426,6 +426,7 @@ def get_mobile_capabilities(enabled_providers=None):
             "administration": True,
             "sharing": True,
             "settlements": True,
+            "settlement_payment_preconditions": True,
             "telemetry": True,
             "delta_sync": True,
             "idempotent_mutations": True,

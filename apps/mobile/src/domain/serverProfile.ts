@@ -17,6 +17,7 @@ export interface ServerCapabilities {
   administration: boolean;
   sharing: boolean;
   settlements: boolean;
+  settlementPaymentPreconditions?: boolean;
 }
 
 export interface ServerProfile {

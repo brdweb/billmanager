@@ -868,7 +868,11 @@ paths:
       summary: Mark recipient portion as paid
       operationId: toggleSharePaid
       x-capability: settlements
-      description: Allows share recipient to mark their portion of the bill as paid
+      description: >-
+        Legacy callers toggle the recipient payment state. Guarded mark-paid
+        callers send base_updated_at from share_updated_at and expected_due_date;
+        stale versions, changed occurrences and already-paid shares return 409.
+        Completed client_mutation_id retries replay before these checks.
       security:
         - bearerAuth: []
       parameters:
@@ -877,7 +881,7 @@ paths:
         required: false
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/MutationControl'}
+            schema: {$ref: '#/components/schemas/SharePaidMutationInput'}
       responses:
         '200':
           description: Recipient payment state toggled
@@ -3476,7 +3480,7 @@ components:
           type: integer
         reason:
           type: string
-          enum: [modified]
+          enum: [modified, occurrence_changed, already_paid]
         base_updated_at:
           type: string
           format: date-time
@@ -3505,6 +3509,24 @@ components:
             Last server timestamp read by the client, encoded as RFC3339 with a
             UTC offset. Legacy clients may omit this field; when present it
             cannot be null, empty, or offset-free.
+
+    SharePaidMutationInput:
+      allOf:
+        - $ref: '#/components/schemas/MutationControl'
+        - type: object
+          properties:
+            base_bill_updated_at:
+              type: string
+              format: date-time
+              description: Original bill_updated_at version; required with expected_due_date.
+            expected_due_date:
+              type: string
+              format: date
+              description: >-
+                Optional guarded mark-paid intent for this occurrence. Requires
+                base_updated_at and base_bill_updated_at. Checks the current bill due date and version under row locks
+                and never unmarks an already-paid share. Omission preserves legacy
+                toggle behavior. Requires settlement_payment_preconditions support.
 
     ObjectDataResponse:
       type: object
@@ -3805,6 +3827,7 @@ components:
             administration: {type: boolean}
             sharing: {type: boolean}
             settlements: {type: boolean}
+            settlement_payment_preconditions: {type: boolean}
             telemetry: {type: boolean}
             delta_sync: {type: boolean}
             idempotent_mutations: {type: boolean}
@@ -4361,6 +4384,7 @@ components:
         created_at: {type: string, format: date-time, nullable: true}
         accepted_at: {type: string, format: date-time, nullable: true}
         share_updated_at: {type: string, format: date-time, nullable: true}
+        bill_updated_at: {type: string, format: date-time, nullable: true}
 
     CategoryBudget:
       type: object
