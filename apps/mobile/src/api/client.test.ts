@@ -1679,4 +1679,15 @@ describe('BillManagerApi security behavior', () => {
     }, expect.any(Object));
   });
 
+  it.each([true, false])('sends explicit desired paid=%s with the original guarded tuple', async (desiredPaid) => {
+    const { api } = createApi();
+    testMocks.mockClient.post.mockResolvedValue({ data: { success: true } });
+    await api.markSharePaid(4, undefined, 'stable-uuid', {
+      baseUpdatedAt: '2026-10-29T12:00:00.123456+00:00', baseBillUpdatedAt: '2026-10-29T10:00:00.654321+00:00', expectedDueDate: '2026-10-29', desiredPaid,
+    });
+    expect(testMocks.mockClient.post).toHaveBeenCalledWith('/shares/4/mark-paid', {
+      client_mutation_id: 'stable-uuid', base_updated_at: '2026-10-29T12:00:00.123456+00:00', base_bill_updated_at: '2026-10-29T10:00:00.654321+00:00', expected_due_date: '2026-10-29', desired_paid: desiredPaid,
+    }, expect.any(Object));
+  });
+
 });

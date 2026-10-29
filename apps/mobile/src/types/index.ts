@@ -63,6 +63,7 @@ export interface Bill {
   share_count?: number;
   share_info?: {
     share_id: number;
+    share_updated_at?: string | null;
     owner_name: string;
     my_portion: number | null;
     my_portion_paid: boolean;
