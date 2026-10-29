@@ -50,6 +50,23 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.3',
+    date: '2026-10-29',
+    title: 'Account Boundaries and Session Recovery',
+    sections: [
+      { heading: 'Bug Fixes', items: [
+        'Sign-in methods consistently identify account owners, and managed users no longer see owner-only controls',
+        'Switching accounts or bill groups clears old bills and ignores late responses from the previous view',
+        'Sessions recover when a previously selected bill group has been removed or access has changed',
+        'Subscription plan changes report their existing immediate behavior and update the local plan after provider confirmation',
+        'Release-note dates display the correct calendar day across time zones',
+      ] },
+      { heading: 'Security', items: [
+        'Patched the server msgpack dependency',
+      ] },
+    ],
+  },
+  {
     version: '4.13.2',
     date: '2026-10-22',
     title: 'Insights Ranges and Shared-Bill Totals',

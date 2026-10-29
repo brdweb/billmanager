@@ -66,6 +66,7 @@ export function ReleaseNotesModal({ opened, onClose, initialVersion }: ReleaseNo
             </Text>
             <Text size="sm" c="dimmed">
               {new Date(release.date).toLocaleDateString(getLocale(), {
+                timeZone: 'UTC',
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
