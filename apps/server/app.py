@@ -2003,8 +2003,8 @@ def billing_portal():
 @api_v2_bp.route("/billing/change-plan", methods=["POST"])
 @jwt_required
 def change_plan():
-    """Change subscription plan (upgrade or downgrade)."""
-    from config import get_stripe_price_id, normalize_paid_tier
+    """Change the subscription immediately without creating prorations."""
+    from config import get_stripe_price_id, get_plan_for_stripe_price_id, normalize_paid_tier
 
     user = db.session.get(User, g.jwt_user_id)
     if not user:
@@ -2041,32 +2041,33 @@ def change_plan():
             {"success": False, "error": "Price not configured for selected plan"}
         ), 400
 
-    # Determine if upgrade or downgrade based on tier/price
-    current_tier = user.subscription.tier or "pro"
-    tier_order = {"basic": 1, "plus": 1, "pro": 1}
-    is_upgrade = tier_order.get(new_tier, 1) > tier_order.get(current_tier, 1)
-
-    # Upgrades: immediate with proration. Downgrades: at end of billing period
+    # Preserve the existing no-proration provider behavior. Changing the item
+    # price does not create a schedule, so the response must not promise a
+    # deferred change.
     result = update_subscription(
-        user.subscription.stripe_subscription_id, new_price_id, prorate=is_upgrade
+        user.subscription.stripe_subscription_id, new_price_id, prorate=False
     )
 
     if "error" in result:
         return jsonify({"success": False, "error": result["error"]}), 400
 
-    # Update local subscription record
-    # For upgrades: update immediately. For downgrades: keep current tier until period ends
-    if is_upgrade:
-        user.subscription.tier = new_tier
-        user.subscription.billing_interval = new_interval
-        db.session.commit()
-    # For downgrades, Stripe will handle the change at period end via webhook
+    # The configured annual/monthly IDs can alias the same provider price.
+    # Match the service's canonical price mapping rather than request labels.
+    resolved_plan = get_plan_for_stripe_price_id(new_price_id)
+    if not resolved_plan:
+        return jsonify({"success": False, "error": "Stripe price ID is not recognized"}), 400
+    new_tier, new_interval = resolved_plan
+
+    # Reflect the provider-confirmed change only after the update succeeds.
+    user.subscription.tier = new_tier
+    user.subscription.billing_interval = new_interval
+    db.session.commit()
 
     return jsonify(
         {
             "success": True,
-            "message": f"Plan {'upgraded' if is_upgrade else 'downgraded'} to {new_tier.capitalize()}",
-            "effective": "immediately" if is_upgrade else "at end of billing period",
+            "message": f"Plan updated to {new_tier.capitalize()}",
+            "effective": "immediately",
             "data": result,
         }
     )
