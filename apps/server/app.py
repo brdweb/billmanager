@@ -945,7 +945,8 @@ def jwt_required(f):
         g.jwt_role = user.role
 
         # Get database from X-Database header for mobile clients
-        db_name = request.headers.get("X-Database")
+        # Account identity/preferences must recover even when a saved group was revoked.
+        db_name = None if f.__name__ == "jwt_me" else request.headers.get("X-Database")
         if db_name:
             if db_name == "_all_":
                 # Special value for all-databases view
@@ -1496,6 +1497,7 @@ def jwt_login():
                     "id": user.id,
                     "username": user.username,
                     "role": user.role,
+                    "is_account_owner": user.is_account_owner if is_saas() else user.role == "admin",
                     "currency": user.currency,
                 },
                 "databases": databases,
@@ -5690,6 +5692,7 @@ def jwt_change_password():
                     "id": user.id,
                     "username": user.username,
                     "role": user.role,
+                    "is_account_owner": user.is_account_owner if is_saas() else user.role == "admin",
                     "currency": user.currency,
                 },
                 "databases": databases,
@@ -6482,6 +6485,7 @@ def _complete_oauth_identity(
                     "id": user.id,
                     "username": user.username,
                     "role": user.role,
+                    "is_account_owner": user.is_account_owner if is_saas() else user.role == "admin",
                     "is_new_user": is_new_user,
                     "currency": user.currency,
                 },
@@ -8112,6 +8116,7 @@ def twofa_verify():
                     "id": user.id,
                     "username": user.username,
                     "role": user.role,
+                    "is_account_owner": user.is_account_owner if is_saas() else user.role == "admin",
                     "currency": user.currency,
                 },
                 "databases": databases,
