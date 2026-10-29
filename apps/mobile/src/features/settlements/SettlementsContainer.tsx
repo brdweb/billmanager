@@ -11,7 +11,7 @@ import { MobileCacheRepository } from '../../data/cacheRepository';
 import { formatDate, getFormattingConfig } from '../../i18n/format';
 import type { ApiResponse, SettlementsResponse } from '../../types';
 import SettlementsScreen from './SettlementsScreen';
-import { SettlementAttemptLedger } from './attemptLedger';
+import { SettlementAttemptLedger, hasSettlementPreconditions } from './attemptLedger';
 import { settleOutstandingShares } from './actions';
 import { useActionScope } from '../useActionScope';
 import { useTranslation } from 'react-i18next';
@@ -22,12 +22,13 @@ const snapshotKey = 'settlements-v1';
 export default function SettlementsContainer() {
   const { t } = useTranslation();
   const { user, currentDatabase, databases } = useAuth();
-  const { activeProfile } = useServerProfiles();
+  const { activeProfile, verifyActiveProfile } = useServerProfiles();
   const runtime = useMobileRuntime();
   const formatting = getFormattingConfig();
   const supported = activeProfile.capabilities?.settlements ?? false;
   const scope = { serverProfileId: activeProfile.id, principalId: user ? String(user.id) : undefined, databaseId: currentDatabase ?? '' };
-  const actionScope = useActionScope(JSON.stringify(scope));
+  const safePayments = activeProfile.capabilities?.settlementPaymentPreconditions === true;
+  const actionScope = useActionScope(JSON.stringify([scope, safePayments]));
   const attempts = useRef(new SettlementAttemptLedger());
   const scopeKey = JSON.stringify(scope);
   const lastServerRead = useRef<{ scope: string; revision: number; snapshot: SettlementsResponse } | null>(null);
@@ -59,6 +60,18 @@ export default function SettlementsContainer() {
       return response.data;
     },
   });
+  const refreshPaymentState = async () => {
+    if (!isActionCurrent()) return;
+    try {
+      if (!safePayments) await verifyActiveProfile();
+      // Verification can replace capabilities or the active profile; never
+      // continue an old screen's work after that scope lease expires.
+      if (!isActionCurrent()) return;
+      await query.refetch();
+    } catch {
+      if (isActionCurrent()) Alert.alert(t('mobileParity.settlements.unavailableTitle'), t('mobileParity.settlements.unavailableBody'));
+    }
+  };
   const data = query.data;
   const bucketLabel = currentDatabase === '_all_'
     ? t('mobileCore.common.allBuckets')
@@ -111,6 +124,15 @@ export default function SettlementsContainer() {
           if (!isActionCurrent() || actionScope.gate.current || !runtime.online || query.isFetching) return;
           const items = (data?.i_owe ?? []).filter((candidate) => candidate.counterparty_name === name && !attempts.current.isConfirmed(scopeKey, candidate));
           if (items.length === 0) return;
+          if (!safePayments
+            || items.some((item) => !hasSettlementPreconditions(item) || attempts.current.isConflicted(scopeKey, item))) {
+            Alert.alert(t('mobileParity.settlements.refreshRequiredTitle'),
+              t(!safePayments
+                ? 'mobileParity.settlements.serverUpdateRequired' : 'mobileParity.settlements.changedRefreshRequired'),
+              [{ text: t('mobileParity.common.cancel'), style: 'cancel' },
+                { text: t('mobileParity.settlements.refreshAction'), onPress: () => { void refreshPaymentState(); } }]);
+            return;
+          }
           attempts.current.beginAction();
           actionScope.setBusy(true);
           let confirmedOnce = false;
@@ -128,14 +150,19 @@ export default function SettlementsContainer() {
                     const result = await settleOutstandingShares(items.map((item) => item.share_id), new Set<number>(),
                       (id) => {
                         const item = items.find((item) => item.share_id === id)!;
-                        const mutationId = attempts.current.mutationId(scopeKey, item, randomUUID);
-                        return api.markSharePaid(id, requestedScope, mutationId);
+                        const intent = attempts.current.intent(scopeKey, item, randomUUID);
+                        if (!intent) return Promise.resolve({ success: false });
+                        return api.markSharePaid(id, requestedScope, intent.mutationId, {
+                          baseUpdatedAt: intent.baseUpdatedAt, baseBillUpdatedAt: intent.baseBillUpdatedAt, expectedDueDate: intent.expectedDueDate,
+                        });
                       }, () => api.isPrincipalScopeAuthenticated(requestedScope), isActionCurrent);
                     for (const item of items) if (result.succeeded.includes(item.share_id)) attempts.current.confirm(scopeKey, item);
+                    for (const item of items) if (result.conflicted?.includes(item.share_id)) attempts.current.conflict(scopeKey, item);
                     attempts.current.finishDispatches();
                     if (!await api.isPrincipalScopeAuthenticated(requestedScope) || !isActionCurrent()) return;
-                    if (result.failed.length) Alert.alert(t('settlementsPage.markPaidFailedTitle'),
-                      `${t('settlementsPage.markPaidSuccess')}: ${result.succeeded.length}/${items.length}\n${t('settlementsPage.markPaidFailedBody')}\n${items.filter((item) => result.failed.includes(item.share_id)).map((item) => item.bill_name).join('\n')}`);
+                    if (result.failed.length) Alert.alert(
+                      t(result.conflicted?.length ? 'mobileParity.settlements.refreshRequiredTitle' : 'settlementsPage.markPaidFailedTitle'),
+                      `${t('settlementsPage.markPaidSuccess')}: ${result.succeeded.length}/${items.length}\n${t(result.conflicted?.length ? 'mobileParity.settlements.changedRefreshRequired' : 'settlementsPage.markPaidFailedBody')}\n${items.filter((item) => result.failed.includes(item.share_id)).map((item) => item.bill_name).join('\n')}`);
                     const previousRead = lastServerRead.current;
                     const revision = attempts.current.revision;
                     await query.refetch({ cancelRefetch: true });
@@ -156,8 +183,8 @@ export default function SettlementsContainer() {
           ], { cancelable: false });
         },
         onOpenHistory: () => { if (isActionCurrent()) Alert.alert(t('mobileParity.settlements.historyTitle'), t('mobileParity.settlements.historyBody', { count: data?.settled.length ?? 0 })); },
-        onRefresh: () => { if (isActionCurrent()) void query.refetch(); },
-        onRetry: () => { if (isActionCurrent()) void query.refetch(); },
+        onRefresh: () => { void refreshPaymentState(); },
+        onRetry: () => { void refreshPaymentState(); },
       }}
     />
   );

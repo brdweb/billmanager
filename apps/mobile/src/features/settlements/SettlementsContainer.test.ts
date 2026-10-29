@@ -8,8 +8,8 @@ import type { SettlementsActions, SettlementsViewModel } from './models';
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 let root: ReactTestRenderer;
 const mocks = vi.hoisted(() => ({
-  profile: 'cloud', principal: 'owner', database: 'home',
-  alert: vi.fn(), markPaid: vi.fn(), current: vi.fn(), refetch: vi.fn(), read: vi.fn(),
+  profile: 'cloud', principal: 'owner', database: 'home', safePayments: true,
+  alert: vi.fn(), markPaid: vi.fn(), current: vi.fn(), refetch: vi.fn(), read: vi.fn(), verify: vi.fn(),
   queryFn: null as (() => Promise<SettlementsResponse>) | null,
   model: null as SettlementsViewModel | null,
   actions: null as SettlementsActions | null,
@@ -25,7 +25,7 @@ vi.mock('../../api/client', () => ({ api: {
 } }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: () => ({ user: { id: mocks.principal }, currentDatabase: mocks.database, databases: [] }) }));
 vi.mock('../../context/MobileRuntimeContext', () => ({ useMobileRuntime: () => ({ online: true }) }));
-vi.mock('../../context/ServerProfileContext', () => ({ useServerProfiles: () => ({ activeProfile: { id: mocks.profile, capabilities: { settlements: true } } }) }));
+vi.mock('../../context/ServerProfileContext', () => ({ useServerProfiles: () => ({ verifyActiveProfile: mocks.verify, activeProfile: { id: mocks.profile, capabilities: { settlements: true, settlementPaymentPreconditions: mocks.safePayments } } }) }));
 vi.mock('../../data/cacheRepository', () => ({ MobileCacheRepository: class { async putAnalyticsSnapshot() {} } }));
 vi.mock('../../i18n/format', () => ({ getFormattingConfig: () => ({ locale: 'en-US', currency: 'USD' }), formatDate: (v: string) => v }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -34,7 +34,7 @@ vi.mock('./SettlementsScreen', () => ({ default: ({ actions, model }: { actions:
 function serverSnapshot(unpaid: number[], paid: number[] = []): SettlementsResponse {
   const item = (id: number, settled: boolean): SettlementLedgerItem => ({ share_id: id, direction: 'i_owe',
     bill_id: id, counterparty_user_id: 3, counterparty_name: 'Alex', bill_name: `Bill ${id}`,
-    due_date: '2026-10-29', amount: 15, paid: settled, paid_date: settled ? '2026-10-29' : null });
+    due_date: '2026-10-29', share_updated_at: '2026-10-29T12:00:00.000000+00:00', bill_updated_at: '2026-10-29T11:00:00.000000+00:00', amount: 15, paid: settled, paid_date: settled ? '2026-10-29' : null });
   return { summary: { owed_to_me: 0, i_owe: unpaid.length * 15, net_balance: -unpaid.length * 15,
     open_count: unpaid.length, settled_count: paid.length }, people: [], owed_to_me: [],
     i_owe: unpaid.map((id) => item(id, false)), settled: paid.map((id) => item(id, true)) };
@@ -42,10 +42,11 @@ function serverSnapshot(unpaid: number[], paid: number[] = []): SettlementsRespo
 
 beforeEach(async () => {
   vi.clearAllMocks();
-  mocks.profile = 'cloud'; mocks.principal = 'owner'; mocks.database = 'home';
+  mocks.profile = 'cloud'; mocks.principal = 'owner'; mocks.database = 'home'; mocks.safePayments = true;
   mocks.data = serverSnapshot([1, 2]);
   mocks.current.mockResolvedValue(true);
   mocks.refetch.mockResolvedValue({});
+  mocks.verify.mockResolvedValue(undefined);
   mocks.markPaid.mockImplementation(async (id: number) => ({ success: id !== 2 }));
   await act(async () => { root = create(React.createElement(SettlementsContainer)); });
 });
@@ -190,4 +191,79 @@ it('does not use a read started during an entirely uncertain batch as post-batch
   await act(async () => { mocks.actions!.onMarkPaid('Alex'); confirmLatest();
     await vi.waitFor(() => expect(mocks.refetch).toHaveBeenCalledTimes(2)); });
   expect(mocks.markPaid.mock.calls[0][2]).toBe(originalId);
+});
+
+it.each(['capability', 'version', 'bill version'] as const)('fails closed with actionable refresh guidance when %s is missing', async (missing) => {
+  if (missing === 'capability') mocks.safePayments = false;
+  else if (missing === 'version') mocks.data.i_owe.forEach((item) => { delete item.share_updated_at; });
+  else mocks.data.i_owe.forEach((item) => { delete item.bill_updated_at; });
+  await act(async () => { root.update(React.createElement(SettlementsContainer)); });
+  await act(async () => { mocks.actions!.onMarkPaid('Alex'); });
+  expect(mocks.markPaid).not.toHaveBeenCalled();
+  expect(mocks.alert).toHaveBeenCalledWith('mobileParity.settlements.refreshRequiredTitle',
+    missing === 'capability' ? 'mobileParity.settlements.serverUpdateRequired' : 'mobileParity.settlements.changedRefreshRequired', expect.any(Array));
+});
+
+it('pins original UUID/version/due across uncertain retries and requires fresh server state after a conflict', async () => {
+  await act(async () => { mocks.actions!.onMarkPaid('Alex'); confirmLatest();
+    await vi.waitFor(() => expect(mocks.refetch).toHaveBeenCalledOnce()); });
+  const first = mocks.markPaid.mock.calls.find(([id]) => id === 2)!;
+  const originalId = first[2];
+  const originalState = first[3];
+  mocks.data = serverSnapshot([2]);
+  mocks.data.i_owe[0].share_updated_at = '2026-10-29T13:00:00.000000+00:00';
+  mocks.data.i_owe[0].bill_updated_at = '2026-10-29T14:00:00.000000+00:00';
+  await act(async () => { root.update(React.createElement(SettlementsContainer)); });
+  mocks.markPaid.mockClear().mockResolvedValue({ success: false, httpStatus: 409 });
+  mocks.refetch.mockResolvedValue({ isSuccess: true, data: mocks.data });
+  await act(async () => { mocks.actions!.onMarkPaid('Alex'); confirmLatest();
+    await vi.waitFor(() => expect(mocks.refetch).toHaveBeenCalledTimes(2)); });
+  expect(mocks.markPaid.mock.calls[0][2]).toBe(originalId);
+  expect(mocks.markPaid.mock.calls[0][3]).toEqual(originalState);
+  mocks.markPaid.mockClear();
+  await act(async () => { mocks.actions!.onMarkPaid('Alex'); });
+  expect(mocks.markPaid).not.toHaveBeenCalled();
+  expect(mocks.alert.mock.calls.at(-1)![0]).toBe('mobileParity.settlements.refreshRequiredTitle');
+  mocks.read.mockResolvedValue({ success: true, data: mocks.data });
+  await act(async () => { await mocks.queryFn!(); root.update(React.createElement(SettlementsContainer)); });
+  mocks.markPaid.mockResolvedValue({ success: true });
+  await act(async () => { mocks.actions!.onMarkPaid('Alex'); confirmLatest();
+    await vi.waitFor(() => expect(mocks.refetch).toHaveBeenCalledTimes(3)); });
+  expect(mocks.markPaid.mock.calls[0][2]).not.toBe(originalId);
+  expect(mocks.markPaid.mock.calls[0][3]).toEqual({
+    baseUpdatedAt: '2026-10-29T13:00:00.000000+00:00', baseBillUpdatedAt: '2026-10-29T14:00:00.000000+00:00', expectedDueDate: '2026-10-29',
+  });
+});
+
+it('reports partial success and the changed bill when a batch contains a definite conflict', async () => {
+  mocks.markPaid.mockImplementation(async (id: number) => id === 1 ? { success: true } : { success: false, httpStatus: 409 });
+  await act(async () => { mocks.actions!.onMarkPaid('Alex'); confirmLatest();
+    await vi.waitFor(() => expect(mocks.refetch).toHaveBeenCalledOnce()); });
+  const feedback = mocks.alert.mock.calls.find(([title]) => title === 'mobileParity.settlements.refreshRequiredTitle')!;
+  expect(feedback[1]).toContain('1/2');
+  expect(feedback[1]).toContain('Bill 2');
+  expect(feedback[1]).toContain('mobileParity.settlements.changedRefreshRequired');
+});
+
+it('rechecks server capabilities from unsupported payment Refresh without creating a payment intent', async () => {
+  mocks.safePayments = false;
+  await act(async () => { root.update(React.createElement(SettlementsContainer)); });
+  await act(async () => { mocks.actions!.onMarkPaid('Alex'); });
+  const refresh = mocks.alert.mock.calls.at(-1)![2][1].onPress;
+  await act(async () => { refresh(); await vi.waitFor(() => expect(mocks.verify).toHaveBeenCalledOnce()); });
+  expect(mocks.refetch).toHaveBeenCalledOnce();
+  expect(mocks.markPaid).not.toHaveBeenCalled();
+});
+
+it('does not continue a capability Refresh after the active screen scope changes', async () => {
+  let finish!: () => void;
+  mocks.safePayments = false;
+  mocks.verify.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+  await act(async () => { root.update(React.createElement(SettlementsContainer)); });
+  await act(async () => { mocks.actions!.onRefresh(); });
+  expect(mocks.verify).toHaveBeenCalledOnce();
+  mocks.profile = 'another';
+  await act(async () => { root.update(React.createElement(SettlementsContainer)); finish(); });
+  expect(mocks.refetch).not.toHaveBeenCalled();
+  expect(mocks.markPaid).not.toHaveBeenCalled();
 });

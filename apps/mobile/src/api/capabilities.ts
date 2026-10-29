@@ -90,5 +90,6 @@ export function parseServerCapabilities(payload: unknown): ServerCapabilities {
     administration: features.administration ?? false,
     sharing: features.sharing ?? false,
     settlements: features.settlements ?? false,
+    settlementPaymentPreconditions: features.settlement_payment_preconditions === true,
   };
 }

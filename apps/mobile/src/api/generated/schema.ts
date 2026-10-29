@@ -348,7 +348,7 @@ export interface paths {
         put?: never;
         /**
          * Mark recipient portion as paid
-         * @description Allows share recipient to mark their portion of the bill as paid
+         * @description Legacy callers toggle the recipient payment state. Guarded mark-paid callers send base_updated_at from share_updated_at and expected_due_date; stale versions, changed occurrences and already-paid shares return 409. Completed client_mutation_id retries replay before these checks.
          */
         post: operations["toggleSharePaid"];
         delete?: never;
@@ -1924,7 +1924,7 @@ export interface components {
             entity: "bill" | "payment" | "share";
             entity_id: number;
             /** @enum {string} */
-            reason: "modified";
+            reason: "modified" | "occurrence_changed" | "already_paid";
             /** Format: date-time */
             base_updated_at?: string;
             /** Format: date-time */
@@ -1947,6 +1947,18 @@ export interface components {
              * @description Last server timestamp read by the client, encoded as RFC3339 with a UTC offset. Legacy clients may omit this field; when present it cannot be null, empty, or offset-free.
              */
             base_updated_at?: string;
+        };
+        SharePaidMutationInput: components["schemas"]["MutationControl"] & {
+            /**
+             * Format: date-time
+             * @description Original bill_updated_at version; required with expected_due_date.
+             */
+            base_bill_updated_at?: string;
+            /**
+             * Format: date
+             * @description Optional guarded mark-paid intent for this occurrence. Requires base_updated_at and base_bill_updated_at. Checks the current bill due date and version under row locks and never unmarks an already-paid share. Omission preserves legacy toggle behavior. Requires settlement_payment_preconditions support.
+             */
+            expected_due_date?: string;
         };
         ObjectDataResponse: {
             /** @enum {boolean} */
@@ -2124,6 +2136,7 @@ export interface components {
                 administration: boolean;
                 sharing: boolean;
                 settlements: boolean;
+                settlement_payment_preconditions?: boolean;
                 telemetry: boolean;
                 delta_sync: boolean;
                 idempotent_mutations: boolean;
@@ -2445,6 +2458,8 @@ export interface components {
             accepted_at?: string | null;
             /** Format: date-time */
             share_updated_at?: string | null;
+            /** Format: date-time */
+            bill_updated_at?: string | null;
         };
         CategoryBudget: {
             id: number;
@@ -3542,7 +3557,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["MutationControl"];
+                "application/json": components["schemas"]["SharePaidMutationInput"];
             };
         };
         responses: {

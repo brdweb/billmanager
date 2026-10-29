@@ -25,6 +25,15 @@ Repeatable mistakes reviewers catch in this repository. Read this file before st
 - **Rule going forward:** Migrate financial/offline work only with trustworthy per-row ownership. Otherwise preserve it in an unreachable encrypted quarantine, explain recovery, and never replay it with the current account's credentials. Treat owner and access/refresh credentials as one atomic envelope during token/profile migrations. A cached user snapshot also cannot establish ownership of an unbound legacy token: only live authentication/identity verification may establish it.
 
 - **Date:** 2026-10-29
+- **PR:** https://github.com/brdweb/billmanager/issues/236
+- **Mistake:** Wired a Mark paid intent to a legacy toggle without binding the action to the share version and bill occurrence. Another client or recurrence can change the intended state.
+- **Rule going forward:** Send immutable version/occurrence preconditions with idempotency identity, verify server capability, and check them atomically under consistent row locks before any guarded state change.
+
+- **Date:** 2026-10-29
 - **PR:** https://github.com/brdweb/billmanager/pull/243
 - **Mistake:** Used a person's net balance to decide whether outgoing shares could be paid, and permanently suppressed successful occurrences without reconciling a later server reopen.
 - **Rule going forward:** Derive payable actions from the directional unpaid ledger. Retain mutation IDs across uncertain failures, and retire them only after causally fresh server state; a late pre-mutation read or cached refetch is not payment-state evidence. Test mixed-direction balances, partial failure, paid/reopened occurrences and delayed reads.
+
+### 2026-10-29 — Verify foreign-key locks when adding payment row locks (#236)
+
+A bill `FOR UPDATE` followed by a share lock can deadlock with an existing share-first action inserting a bill-referencing audit row. Use a scoped `FOR NO KEY UPDATE` bill lock when only non-key bill fields must remain stable; it blocks renewal edits while allowing foreign-key `KEY SHARE` checks. Reproduce the exact competing route schedule with real PostgreSQL, including its audit insert, rather than only testing two instances of the new route.
