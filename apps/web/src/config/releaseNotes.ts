@@ -59,6 +59,7 @@ export const releaseNotes: ReleaseNote[] = [
         'Switching accounts or bill groups clears old bills and ignores late responses from the previous view',
         'Sessions recover when a previously selected bill group has been removed or access has changed',
         'Subscription plan changes report their existing immediate behavior and update the local plan after provider confirmation',
+        'Release-note dates display the correct calendar day across time zones',
       ] },
       { heading: 'Security', items: [
         'Patched the server msgpack dependency',

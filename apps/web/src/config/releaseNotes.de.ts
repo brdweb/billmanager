@@ -11,6 +11,7 @@ export const germanReleaseNotes: ReleaseNote[] = [
         'Beim Wechsel von Konto oder Rechnungsgruppe werden alte Rechnungen entfernt und verspätete Antworten der vorherigen Ansicht ignoriert',
         'Sitzungen werden wiederhergestellt, wenn die ausgewählte Rechnungsgruppe entfernt wurde oder sich Zugriffsrechte geändert haben',
         'Abonnementänderungen melden ihre bereits bestehende sofortige Wirkung und aktualisieren den lokalen Tarif nach Bestätigung des Zahlungsanbieters',
+        'Veröffentlichungsdaten zeigen in allen Zeitzonen den richtigen Kalendertag',
       ] },
       { heading: 'Sicherheit', items: [
         'Die msgpack-Abhängigkeit des Servers wurde aktualisiert',
