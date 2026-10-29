@@ -22,7 +22,7 @@ const snapshotKey = 'settlements-v1';
 export default function SettlementsContainer() {
   const { t } = useTranslation();
   const { user, currentDatabase, databases } = useAuth();
-  const { activeProfile } = useServerProfiles();
+  const { activeProfile, verifyActiveProfile } = useServerProfiles();
   const runtime = useMobileRuntime();
   const formatting = getFormattingConfig();
   const supported = activeProfile.capabilities?.settlements ?? false;
@@ -60,6 +60,18 @@ export default function SettlementsContainer() {
       return response.data;
     },
   });
+  const refreshPaymentState = async () => {
+    if (!isActionCurrent()) return;
+    try {
+      if (!safePayments) await verifyActiveProfile();
+      // Verification can replace capabilities or the active profile; never
+      // continue an old screen's work after that scope lease expires.
+      if (!isActionCurrent()) return;
+      await query.refetch();
+    } catch {
+      if (isActionCurrent()) Alert.alert(t('mobileParity.settlements.unavailableTitle'), t('mobileParity.settlements.unavailableBody'));
+    }
+  };
   const data = query.data;
   const bucketLabel = currentDatabase === '_all_'
     ? t('mobileCore.common.allBuckets')
@@ -118,7 +130,7 @@ export default function SettlementsContainer() {
               t(!safePayments
                 ? 'mobileParity.settlements.serverUpdateRequired' : 'mobileParity.settlements.changedRefreshRequired'),
               [{ text: t('mobileParity.common.cancel'), style: 'cancel' },
-                { text: t('mobileParity.settlements.refreshAction'), onPress: () => { if (isActionCurrent()) void query.refetch(); } }]);
+                { text: t('mobileParity.settlements.refreshAction'), onPress: () => { void refreshPaymentState(); } }]);
             return;
           }
           attempts.current.beginAction();
@@ -171,8 +183,8 @@ export default function SettlementsContainer() {
           ], { cancelable: false });
         },
         onOpenHistory: () => { if (isActionCurrent()) Alert.alert(t('mobileParity.settlements.historyTitle'), t('mobileParity.settlements.historyBody', { count: data?.settled.length ?? 0 })); },
-        onRefresh: () => { if (isActionCurrent()) void query.refetch(); },
-        onRetry: () => { if (isActionCurrent()) void query.refetch(); },
+        onRefresh: () => { void refreshPaymentState(); },
+        onRetry: () => { void refreshPaymentState(); },
       }}
     />
   );
