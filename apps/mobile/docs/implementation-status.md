@@ -15,6 +15,15 @@ This source version does not establish a signed build, TestFlight/Play upload,
 privacy publication, or device acceptance. See [candidate notes](releases/1.2.0.md)
 and keep the mandatory gates below open until candidate-specific proof exists.
 
+The [October 29 market launch plan](../../../docs/market-launch-plan.md) is the
+current source for release jobs and store status. It supersedes the historical
+October 9 store observations below: Apple privacy now has ten published data
+types after explicit owner approval, Google's ten-type Data safety update is in
+review, and the iOS draft is 1.2.0 with manual release selected. Android 1.2.0
+native emulator QA passed; signed candidates, authenticated/device acceptance,
+reviewer access and binary submissions remain open. These metadata changes do
+not establish a reviewed or publicly available binary.
+
 ## Follow-up verification — 2026-10-11
 
 - **Merge decision updated October 12 UTC:** the owner personally confirmed

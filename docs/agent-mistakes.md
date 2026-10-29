@@ -37,3 +37,13 @@ Repeatable mistakes reviewers catch in this repository. Read this file before st
 ### 2026-10-29 — Verify foreign-key locks when adding payment row locks (#236)
 
 A bill `FOR UPDATE` followed by a share lock can deadlock with an existing share-first action inserting a bill-referencing audit row. Use a scoped `FOR NO KEY UPDATE` bill lock when only non-key bill fields must remain stable; it blocks renewal edits while allowing foreign-key `KEY SHARE` checks. Reproduce the exact competing route schedule with real PostgreSQL, including its audit insert, rather than only testing two instances of the new route.
+
+- **Date:** 2026-10-29
+- **PR:** https://github.com/brdweb/billmanager/pull/250
+- **Mistake:** Reused the full owner bill conflict serializer in a response to a share recipient, exposing fields beyond the recipient's normal view.
+- **Rule going forward:** Scope conflict payloads to the caller's permitted fields. Check the complete response for private-field sentinels, not only the primary success serializer.
+
+- **Date:** 2026-10-29
+- **PR:** https://github.com/brdweb/billmanager/pull/240
+- **Mistake:** Dispatched another iOS Simulator run assuming it would queue, but the workflow's `cancel-in-progress: true` setting interrupted the existing native build.
+- **Rule going forward:** Inspect the exact concurrency group and cancellation policy before every overlapping workflow dispatch. Wait for an existing QA run to finish unless canceling it is intentional; distinguish saved diagnostic artifacts from completed build acceptance.
