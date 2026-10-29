@@ -4,6 +4,15 @@ Implementation/device-matrix baseline: 2026-07-15, `codex/mobile-native-rewrite`
 
 This document tracks implementation evidence, not a release declaration. A row marked **Implemented** means the source path exists and is wired into the application. It does not mean that the flow has passed the complete iOS, Android, SaaS, self-hosted, accessibility, or store acceptance matrix.
 
+## Candidate preparation — 2026-10-29
+
+The mobile source candidate is `1.2.0`. Its numeric native version and
+`appVersion` runtime policy derive from `package.json`, preventing the updated
+Expo/native client from sharing the historical `1.1.1` OTA compatibility boundary.
+This source version does not establish a signed build, TestFlight/Play upload,
+privacy publication, or device acceptance. See [candidate notes](releases/1.2.0.md)
+and keep the mandatory gates below open until candidate-specific proof exists.
+
 ## Follow-up verification — 2026-10-11
 
 - **Merge decision updated October 12 UTC:** the owner personally confirmed
