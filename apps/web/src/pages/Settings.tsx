@@ -96,9 +96,10 @@ export function Settings() {
 
                 <LinkedAccounts />
 
-                <Divider />
-
-                <AccountDangerZone />
+                {isAdmin && (<>
+                  <Divider />
+                  <AccountDangerZone />
+                </>)}
               </Stack>
             </Box>
           </Tabs.Panel>

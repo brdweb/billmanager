@@ -100,7 +100,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const response = await api.getMe();
       setCurrency(response.user.currency ?? 'USD');
-      const currentDb = TokenStorage.getCurrentDatabase();
+      const storedDb = TokenStorage.getCurrentDatabase();
+      const currentDb = storedDb === '_all_' || response.databases.some((database) => database.name === storedDb)
+        ? storedDb : response.databases[0]?.name ?? null;
+      if (currentDb) TokenStorage.setCurrentDatabase(currentDb);
+      else TokenStorage.clearCurrentDatabase();
 
       setState({
         isLoggedIn: true,
@@ -237,7 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setState({
         isLoggedIn: true,
-        isAdmin: response.user.role === 'admin',
+        isAdmin: response.user.is_account_owner ?? response.user.role === 'admin',
         role: response.user.role,
         user: response.user,
         databases: response.databases || [],
