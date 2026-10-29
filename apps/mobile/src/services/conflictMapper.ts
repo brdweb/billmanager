@@ -62,6 +62,7 @@ export function mapSyncConflict(
     mutationId: mutation.id,
     serverProfileId: mutation.serverProfileId,
     databaseId: mutation.databaseId,
+    ...(mutation.principalId ? { principalId: mutation.principalId } : {}),
     entity: mutation.entity,
     entityId: mutation.entityId,
     local: mutation.payload,

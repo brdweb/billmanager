@@ -5,7 +5,7 @@ import { withSerializedMobileTransaction } from './databaseWriteQueue';
 
 const DATABASE_NAME = 'billmanager-mobile.db';
 const DATABASE_KEY_STORAGE_KEY = 'billmanager_database_key_v1';
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -207,6 +207,18 @@ export async function migrateMobileDatabase(database: SQLite.SQLiteDatabase): Pr
       await database.execAsync('PRAGMA user_version = 3');
     });
   }
+  if (currentVersion < 4) {
+    await withSerializedMobileTransaction(database, async () => {
+      // Last-session identity cannot prove individual legacy row ownership.
+      // Retain every old payload and queued edit under an unreachable namespace
+      // until explicit owner-verified recovery; never replay by guessing.
+      for (const table of ['bill_groups', 'bills', 'payments', 'reminder_state', 'analytics_snapshots', 'sync_state', 'outbox', 'conflicts']) {
+        await database.runAsync(`UPDATE ${table} SET database_id = '@legacy/' || database_id`);
+      }
+      await database.execAsync('PRAGMA user_version = 4');
+    });
+  }
+
 }
 
 async function openMobileDatabase(): Promise<SQLite.SQLiteDatabase> {

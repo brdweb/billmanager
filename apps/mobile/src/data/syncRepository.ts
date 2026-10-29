@@ -1,3 +1,4 @@
+import { storageDatabaseId, decodeStorageDatabaseId } from './principalScope';
 import {
   OutboxMutation,
   OutboxStore,
@@ -35,7 +36,7 @@ function mutationFromRow(row: OutboxRow): OutboxMutation {
   return {
     id: row.id,
     serverProfileId: row.server_profile_id,
-    databaseId: row.database_id,
+    ...decodeStorageDatabaseId(row.database_id),
     entity: row.entity,
     entityId: row.entity_id,
     operation: row.operation,
@@ -60,6 +61,7 @@ export interface SyncState {
 export interface StoredMutationScope {
   serverProfileId: string;
   databaseId: string;
+  principalId?: string;
 }
 
 export class SQLiteSyncRepository implements OutboxStore {
@@ -77,7 +79,7 @@ export class SQLiteSyncRepository implements OutboxStore {
          ON CONFLICT(id) DO NOTHING`,
         mutation.id,
         mutation.serverProfileId,
-        mutation.databaseId,
+        storageDatabaseId(mutation),
         mutation.entity,
         mutation.entityId,
         mutation.operation,
@@ -97,7 +99,9 @@ export class SQLiteSyncRepository implements OutboxStore {
     serverProfileId: string,
     databaseId: string,
     now: string,
+    principalId?: string,
   ): Promise<OutboxMutation[]> {
+    databaseId = storageDatabaseId({ databaseId, principalId });
     const database = await this.databaseProvider();
     // A process can be terminated after a mutation is claimed but before it is
     // completed. getReady is called only at the start of a serialized scope
@@ -162,7 +166,7 @@ export class SQLiteSyncRepository implements OutboxStore {
           `SELECT payload_json FROM ${cacheTable}
            WHERE server_profile_id = ? AND database_id = ? AND entity_id = ?`,
           mutation.serverProfileId,
-          mutation.databaseId,
+          storageDatabaseId(mutation),
           mutation.entityId,
         );
         if (cachedRow) {
@@ -174,7 +178,7 @@ export class SQLiteSyncRepository implements OutboxStore {
             JSON.stringify(payload),
             entityTimestamp,
             mutation.serverProfileId,
-            mutation.databaseId,
+            storageDatabaseId(mutation),
             mutation.entityId,
           );
         }
@@ -193,7 +197,7 @@ export class SQLiteSyncRepository implements OutboxStore {
              )`,
           nextBaseUpdatedAt,
           mutation.serverProfileId,
-          mutation.databaseId,
+          storageDatabaseId(mutation),
           mutation.entityId,
           mutation.id,
           mutation.createdAt,
@@ -228,7 +232,7 @@ export class SQLiteSyncRepository implements OutboxStore {
           `SELECT payload_json FROM payments
            WHERE server_profile_id = ? AND database_id = ? AND entity_id = ?`,
           mutation.serverProfileId,
-          mutation.databaseId,
+          storageDatabaseId(mutation),
           temporaryId,
         );
         if (paymentRow) {
@@ -244,7 +248,7 @@ export class SQLiteSyncRepository implements OutboxStore {
             JSON.stringify(payload),
             paymentUpdatedAt,
             mutation.serverProfileId,
-            mutation.databaseId,
+            storageDatabaseId(mutation),
             temporaryId,
           );
         }
@@ -259,7 +263,7 @@ export class SQLiteSyncRepository implements OutboxStore {
           String(serverId),
           paymentUpdatedAt,
           mutation.serverProfileId,
-          mutation.databaseId,
+          storageDatabaseId(mutation),
           temporaryId,
         );
 
@@ -268,7 +272,7 @@ export class SQLiteSyncRepository implements OutboxStore {
             `SELECT payload_json FROM bills
              WHERE server_profile_id = ? AND database_id = ? AND entity_id = ?`,
             mutation.serverProfileId,
-            mutation.databaseId,
+            storageDatabaseId(mutation),
             affectedBillId,
           );
           if (billRow) {
@@ -280,7 +284,7 @@ export class SQLiteSyncRepository implements OutboxStore {
               JSON.stringify(payload),
               billUpdatedAt,
               mutation.serverProfileId,
-              mutation.databaseId,
+              storageDatabaseId(mutation),
               affectedBillId,
             );
           }
@@ -306,7 +310,7 @@ export class SQLiteSyncRepository implements OutboxStore {
         `SELECT payload_json FROM bills
          WHERE server_profile_id = ? AND database_id = ? AND entity_id = ?`,
         mutation.serverProfileId,
-        mutation.databaseId,
+        storageDatabaseId(mutation),
         temporaryId,
       );
       if (billRow) {
@@ -322,7 +326,7 @@ export class SQLiteSyncRepository implements OutboxStore {
           JSON.stringify(payload),
           result.serverUpdatedAt ?? billUpdatedAt,
           mutation.serverProfileId,
-          mutation.databaseId,
+          storageDatabaseId(mutation),
           temporaryId,
         );
       }
@@ -332,7 +336,7 @@ export class SQLiteSyncRepository implements OutboxStore {
          WHERE server_profile_id = ? AND database_id = ?
            AND status IN ('pending', 'retry')`,
         mutation.serverProfileId,
-        mutation.databaseId,
+        storageDatabaseId(mutation),
       );
       for (const row of dependentRows) {
         const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
@@ -356,7 +360,7 @@ export class SQLiteSyncRepository implements OutboxStore {
         String(serverId),
         billUpdatedAt,
         mutation.serverProfileId,
-        mutation.databaseId,
+        storageDatabaseId(mutation),
         temporaryId,
       );
 
@@ -367,7 +371,7 @@ export class SQLiteSyncRepository implements OutboxStore {
         `SELECT entity_id, payload_json FROM payments
          WHERE server_profile_id = ? AND database_id = ? AND bill_id = ?`,
         mutation.serverProfileId,
-        mutation.databaseId,
+        storageDatabaseId(mutation),
         temporaryId,
       );
       for (const row of paymentRows) {
@@ -379,7 +383,7 @@ export class SQLiteSyncRepository implements OutboxStore {
           String(serverId),
           JSON.stringify(payload),
           mutation.serverProfileId,
-          mutation.databaseId,
+          storageDatabaseId(mutation),
           row.entity_id,
         );
       }
@@ -391,7 +395,9 @@ export class SQLiteSyncRepository implements OutboxStore {
     databaseId: string,
     entity: SyncEntity,
     entityId: string,
+    principalId?: string,
   ): Promise<string | null> {
+    databaseId = storageDatabaseId({ databaseId, principalId });
     const database = await this.databaseProvider();
     const row = await database.getFirstAsync<{ id: string }>(
       `SELECT id FROM outbox
@@ -412,7 +418,9 @@ export class SQLiteSyncRepository implements OutboxStore {
     databaseId: string,
     entity: SyncEntity,
     entityId: string,
+    principalId?: string,
   ): Promise<string | null> {
+    databaseId = storageDatabaseId({ databaseId, principalId });
     const database = await this.databaseProvider();
     const entityPredicate = syncObjectKind(entity) === 'payment'
       ? "entity = 'payment'"
@@ -434,7 +442,9 @@ export class SQLiteSyncRepository implements OutboxStore {
     serverProfileId: string,
     databaseId: string,
     billId: string,
+    principalId?: string,
   ): Promise<string | null> {
+    databaseId = storageDatabaseId({ databaseId, principalId });
     const database = await this.databaseProvider();
     const rows = await database.getAllAsync<Pick<OutboxRow,
       'id' | 'entity' | 'entity_id' | 'operation' | 'payload_json'
@@ -484,7 +494,7 @@ export class SQLiteSyncRepository implements OutboxStore {
           `SELECT payload_json FROM ${cacheTable}
            WHERE server_profile_id = ? AND database_id = ? AND entity_id = ?`,
           conflict.serverProfileId,
-          conflict.databaseId,
+          storageDatabaseId(conflict),
           conflict.entityId,
         );
         if (cached?.payload_json) {
@@ -503,7 +513,7 @@ export class SQLiteSyncRepository implements OutboxStore {
            reason = excluded.reason`,
         conflict.mutationId,
         conflict.serverProfileId,
-        conflict.databaseId,
+        storageDatabaseId(conflict),
         conflict.entity,
         conflict.entityId,
         JSON.stringify(local),
@@ -521,7 +531,8 @@ export class SQLiteSyncRepository implements OutboxStore {
     });
   }
 
-  async getConflicts(serverProfileId: string, databaseId: string): Promise<SyncConflict[]> {
+  async getConflicts(serverProfileId: string, databaseId: string, principalId?: string): Promise<SyncConflict[]> {
+    databaseId = storageDatabaseId({ databaseId, principalId });
     const database = await this.databaseProvider();
     const rows = await database.getAllAsync<{
       mutation_id: string;
@@ -543,7 +554,7 @@ export class SQLiteSyncRepository implements OutboxStore {
     return rows.map((row) => ({
       mutationId: row.mutation_id,
       serverProfileId: row.server_profile_id,
-      databaseId: row.database_id,
+      ...decodeStorageDatabaseId(row.database_id),
       entity: row.entity,
       entityId: row.entity_id,
       local: JSON.parse(row.local_json) as unknown,
@@ -594,7 +605,7 @@ export class SQLiteSyncRepository implements OutboxStore {
               `UPDATE ${cacheTable} SET is_dirty = 0
                WHERE server_profile_id = ? AND database_id = ? AND entity_id = ?`,
               conflict.serverProfileId,
-              conflict.databaseId,
+              storageDatabaseId(conflict),
               conflict.entityId,
             );
           }
@@ -644,7 +655,7 @@ export class SQLiteSyncRepository implements OutboxStore {
       ? {
           mutationId: row.mutation_id,
           serverProfileId: row.server_profile_id,
-          databaseId: row.database_id,
+          ...decodeStorageDatabaseId(row.database_id),
           entity: row.entity,
           entityId: row.entity_id,
           local: JSON.parse(row.local_json) as unknown,
@@ -656,7 +667,8 @@ export class SQLiteSyncRepository implements OutboxStore {
       : null;
   }
 
-  async hasUnresolvedMutations(serverProfileId: string, databaseId: string): Promise<boolean> {
+  async hasUnresolvedMutations(serverProfileId: string, databaseId: string, principalId?: string): Promise<boolean> {
+    databaseId = storageDatabaseId({ databaseId, principalId });
     const database = await this.databaseProvider();
     const row = await database.getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) AS count FROM outbox
@@ -681,7 +693,7 @@ export class SQLiteSyncRepository implements OutboxStore {
     );
     return rows.map((row) => ({
       serverProfileId: row.server_profile_id,
-      databaseId: row.database_id,
+      ...decodeStorageDatabaseId(row.database_id),
     }));
   }
 
@@ -695,7 +707,8 @@ export class SQLiteSyncRepository implements OutboxStore {
     });
   }
 
-  async getSyncState(serverProfileId: string, databaseId: string): Promise<SyncState | null> {
+  async getSyncState(serverProfileId: string, databaseId: string, principalId?: string): Promise<SyncState | null> {
+    databaseId = storageDatabaseId({ databaseId, principalId });
     const database = await this.databaseProvider();
     const row = await database.getFirstAsync<{
       cursor: string | null;
@@ -721,7 +734,9 @@ export class SQLiteSyncRepository implements OutboxStore {
     serverProfileId: string,
     databaseId: string,
     state: SyncState,
+    principalId?: string,
   ): Promise<void> {
+    databaseId = storageDatabaseId({ databaseId, principalId });
     const database = await this.databaseProvider();
     await withSerializedMobileWrite(database, async () => {
       await database.runAsync(

@@ -11,7 +11,7 @@ vi.mock('../native/localNotifications', () => ({
   scheduleLocalBillReminders: vi.fn(),
 }));
 
-import { runHeadlessBackgroundSync } from './headlessBackgroundSync';
+import { runHeadlessBackgroundSync, mergeBackgroundSyncScopes } from './headlessBackgroundSync';
 
 describe('headless background synchronization', () => {
   it('deduplicates persisted scopes and refreshes each without activating it', async () => {
@@ -30,8 +30,8 @@ describe('headless background synchronization', () => {
       markRetry: vi.fn(),
       markConflict: vi.fn(),
       listMutationScopes: vi.fn().mockResolvedValue([
-        { serverProfileId: 'server-home', databaseId: 'family' },
-        { serverProfileId: 'billmanager-cloud', databaseId: 'personal' },
+        { serverProfileId: 'server-home', principalId: '1', databaseId: 'family' },
+        { serverProfileId: 'billmanager-cloud', principalId: '2', databaseId: 'personal' },
       ]),
       getSyncState: vi.fn().mockResolvedValue(null),
       setSyncState: vi.fn(),
@@ -49,7 +49,8 @@ describe('headless background synchronization', () => {
       } as never,
       sessions: {
         listCurrentScopes: vi.fn().mockResolvedValue([
-          { serverProfileId: 'server-home', databaseId: 'family' },
+          { serverProfileId: 'server-home', principalId: '1', databaseId: 'family' },
+          { serverProfileId: 'billmanager-cloud', principalId: '2', databaseId: 'personal' },
         ]),
       },
       syncRepository: syncRepository as never,
@@ -62,12 +63,12 @@ describe('headless background synchronization', () => {
     expect(requestScopedGet).toHaveBeenCalledTimes(4);
     expect(requestScopedGet).toHaveBeenCalledWith(
       '/bills',
-      { serverProfileId: 'server-home', databaseId: 'family' },
+      { serverProfileId: 'server-home', principalId: '1', databaseId: 'family' },
       { include_archived: true },
     );
     expect(cacheRepository.commitSyncSnapshot).toHaveBeenCalledTimes(2);
     expect(cacheRepository.commitSyncSnapshot).toHaveBeenCalledWith(
-      { serverProfileId: 'server-home', databaseId: 'family' },
+      { serverProfileId: 'server-home', principalId: '1', databaseId: 'family' },
       {
         bills: [{ id: 1, name: 'Rent' }],
         payments: [{ id: 9, bill_id: 1, amount: 100 }],
@@ -79,6 +80,7 @@ describe('headless background synchronization', () => {
       'server-home',
       'family',
       expect.objectContaining({ status: 'syncing' }),
+      '1',
     );
   });
 
@@ -119,8 +121,8 @@ describe('headless background synchronization', () => {
       } as never,
       sessions: {
         listCurrentScopes: vi.fn().mockResolvedValue([
-          { serverProfileId: 'server-home', databaseId: 'family' },
-          { serverProfileId: 'server-home', databaseId: 'personal' },
+          { serverProfileId: 'server-home', principalId: '1', databaseId: 'family' },
+          { serverProfileId: 'server-home', principalId: '1', databaseId: 'personal' },
         ]),
       },
       syncRepository: syncRepository as never,
@@ -165,8 +167,8 @@ describe('headless background synchronization', () => {
       } as never,
       sessions: {
         listCurrentScopes: vi.fn().mockResolvedValue([
-          { serverProfileId: 'server-home', databaseId: 'family' },
-          { serverProfileId: 'server-home', databaseId: 'personal' },
+          { serverProfileId: 'server-home', principalId: '1', databaseId: 'family' },
+          { serverProfileId: 'server-home', principalId: '1', databaseId: 'personal' },
         ]),
       },
       syncRepository: syncRepository as never,
@@ -183,11 +185,21 @@ describe('headless background synchronization', () => {
       'server-home',
       'family',
       expect.objectContaining({ status: 'error', lastError: 'snapshot commit failed' }),
+      '1',
     );
     expect(syncRepository.setSyncState).toHaveBeenCalledWith(
       'server-home',
       'personal',
       expect.objectContaining({ status: 'syncing' }),
+      '1',
     );
   });
+  it('quarantines unknown legacy ownership and another account outbox partitions', () => {
+    const active = { serverProfileId: 'server', databaseId: 'family', principalId: '2' };
+    const legacy = { serverProfileId: 'server', databaseId: 'legacy' };
+    const previous = { serverProfileId: 'server', databaseId: 'family', principalId: '1' };
+    expect(mergeBackgroundSyncScopes([active], [legacy, previous, active])).toEqual([active]);
+    expect(mergeBackgroundSyncScopes([], [previous])).toEqual([]);
+  });
+
 });

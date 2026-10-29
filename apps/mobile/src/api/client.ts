@@ -70,6 +70,7 @@ export interface MutationMetadata {
 export interface MutationScope {
   serverProfileId: string;
   databaseId: string;
+  principalId?: string;
 }
 
 export interface ScopedLoginResponse extends ApiResponse<LoginResponse> {
@@ -155,6 +156,7 @@ export class ProfileActivationSupersededError extends Error {
 export class BillManagerApi {
   private client: AxiosInstance;
   private accessToken: string | null = null;
+  private principalId: string | undefined;
   private refreshToken: string | null = null;
   private currentDatabase: string | null = null;
   private onAuthError: (() => void) | null = null;
@@ -222,6 +224,7 @@ export class BillManagerApi {
           _databaseId: databaseId,
           _refreshToken: refreshToken,
           _sessionGeneration: requestSessionGeneration,
+          _principalId: authBinding?.scope.principalId ?? this.principalId,
         });
         return config;
       },
@@ -308,6 +311,7 @@ export class BillManagerApi {
               profile,
               refreshedTokens,
               requestSessionGeneration ?? sessionGeneration(requestProfileId),
+              originalRequest._principalId,
             );
             if (!installed) return Promise.reject(error);
             originalRequest.baseURL = baseURL;
@@ -316,7 +320,8 @@ export class BillManagerApi {
             originalRequest._sessionGeneration = sessionGeneration(requestProfileId);
             originalRequest._authenticationBinding = {
               profile,
-              scope: { serverProfileId: requestProfileId, databaseId: originalRequest._databaseId ?? null },
+              scope: { serverProfileId: requestProfileId, databaseId: originalRequest._databaseId ?? null,
+                ...(originalRequest._principalId ? { principalId: originalRequest._principalId } : {}) },
               ...refreshedTokens,
               sessionGeneration: sessionGeneration(requestProfileId),
             } satisfies AuthenticationRequestBinding;
@@ -327,6 +332,7 @@ export class BillManagerApi {
             const cleared = await this.invalidateAndClearTokensIfCurrent(
               requestProfileId,
               requestSessionGeneration ?? sessionGeneration(requestProfileId),
+              originalRequest._principalId,
             );
             if (cleared && this.activeProfile.id === requestProfileId) {
               this.onAuthError?.();
@@ -363,6 +369,7 @@ export class BillManagerApi {
         this.profileActivationGeneration += 1;
         this.applyProfile(activeProfile);
         this.accessToken = tokens.accessToken;
+        this.principalId = tokens.principalId;
         this.refreshToken = tokens.refreshToken;
         return !!this.accessToken;
       });
@@ -404,7 +411,27 @@ export class BillManagerApi {
     return {
       serverProfileId: this.activeProfile.id,
       databaseId: this.currentDatabase,
+      ...(this.principalId ? { principalId: this.principalId } : {}),
     };
+  }
+
+  async isPrincipalScopeAuthenticated(scope: { serverProfileId: string; principalId?: string }): Promise<boolean> {
+    if (!scope.principalId) return false;
+    const tokens = await this.tokenStore.load(scope.serverProfileId);
+    return Boolean(tokens.accessToken && tokens.principalId === scope.principalId);
+  }
+
+  async bindAuthenticatedPrincipal(principalId: string, verifiedLive = false): Promise<void> {
+    const profileId = this.activeProfile.id;
+    const expectedGeneration = sessionGeneration(profileId);
+    await serializeProfileSessionMutation(profileId, async () => {
+      if (sessionGeneration(profileId) !== expectedGeneration) throw new AuthSessionSupersededError();
+      const tokens = await this.tokenStore.load(profileId);
+      if (tokens.principalId !== principalId && !(verifiedLive && !tokens.principalId)) throw new AuthSessionSupersededError();
+      if (!tokens.accessToken) throw new AuthSessionSupersededError();
+      await this.tokenStore.save(profileId, { ...tokens, principalId });
+      if (this.activeProfile.id === profileId) this.principalId = principalId;
+    });
   }
 
   private async authenticationBinding(
@@ -413,6 +440,7 @@ export class BillManagerApi {
     const profileId = scope?.serverProfileId ?? this.activeProfile.id;
     const capturedGeneration = sessionGeneration(profileId);
     if (!scope || profileId === this.activeProfile.id) {
+      if (scope?.principalId && scope.principalId !== this.principalId) throw new AuthSessionSupersededError();
       return {
         profile: { ...this.activeProfile },
         scope: scope ?? this.captureAuthSessionScope(),
@@ -427,6 +455,7 @@ export class BillManagerApi {
       throw new Error(`Unknown server profile for authentication: ${scope.serverProfileId}`);
     }
     const tokens = await this.tokenStore.load(scope.serverProfileId);
+    if (scope.principalId && scope.principalId !== tokens.principalId) throw new AuthSessionSupersededError();
     return {
       profile,
       scope,
@@ -465,6 +494,7 @@ export class BillManagerApi {
       }
       if (profile.id !== this.activeProfile.id) {
         this.accessToken = null;
+        this.principalId = undefined;
         this.refreshToken = null;
         this.currentDatabase = null;
       }
@@ -506,6 +536,7 @@ export class BillManagerApi {
       this.configurationError = null;
       this.applyProfile(nextProfile);
       this.accessToken = tokens.accessToken;
+        this.principalId = tokens.principalId;
       this.refreshToken = tokens.refreshToken;
       return !!this.accessToken;
     });
@@ -583,6 +614,7 @@ export class BillManagerApi {
     this.invalidateDatabaseSelection(scope.serverProfileId);
     if (this.activeProfile.id === scope.serverProfileId) {
       this.accessToken = null;
+        this.principalId = undefined;
       this.refreshToken = null;
     }
 
@@ -627,6 +659,7 @@ export class BillManagerApi {
           binding.profile,
           tokens,
           binding.sessionGeneration,
+          binding.scope.principalId,
         );
       }
       return false;
@@ -641,6 +674,7 @@ export class BillManagerApi {
       await this.profileStore.setSelectedDatabase(scope.serverProfileId, null);
       if (this.activeProfile.id === scope.serverProfileId) {
         this.accessToken = null;
+        this.principalId = undefined;
         this.refreshToken = null;
         this.currentDatabase = null;
         this.activeProfile.selectedDatabase = null;
@@ -735,6 +769,9 @@ export class BillManagerApi {
       allowInsecure: this.allowInsecure,
     });
     const tokens = await this.tokenStore.load(scope.serverProfileId);
+    if (scope.principalId && scope.principalId !== tokens.principalId) {
+      throw new AuthSessionSupersededError();
+    }
     if (!tokens.accessToken) {
       throw new Error(`No stored session for queued mutation profile: ${scope.serverProfileId}`);
     }
@@ -787,6 +824,7 @@ export class BillManagerApi {
         profile,
         refreshedTokens,
         expectedGeneration,
+        tokens.principalId,
       );
       if (!installed) throw new AuthSessionSupersededError();
       const response = await request(refreshedTokens.accessToken);
@@ -814,6 +852,9 @@ export class BillManagerApi {
       allowInsecure: this.allowInsecure,
     });
     const tokens = await this.tokenStore.load(scope.serverProfileId);
+    if (scope.principalId && scope.principalId !== tokens.principalId) {
+      throw new AuthSessionSupersededError();
+    }
     if (!tokens.accessToken) {
       throw new Error(`No stored session for scoped request profile: ${scope.serverProfileId}`);
     }
@@ -860,6 +901,7 @@ export class BillManagerApi {
         profile,
         refreshedTokens,
         expectedGeneration,
+        tokens.principalId,
       );
       if (!installed) throw new AuthSessionSupersededError();
       const response = await request(refreshedTokens.accessToken);
@@ -1475,6 +1517,7 @@ export class BillManagerApi {
         this.invalidateDatabaseSelection(binding.scope.serverProfileId);
         if (this.activeProfile.id === binding.scope.serverProfileId) {
           this.accessToken = null;
+        this.principalId = undefined;
           this.refreshToken = null;
         }
         await serializeProfileSessionMutation(binding.scope.serverProfileId, () =>
@@ -1660,9 +1703,10 @@ export class BillManagerApi {
 
   // ============ Bill Sharing ============
 
-  async markSharePaid(shareId: number): Promise<ApiResponse<{ recipient_paid_date: string | null }>> {
+  async markSharePaid(shareId: number, requestedScope?: AuthSessionScope, clientMutationId?: string): Promise<ApiResponse<{ recipient_paid_date: string | null }>> {
     try {
-      const response = await this.client.post<ApiResponse<{ recipient_paid_date: string | null }>>(`/shares/${shareId}/mark-paid`);
+      const binding = await this.authenticationBinding(requestedScope);
+      const response = await this.client.post<ApiResponse<{ recipient_paid_date: string | null }>>(`/shares/${shareId}/mark-paid`, clientMutationId ? { client_mutation_id: clientMutationId } : undefined, this.authenticationRequestConfig(binding));
       return response.data;
     } catch (error) {
       return this.handleError(error);
@@ -1989,21 +2033,23 @@ export class BillManagerApi {
     }
   }
 
-  async createCheckoutSession(tier: 'pro' | 'basic' | 'plus', interval: 'monthly' | 'annual'): Promise<ApiResponse<{ url: string }>> {
+  async createCheckoutSession(tier: 'pro' | 'basic' | 'plus', interval: 'monthly' | 'annual', requestedScope?: AuthSessionScope): Promise<ApiResponse<{ url: string }>> {
     try {
+      const binding = await this.authenticationBinding(requestedScope);
       const response = await this.client.post<ApiResponse<{ url: string }>>('/billing/create-checkout', {
         tier,
         interval,
-      });
+      }, this.authenticationRequestConfig(binding));
       return response.data;
     } catch (error) {
       return this.handleError(error);
     }
   }
 
-  async createPortalSession(): Promise<ApiResponse<{ url: string }>> {
+  async createPortalSession(requestedScope?: AuthSessionScope): Promise<ApiResponse<{ url: string }>> {
     try {
-      const response = await this.client.post<ApiResponse<{ url: string }>>('/billing/portal');
+      const binding = await this.authenticationBinding(requestedScope);
+      const response = await this.client.post<ApiResponse<{ url: string }>>('/billing/portal', undefined, this.authenticationRequestConfig(binding));
       return response.data;
     } catch (error) {
       return this.handleError(error);
@@ -2186,6 +2232,7 @@ export class BillManagerApi {
       await this.tokenStore.save(scope.serverProfileId, {
         accessToken: session.access_token,
         refreshToken: session.refresh_token,
+        principalId: String(session.user.id),
       });
       if (sessionGeneration(scope.serverProfileId) !== binding.sessionGeneration) {
         await this.tokenStore.clear(scope.serverProfileId);
@@ -2206,6 +2253,7 @@ export class BillManagerApi {
       // profile's in-memory credentials or selected database.
       if (this.activeProfile.id === scope.serverProfileId) {
         this.accessToken = session.access_token;
+        this.principalId = String(session.user.id);
         this.refreshToken = session.refresh_token;
       }
       return true;
@@ -2218,8 +2266,9 @@ export class BillManagerApi {
 
   private async installRotatedTokens(
     profile: PersistedServerProfile,
-    tokens: { accessToken: string; refreshToken: string | null },
+    tokens: { accessToken: string; refreshToken: string | null; principalId?: string },
     expectedGeneration: number,
+    expectedPrincipalId?: string,
   ): Promise<boolean> {
     return serializeProfileSessionMutation(profile.id, async () => {
       if (sessionGeneration(profile.id) !== expectedGeneration) {
@@ -2227,7 +2276,10 @@ export class BillManagerApi {
         return false;
       }
 
-      await this.tokenStore.save(profile.id, tokens);
+      const previous = await this.tokenStore.load(profile.id);
+      if (expectedPrincipalId && previous.principalId !== expectedPrincipalId) return false;
+      const principalId = previous.principalId;
+      await this.tokenStore.save(profile.id, { ...tokens, ...(principalId ? { principalId } : {}) });
       if (sessionGeneration(profile.id) !== expectedGeneration) {
         await this.tokenStore.clear(profile.id);
         await this.revokeRefreshToken(profile, tokens.refreshToken);
@@ -2237,6 +2289,7 @@ export class BillManagerApi {
       invalidateSessionGeneration(profile.id);
       if (this.activeProfile.id === profile.id) {
         this.accessToken = tokens.accessToken;
+        this.principalId = principalId;
         this.refreshToken = tokens.refreshToken;
       }
       return true;
@@ -2246,13 +2299,16 @@ export class BillManagerApi {
   private async invalidateAndClearTokensIfCurrent(
     profileId: string,
     expectedGeneration: number,
+    expectedPrincipalId?: string,
   ): Promise<boolean> {
     return serializeProfileSessionMutation(profileId, async () => {
       if (sessionGeneration(profileId) !== expectedGeneration) return false;
+      if (expectedPrincipalId && (await this.tokenStore.load(profileId)).principalId !== expectedPrincipalId) return false;
       invalidateSessionGeneration(profileId);
       await this.tokenStore.clear(profileId);
       if (this.activeProfile.id === profileId) {
         this.accessToken = null;
+        this.principalId = undefined;
         this.refreshToken = null;
       }
       return true;

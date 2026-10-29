@@ -9,7 +9,7 @@ import { useMobileRuntime } from '../../context/MobileRuntimeContext';
 import { useServerProfiles } from '../../context/ServerProfileContext';
 import { MobileCacheRepository } from '../../data/cacheRepository';
 import { formatDate, getFormattingConfig } from '../../i18n/format';
-import type { Bill, BillShare, PendingShare, SharedBill } from '../../types';
+import type { ApiResponse, Bill, BillShare, PendingShare, SharedBill } from '../../types';
 import CollaborationScreen from './CollaborationScreen';
 import type { ShareInviteItem, SharedBillItem, ShareSplitMode } from './models';
 import { useTranslation } from 'react-i18next';
@@ -30,12 +30,12 @@ function splitMode(value: string | null): ShareSplitMode {
 export default function CollaborationContainer() {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
-  const { currentDatabase, databases } = useAuth();
+  const { user, currentDatabase, databases } = useAuth();
   const { activeProfile } = useServerProfiles();
   const runtime = useMobileRuntime();
   const formatting = getFormattingConfig();
   const supported = activeProfile.capabilities?.sharing ?? false;
-  const scope = { serverProfileId: activeProfile.id, databaseId: currentDatabase ?? '' };
+  const scope = { serverProfileId: activeProfile.id, databaseId: currentDatabase ?? '', principalId: user ? String(user.id) : undefined };
   const query = useQuery({
     queryKey: ['collaboration', activeProfile.id, currentDatabase, runtime.online, runtime.bills.map((bill) => `${bill.id}:${bill.share_count ?? 0}`).join(',')],
     enabled: supported && Boolean(currentDatabase),
@@ -48,10 +48,10 @@ export default function CollaborationContainer() {
 
       const ownedBills = runtime.bills.filter((bill) => !bill.is_shared && (bill.share_count ?? 0) > 0);
       const [received, pending, owned] = await Promise.all([
-        api.getSharedBills(),
-        api.getPendingShares(),
+        api.requestScopedGet<ApiResponse<SharedBill[]>>('/shared-bills', scope),
+        api.requestScopedGet<ApiResponse<PendingShare[]>>('/shared-bills/pending', scope),
         Promise.all(ownedBills.map(async (bill) => {
-          const response = await api.getBillShares(bill.id);
+          const response = await api.requestScopedGet<ApiResponse<BillShare[]>>(`/bills/${bill.id}/shares`, scope);
           if (!response.success) throw new Error(response.error ?? t('mobileParity.collaboration.sharesUnavailable', { name: bill.name }));
           return { bill, shares: response.data ?? [] };
         })),
