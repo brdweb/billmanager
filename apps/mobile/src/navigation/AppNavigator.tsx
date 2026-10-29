@@ -9,6 +9,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '../api/client';
+import LegacyDataNotice from '../components/LegacyDataNotice';
 import TelemetryNoticeModal from '../components/TelemetryNoticeModal';
 import { useAuth } from '../context/AuthContext';
 import { useServerProfiles } from '../context/ServerProfileContext';
@@ -77,6 +78,7 @@ export default function AppNavigator() {
 
   return (
     <>
+      <LegacyDataNotice />
       <NavigationContainer linking={linking} theme={navigationTheme}>
         <Stack.Navigator
           screenOptions={{ headerShown: false }}

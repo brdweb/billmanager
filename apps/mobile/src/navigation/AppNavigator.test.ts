@@ -45,6 +45,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('../api/client', () => ({
   api: { getTelemetryNotice: vi.fn() },
 }));
+vi.mock('../components/LegacyDataNotice', () => ({ default: 'LegacyDataNotice' }));
 vi.mock('../components/TelemetryNoticeModal', () => ({ default: 'TelemetryNoticeModal' }));
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({

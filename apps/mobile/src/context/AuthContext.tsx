@@ -1,3 +1,4 @@
+import { cancelOtherPrincipalReminders, cancelPrincipalReminders } from '../native/localNotifications';
 import React, {
   createContext,
   useCallback,
@@ -138,6 +139,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     snapshot: AuthenticatedSessionSnapshot,
   ): Promise<AuthenticatedSessionSnapshot | null> => {
     if (!isAuthCurrent(token)) return null;
+    await api.bindAuthenticatedPrincipal(String(snapshot.user.id));
+    await cancelOtherPrincipalReminders(token.profileId, String(snapshot.user.id)).catch(() => undefined);
+    if (!isAuthCurrent(token)) return null;
     if (!api.getCurrentDatabase() && snapshot.currentDatabase) {
       const selection = operationGuardRef.current.beginDatabaseSelection(
         token.profileId,
@@ -251,7 +255,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const profileId = providerProfileIdRef.current;
       if (api.getActiveProfile().id !== profileId) return;
       operationGuardRef.current.invalidateAuthentication(profileId);
+      const departingPrincipalId = stateRef.current.user ? String(stateRef.current.user.id) : undefined;
       replaceState(anonymousState());
+      void cancelPrincipalReminders(profileId, departingPrincipalId).catch(() => undefined);
       void serializeSessionWrite(() => (
         authSessionStore.clear(profileId).catch(() => undefined)
       ));
@@ -298,6 +304,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const scope = api.captureAuthSessionScope();
     operationGuardRef.current.invalidateAuthentication(scope.serverProfileId);
     replaceState(anonymousState());
+    void cancelPrincipalReminders(scope.serverProfileId, scope.principalId).catch(() => undefined);
     const clearSnapshot = serializeSessionWrite(() => (
       authSessionStore.clear(scope.serverProfileId).catch(() => undefined)
     ));
@@ -309,6 +316,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (api.getActiveProfile().id === scope.serverProfileId) {
       replaceState(anonymousState());
     }
+    void cancelPrincipalReminders(scope.serverProfileId, scope.principalId).catch(() => undefined);
     await serializeSessionWrite(() => (
       authSessionStore.clear(scope.serverProfileId).catch(() => undefined)
     ));

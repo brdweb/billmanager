@@ -82,6 +82,7 @@ export class ApiOutboxMutationExecutor implements OutboxMutationExecutor {
       {
         serverProfileId: mutation.serverProfileId,
         databaseId: mutation.databaseId,
+        ...(mutation.principalId ? { principalId: mutation.principalId } : {}),
       },
     );
     const responseData = response.data && typeof response.data === 'object'

@@ -136,6 +136,7 @@ describe('BillManagerApi security behavior', () => {
       data: {
         success: true,
         data: {
+          user: { id: 1, username: 'alice', role: 'user' },
           access_token: 'access-token-1',
           refresh_token: 'refresh-token-1',
           databases: [{ id: 1, name: 'personal', display_name: 'Personal' }],
@@ -153,6 +154,7 @@ describe('BillManagerApi security behavior', () => {
     });
     expect(tokenStore.save).toHaveBeenCalledWith('billmanager-cloud', {
       accessToken: 'access-token-1',
+      principalId: '1',
       refreshToken: 'refresh-token-1',
     });
     expect(profileStore.setSelectedDatabase).toHaveBeenCalledWith(
@@ -216,6 +218,7 @@ describe('BillManagerApi security behavior', () => {
     });
     expect(tokenStore.save).toHaveBeenCalledWith('billmanager-cloud', {
       accessToken: 'access-a',
+      principalId: '1',
       refreshToken: 'refresh-a',
     });
     expect(tokenStore.save).not.toHaveBeenCalledWith(
@@ -268,6 +271,7 @@ describe('BillManagerApi security behavior', () => {
     const { api, tokenStore } = createApi();
     tokenStore.load.mockResolvedValue({
       accessToken: 'access-token-1',
+      principalId: '1',
       refreshToken: 'refresh-token-1',
     });
     (api as unknown as { accessToken: string | null }).accessToken = 'access-token-1';
@@ -1019,6 +1023,7 @@ describe('BillManagerApi security behavior', () => {
     });
     expect(tokenStore.save).toHaveBeenCalledWith('billmanager-cloud', {
       accessToken: 'verified-a',
+      principalId: '1',
       refreshToken: 'verified-refresh-a',
     });
     expect(tokenStore.save).not.toHaveBeenCalledWith(
@@ -1159,6 +1164,7 @@ describe('BillManagerApi security behavior', () => {
     });
     expect(tokenStore.save).toHaveBeenCalledWith('billmanager-cloud', {
       accessToken: 'native-google-access',
+      principalId: '1',
       refreshToken: 'native-google-refresh',
     });
   });
@@ -1289,6 +1295,7 @@ describe('BillManagerApi security behavior', () => {
     });
     expect(tokenStore.save).toHaveBeenCalledWith('billmanager-cloud', {
       accessToken: 'oauth-access-a',
+      principalId: '1',
       refreshToken: 'oauth-refresh-a',
     });
     await expect(oauthScopeStore.consume('oauth-state-a')).resolves.toBeNull();
@@ -1383,6 +1390,7 @@ describe('BillManagerApi security behavior', () => {
     });
     expect(tokenStore.save).toHaveBeenCalledWith('billmanager-cloud', {
       accessToken: 'twofa-access',
+      principalId: '5',
       refreshToken: 'twofa-refresh',
     });
   });
@@ -1626,4 +1634,27 @@ describe('BillManagerApi security behavior', () => {
     }));
     expect(api.getActiveProfile().id).toBe('billmanager-cloud');
   });
+  it('rejects another account queued mutation before reading or sending current credentials', async () => {
+    const { api, tokenStore, profileStore } = createApi();
+    profileStore.getById.mockResolvedValue(api.getActiveProfile());
+    tokenStore.load.mockResolvedValue({ accessToken: 'bob-access', refreshToken: 'bob-refresh', principalId: '2' } as never);
+    await expect(api.requestScopedMutation('PUT', '/bills/1', { name: 'Alice edit' },
+      { clientMutationId: 'alice-mutation', baseUpdatedAt: null },
+      { serverProfileId: 'billmanager-cloud', databaseId: 'family', principalId: '1' }))
+      .rejects.toThrow();
+    expect(testMocks.axiosMock.request).not.toHaveBeenCalled();
+    await expect(api.requestScopedGet('/bills',
+      { serverProfileId: 'billmanager-cloud', databaseId: 'family', principalId: '1' })).rejects.toThrow();
+    expect(testMocks.axiosMock.request).not.toHaveBeenCalled();
+  });
+
+  it('rejects stale billing and settlement dialogs after the account changes', async () => {
+    const { api } = createApi();
+    const alice = { serverProfileId: 'billmanager-cloud', databaseId: 'family', principalId: '1' };
+    expect((await api.markSharePaid(4, alice)).success).toBe(false);
+    expect((await api.createCheckoutSession('pro', 'monthly', alice)).success).toBe(false);
+    expect((await api.createPortalSession(alice)).success).toBe(false);
+    expect(testMocks.mockClient.post).not.toHaveBeenCalled();
+  });
+
 });

@@ -79,6 +79,7 @@ export interface OAuthSession extends LoginResponse {
 export interface AuthSessionScope {
   serverProfileId: string;
   databaseId: string | null;
+  principalId?: string;
 }
 
 export interface OAuthTransaction {

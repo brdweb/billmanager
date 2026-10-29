@@ -106,3 +106,23 @@ The iOS WidgetKit/Expo Widget and Android Jetpack Glance widget receive a minima
 The runtime currently writes snapshots with `showAmounts: false`, so amounts are hidden by default. Widgets deep-link to Home or a bill. They do not perform independent server authentication or precise background synchronization.
 
 Widget source exists, but installation, app-group/preferences storage, refresh, privacy redaction, deep linking, theme, and lock-screen/home-screen behavior remain native release-validation items.
+
+## Account isolation and earlier offline changes
+
+Each authenticated account now has its own encrypted local cache, pending-change
+queue, reminders and synchronization state within a server profile. Signing out
+preserves that account's qualified offline work; signing in as another account
+cannot display or send it. Returning to the original account resumes its work.
+
+Earlier app versions did not record a reliable owner for each local row. On
+upgrade, all earlier financial cache and queued changes are retained in encrypted
+quarantine. The last signed-in user is not evidence of ownership, so those rows
+are never automatically assigned or replayed. Reconnect and refresh to download
+the current account's bills. A persistent recovery notice remains if earlier
+unsynced changes exist, even after the current account synchronizes successfully.
+
+For recovery, keep the app installed and do not clear its data. Contact your
+server administrator or BillManager support to verify the account that created
+the earlier changes and plan an owner-verified recovery. Automatic recovery and
+export of this quarantine are not implemented in this release. Do not describe
+quarantined changes as synchronized or assume reinstalling will preserve them.
