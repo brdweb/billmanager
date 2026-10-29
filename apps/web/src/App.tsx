@@ -18,6 +18,7 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { useAuth } from './context/AuthContext';
 import { useConfig } from './context/ConfigContext';
+import { useScopedBills } from './hooks/useScopedBills';
 import * as api from './api/client';
 import type { Bill } from './api/client';
 import { archiveBill, unarchiveBill, deleteBillPermanent, ApiError } from './api/client';
@@ -87,7 +88,7 @@ export interface BillFilter {
 
 function App() {
   const { t } = useTranslation();
-  const { isLoggedIn, isAdmin, isLoading, pendingPasswordChange, currentDb, databases } = useAuth();
+  const { isLoggedIn, isAdmin, isLoading, pendingPasswordChange, currentDb, databases, user } = useAuth();
   const { config } = useConfig();
   const navigate = useNavigate();
   const location = useLocation();
@@ -96,8 +97,7 @@ function App() {
   const billingEnabled = config?.billing_enabled ?? false;
 
   // Bills state
-  const [bills, setBills] = useState<Bill[]>([]);
-  const [billsLoading, setBillsLoading] = useState(false);
+  const { bills, billsLoading, fetchBills } = useScopedBills(isLoggedIn ? user?.id ?? null : null, currentDb);
 
   // Filter state
   const [filter, setFilter] = useState<BillFilter>({
@@ -213,37 +213,6 @@ function App() {
 
     return result;
   }, [bills, filter]);
-
-  // Fetch bills
-  const fetchBills = useCallback(async () => {
-    if (!isLoggedIn || !currentDb) {
-      setBills([]);
-      return;
-    }
-
-    setBillsLoading(true);
-    try {
-      // Process auto-payments first (ignore errors - admin only feature)
-      try {
-        await api.processAutoPayments();
-      } catch {
-        // Silently ignore auto-payment errors (403 for non-admins is expected)
-      }
-
-      // Fetch bills (include archived so they can be searched)
-      const response = await api.getBills(true);
-      setBills(Array.isArray(response) ? response : []);
-    } catch {
-      setBills([]);
-    } finally {
-      setBillsLoading(false);
-    }
-  }, [isLoggedIn, currentDb]);
-
-  // Fetch bills when logged in or database changes
-  useEffect(() => {
-    fetchBills();
-  }, [fetchBills]);
 
   // Check telemetry notice status on login
   useEffect(() => {
