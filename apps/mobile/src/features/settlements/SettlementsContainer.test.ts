@@ -34,7 +34,7 @@ vi.mock('./SettlementsScreen', () => ({ default: ({ actions, model }: { actions:
 function serverSnapshot(unpaid: number[], paid: number[] = []): SettlementsResponse {
   const item = (id: number, settled: boolean): SettlementLedgerItem => ({ share_id: id, direction: 'i_owe',
     bill_id: id, counterparty_user_id: 3, counterparty_name: 'Alex', bill_name: `Bill ${id}`,
-    due_date: '2026-10-29', share_updated_at: '2026-10-29T12:00:00.000000+00:00', amount: 15, paid: settled, paid_date: settled ? '2026-10-29' : null });
+    due_date: '2026-10-29', share_updated_at: '2026-10-29T12:00:00.000000+00:00', bill_updated_at: '2026-10-29T11:00:00.000000+00:00', amount: 15, paid: settled, paid_date: settled ? '2026-10-29' : null });
   return { summary: { owed_to_me: 0, i_owe: unpaid.length * 15, net_balance: -unpaid.length * 15,
     open_count: unpaid.length, settled_count: paid.length }, people: [], owed_to_me: [],
     i_owe: unpaid.map((id) => item(id, false)), settled: paid.map((id) => item(id, true)) };
@@ -193,9 +193,10 @@ it('does not use a read started during an entirely uncertain batch as post-batch
   expect(mocks.markPaid.mock.calls[0][2]).toBe(originalId);
 });
 
-it.each(['capability', 'version'] as const)('fails closed with actionable refresh guidance when %s is missing', async (missing) => {
+it.each(['capability', 'version', 'bill version'] as const)('fails closed with actionable refresh guidance when %s is missing', async (missing) => {
   if (missing === 'capability') mocks.safePayments = false;
-  else mocks.data.i_owe.forEach((item) => { delete item.share_updated_at; });
+  else if (missing === 'version') mocks.data.i_owe.forEach((item) => { delete item.share_updated_at; });
+  else mocks.data.i_owe.forEach((item) => { delete item.bill_updated_at; });
   await act(async () => { root.update(React.createElement(SettlementsContainer)); });
   await act(async () => { mocks.actions!.onMarkPaid('Alex'); });
   expect(mocks.markPaid).not.toHaveBeenCalled();
@@ -211,6 +212,7 @@ it('pins original UUID/version/due across uncertain retries and requires fresh s
   const originalState = first[3];
   mocks.data = serverSnapshot([2]);
   mocks.data.i_owe[0].share_updated_at = '2026-10-29T13:00:00.000000+00:00';
+  mocks.data.i_owe[0].bill_updated_at = '2026-10-29T14:00:00.000000+00:00';
   await act(async () => { root.update(React.createElement(SettlementsContainer)); });
   mocks.markPaid.mockClear().mockResolvedValue({ success: false, httpStatus: 409 });
   mocks.refetch.mockResolvedValue({ isSuccess: true, data: mocks.data });
@@ -229,7 +231,7 @@ it('pins original UUID/version/due across uncertain retries and requires fresh s
     await vi.waitFor(() => expect(mocks.refetch).toHaveBeenCalledTimes(3)); });
   expect(mocks.markPaid.mock.calls[0][2]).not.toBe(originalId);
   expect(mocks.markPaid.mock.calls[0][3]).toEqual({
-    baseUpdatedAt: '2026-10-29T13:00:00.000000+00:00', expectedDueDate: '2026-10-29',
+    baseUpdatedAt: '2026-10-29T13:00:00.000000+00:00', baseBillUpdatedAt: '2026-10-29T14:00:00.000000+00:00', expectedDueDate: '2026-10-29',
   });
 });
 

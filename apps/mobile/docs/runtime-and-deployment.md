@@ -89,12 +89,13 @@ Security, OAuth, sharing changes, settlements, administration, and SaaS billing 
 ### Safe shared-bill payment recording
 
 Mark Paid from Settlements requires the server's
-`settlement_payment_preconditions` feature plus each row's `share_updated_at`
-and due date. Earlier servers remain readable, but the app asks for a server
+`settlement_payment_preconditions` feature plus each row's `share_updated_at`,
+`bill_updated_at` and due date. Earlier servers remain readable, but the app asks for a server
 update and refresh rather than sending an unguarded toggle.
 
-Each payment intent sends its original `client_mutation_id`, `base_updated_at`
-and `expected_due_date` together. An uncertain retry keeps all three values;
+Each payment intent sends its original `client_mutation_id`, `base_updated_at`,
+`base_bill_updated_at` and `expected_due_date` together. An uncertain retry keeps
+all four values;
 it never silently substitutes a newer version into an old intent. A definite
 409 conflict blocks that intent until a real, causally fresh server read lets
 the user review the current amount/date and explicitly try again. A reopened

@@ -153,7 +153,7 @@ export default function SettlementsContainer() {
                         const intent = attempts.current.intent(scopeKey, item, randomUUID);
                         if (!intent) return Promise.resolve({ success: false });
                         return api.markSharePaid(id, requestedScope, intent.mutationId, {
-                          baseUpdatedAt: intent.baseUpdatedAt, expectedDueDate: intent.expectedDueDate,
+                          baseUpdatedAt: intent.baseUpdatedAt, baseBillUpdatedAt: intent.baseBillUpdatedAt, expectedDueDate: intent.expectedDueDate,
                         });
                       }, () => api.isPrincipalScopeAuthenticated(requestedScope), isActionCurrent);
                     for (const item of items) if (result.succeeded.includes(item.share_id)) attempts.current.confirm(scopeKey, item);

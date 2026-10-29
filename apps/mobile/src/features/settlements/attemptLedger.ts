@@ -1,9 +1,10 @@
 import type { SettlementLedgerItem, SettlementsResponse } from '../../types';
 
-type Occurrence = Pick<SettlementLedgerItem, 'share_id' | 'due_date' | 'share_updated_at'>;
-export interface SettlementIntent { mutationId: string; baseUpdatedAt: string; expectedDueDate: string }
+type Occurrence = Pick<SettlementLedgerItem, 'share_id' | 'due_date' | 'share_updated_at' | 'bill_updated_at'>;
+export interface SettlementIntent { mutationId: string; baseUpdatedAt: string; baseBillUpdatedAt: string; expectedDueDate: string }
 export function hasSettlementPreconditions(item: Occurrence): boolean {
-  if (typeof item.share_updated_at !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(item.share_updated_at)) return false;
+  if (![item.share_updated_at, item.bill_updated_at].every((version) => typeof version === 'string'
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(version))) return false;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(item.due_date)) return false;
   const date = new Date(`${item.due_date}T00:00:00Z`);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === item.due_date;
@@ -27,10 +28,10 @@ export class SettlementAttemptLedger {
     let attempt = this.attempts.get(key);
     if (!attempt) {
       attempt = { scope, occurrence: occurrenceKey(item), mutationId: createId(), confirmed: false, conflicted: false,
-        baseUpdatedAt: item.share_updated_at!, expectedDueDate: item.due_date };
+        baseUpdatedAt: item.share_updated_at!, baseBillUpdatedAt: item.bill_updated_at!, expectedDueDate: item.due_date };
       this.attempts.set(key, attempt);
     }
-    return attempt.conflicted ? null : { mutationId: attempt.mutationId, baseUpdatedAt: attempt.baseUpdatedAt, expectedDueDate: attempt.expectedDueDate };
+    return attempt.conflicted ? null : { mutationId: attempt.mutationId, baseUpdatedAt: attempt.baseUpdatedAt, baseBillUpdatedAt: attempt.baseBillUpdatedAt, expectedDueDate: attempt.expectedDueDate };
   }
 
   isConfirmed(scope: string, item: Occurrence): boolean {
