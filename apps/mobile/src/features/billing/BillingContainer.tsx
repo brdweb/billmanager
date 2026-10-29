@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
-import React, { useRef, useState } from 'react';
+import React from 'react';
 import { Alert, Platform } from 'react-native';
 
 import { api } from '../../api/client';
@@ -13,6 +13,7 @@ import BillingScreen from './BillingScreen';
 import type { SubscriptionState } from './models';
 import { proPlans } from './pricing';
 import { allowsExternalPurchases, runBillingAction } from './actions';
+import { useActionScope } from '../useActionScope';
 import { useTranslation } from 'react-i18next';
 
 export default function BillingContainer() {
@@ -43,18 +44,23 @@ export default function BillingContainer() {
     : subscription?.is_trialing
       ? 'trialing'
       : subscription?.status ?? (subscription?.has_subscription ? 'active' : 'free');
-  const actionGate = useRef(false);
-  const [actionBusy, setActionBusy] = useState(false);
+  const actionScope = useActionScope(JSON.stringify([activeProfile.id, user?.id]));
+  const isActionCurrent = () => {
+    const active = api.captureAuthSessionScope();
+    return actionScope.isActive() && active.serverProfileId === requestedScope.serverProfileId
+      && active.principalId === requestedScope.principalId;
+  };
   const purchasesAllowed = allowsExternalPurchases(Platform.OS);
   const plans = proPlans(t, tier, subscription?.billing_interval);
 
   const runAction = (request: () => ReturnType<typeof api.createPortalSession>, failureKey: string) => runBillingAction({
-    gate: actionGate,
+    gate: actionScope.gate,
+    isActive: isActionCurrent,
     allowed: purchasesAllowed && Boolean(user?.is_account_owner) && runtime.online && !selfHosted,
     isCurrent: () => api.isPrincipalScopeAuthenticated(requestedScope),
     request,
     openUrl: Linking.openURL,
-    onBusy: setActionBusy,
+    onBusy: actionScope.setBusy,
     onError: (message) => Alert.alert(t('mobileParity.billing.unavailableTitle'), message ?? t(failureKey)),
   });
   const openCheckout = (planId: string) => {
@@ -95,14 +101,14 @@ export default function BillingContainer() {
         })),
         plans: selfHosted || !purchasesAllowed ? [] : plans,
         canManageBilling: purchasesAllowed && Boolean(user?.is_account_owner),
-        actionBusy,
+        actionBusy: actionScope.busy,
         refreshing: query.isFetching,
       }}
       actions={{
         onSelectPlan: (id) => void openCheckout(id),
         onOpenPortal: () => void openPortal(),
-        onRefresh: () => void query.refetch(),
-        onRetry: () => void query.refetch(),
+        onRefresh: () => { if (isActionCurrent()) void query.refetch(); },
+        onRetry: () => { if (isActionCurrent()) void query.refetch(); },
       }}
     />
   );

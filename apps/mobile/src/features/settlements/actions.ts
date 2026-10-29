@@ -3,12 +3,13 @@ export async function settleOutstandingShares(
   confirmed: Set<number>,
   markPaid: (id: number) => Promise<{ success: boolean }>,
   isCurrent: () => Promise<boolean>,
+  isActive: () => boolean,
 ): Promise<{ succeeded: number[]; failed: number[] }> {
   const succeeded: number[] = [];
   const failed: number[] = [];
   for (const id of new Set(shareIds)) {
     if (confirmed.has(id)) continue;
-    if (!await isCurrent()) break;
+    if (!isActive() || !await isCurrent() || !isActive()) break;
     try {
       const response = await markPaid(id);
       if (response.success) {

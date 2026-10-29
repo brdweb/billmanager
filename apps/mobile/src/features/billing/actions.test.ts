@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { allowsExternalPurchases, runBillingAction } from './actions';
 
 function fixture() {
-  return { gate: { current: false }, allowed: true, isCurrent: vi.fn(async () => true),
+  return { gate: { current: false }, allowed: true, isActive: vi.fn(() => true), isCurrent: vi.fn(async () => true),
     request: vi.fn(async () => ({ success: true, data: { url: 'https://checkout.stripe.com/test' } })),
     openUrl: vi.fn(async (): Promise<void> => undefined), onBusy: vi.fn(), onError: vi.fn() };
 }
@@ -40,6 +40,16 @@ describe('native billing actions', () => {
       expect(f.onError).toHaveBeenCalledOnce();
       expect(f.gate.current).toBe(false);
     }
+  });
+  it('rejects inactive UI even when stored profile credentials are still valid', async () => {
+    const f = fixture();
+    f.isActive.mockReturnValue(false);
+    await runBillingAction(f);
+    expect(f.request).not.toHaveBeenCalled();
+    f.isActive.mockReturnValue(true);
+    f.request.mockImplementation(async () => { f.isActive.mockReturnValue(false); return { success: true, data: { url: 'https://checkout.stripe.com/test' } }; });
+    await runBillingAction(f);
+    expect(f.openUrl).not.toHaveBeenCalled();
   });
   it('rejects stale-account callbacks and late checkout responses', async () => {
     const f = fixture();
