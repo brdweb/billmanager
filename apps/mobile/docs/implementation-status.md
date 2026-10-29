@@ -9,6 +9,8 @@ This document tracks implementation evidence, not a release declaration. A row m
 The mobile source candidate is `1.2.0`. Its numeric native version and
 `appVersion` runtime policy derive from `package.json`, preventing the updated
 Expo/native client from sharing the historical `1.1.1` OTA compatibility boundary.
+New preview/production candidates use store-delivered embedded bundles with OTA
+requests disabled; older installed binaries are unaffected until upgraded.
 This source version does not establish a signed build, TestFlight/Play upload,
 privacy publication, or device acceptance. See [candidate notes](releases/1.2.0.md)
 and keep the mandatory gates below open until candidate-specific proof exists.
