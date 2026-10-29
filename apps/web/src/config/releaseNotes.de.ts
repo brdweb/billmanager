@@ -12,6 +12,7 @@ export const germanReleaseNotes: ReleaseNote[] = [
         'Sitzungen werden wiederhergestellt, wenn die ausgewählte Rechnungsgruppe entfernt wurde oder sich Zugriffsrechte geändert haben',
         'Abonnementänderungen melden ihre bereits bestehende sofortige Wirkung und aktualisieren den lokalen Tarif nach Bestätigung des Zahlungsanbieters',
         'Veröffentlichungsdaten zeigen in allen Zeitzonen den richtigen Kalendertag',
+        'Abgesicherte Ausgleichszahlungen lehnen veraltete Versionen und geänderte Fälligkeiten ab, statt bestehende Zahlungen rückgängig zu machen',
       ] },
       { heading: 'Sicherheit', items: [
         'Die msgpack-Abhängigkeit des Servers wurde aktualisiert',

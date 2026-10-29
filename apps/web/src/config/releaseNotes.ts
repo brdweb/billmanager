@@ -60,6 +60,7 @@ export const releaseNotes: ReleaseNote[] = [
         'Sessions recover when a previously selected bill group has been removed or access has changed',
         'Subscription plan changes report their existing immediate behavior and update the local plan after provider confirmation',
         'Release-note dates display the correct calendar day across time zones',
+        'Guarded settlement payments reject stale versions or changed bill occurrences instead of undoing an existing payment',
       ] },
       { heading: 'Security', items: [
         'Patched the server msgpack dependency',
