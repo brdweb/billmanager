@@ -46,4 +46,14 @@ describe('activateNotificationScope', () => {
     expect(switchProfile).not.toHaveBeenCalled();
     expect(selectDatabase).not.toHaveBeenCalled();
   });
+  it('rejects a reminder for the previous account before selecting a same-named database', async () => {
+    const selectDatabase = vi.fn();
+    await expect(activateNotificationScope(
+      { serverProfileId: 'server', databaseId: 'family', principalId: '1' },
+      { getActiveProfileId: () => 'server', getCurrentDatabase: () => 'other', getPrincipalId: () => '2',
+        switchProfile: vi.fn(), selectDatabase },
+    )).rejects.toThrow('another signed-in account');
+    expect(selectDatabase).not.toHaveBeenCalled();
+  });
+
 });

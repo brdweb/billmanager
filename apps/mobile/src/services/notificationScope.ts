@@ -3,6 +3,7 @@ import type { CacheScope } from '../data/cacheRepository';
 export interface NotificationScopeActivationDependencies {
   getActiveProfileId: () => string;
   getCurrentDatabase: () => string | null;
+  getPrincipalId?: () => string | undefined;
   switchProfile: (profileId: string) => void | Promise<void>;
   selectDatabase: (databaseId: string) => void | Promise<void>;
 }
@@ -18,6 +19,9 @@ export async function activateNotificationScope(
 ): Promise<void> {
   if (target.serverProfileId !== dependencies.getActiveProfileId()) {
     await dependencies.switchProfile(target.serverProfileId);
+  }
+  if (target.principalId && target.principalId !== dependencies.getPrincipalId?.()) {
+    throw new Error('This reminder belongs to another signed-in account.');
   }
   if (target.databaseId !== dependencies.getCurrentDatabase()) {
     await dependencies.selectDatabase(target.databaseId);
