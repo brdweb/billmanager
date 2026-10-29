@@ -1,34 +1,45 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 
 import './src/i18n';
 import { BiometricGate } from './src/components/BiometricGate';
 import { SecurityConfirmation } from './src/components/SecurityConfirmation';
 import { AppLockProvider } from './src/context/AppLockContext';
-import { AuthProvider } from './src/context/AuthContext';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { createSessionQueryClient } from './src/services/sessionQueryClient';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { ConfigProvider } from './src/context/ConfigContext';
 import { MobileRuntimeProvider } from './src/context/MobileRuntimeContext';
 import { ServerProfileProvider, useServerProfiles } from './src/context/ServerProfileContext';
 import AppNavigator from './src/navigation/AppNavigator';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      networkMode: 'offlineFirst',
-      retry: 2,
-      staleTime: 30_000,
-    },
-    mutations: {
-      networkMode: 'offlineFirst',
-      retry: 0,
-    },
-  },
-});
+function SessionQueryProvider({ children }: { children: React.ReactNode }) {
+  const [client] = useState(createSessionQueryClient);
+  useEffect(() => () => client.clear(), [client]);
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+function AuthenticatedApplication() {
+  const { user, isAuthenticated } = useAuth();
+  // A new cache and runtime also invalidate old native-surface leases. Even a
+  // same-user sign-in after logout starts a new mounted session boundary.
+  const sessionKey = isAuthenticated ? `user:${user?.id}` : 'anonymous';
+  return (
+    <SessionQueryProvider key={sessionKey}>
+      <ConfigProvider>
+        <MobileRuntimeProvider>
+          <AppLockProvider>
+            <BiometricGate><AppContent /></BiometricGate>
+          </AppLockProvider>
+        </MobileRuntimeProvider>
+      </ConfigProvider>
+    </SessionQueryProvider>
+  );
+}
 
 function AppContent() {
   const { isDark } = useTheme();
@@ -47,15 +58,7 @@ function ProfileBoundApplication() {
 
   return (
     <AuthProvider key={activeProfile.id}>
-      <ConfigProvider>
-        <MobileRuntimeProvider>
-          <AppLockProvider>
-            <BiometricGate>
-              <AppContent />
-            </BiometricGate>
-          </AppLockProvider>
-        </MobileRuntimeProvider>
-      </ConfigProvider>
+      <AuthenticatedApplication />
     </AuthProvider>
   );
 }
@@ -64,13 +67,11 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <ServerProfileProvider>
-            <ThemeProvider>
-              <ProfileBoundApplication />
-            </ThemeProvider>
-          </ServerProfileProvider>
-        </QueryClientProvider>
+        <ServerProfileProvider>
+          <ThemeProvider>
+            <ProfileBoundApplication />
+          </ThemeProvider>
+        </ServerProfileProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
