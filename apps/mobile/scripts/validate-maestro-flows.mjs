@@ -27,6 +27,7 @@ const allowedCommands = new Set([
   'launchApp',
   'scrollUntilVisible',
   'tapOn',
+  'takeScreenshot',
 ]);
 
 function fail(message) {

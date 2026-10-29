@@ -1,0 +1,85 @@
+name: iOS Simulator QA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-simulator-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    name: Native Release simulator smoke
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      BILLMANAGER_DEVELOPMENT_BUILD: 'false'
+      EXPO_PUBLIC_DESIGN_PREVIEW: '0'
+      EXPO_NO_DOTENV: '1'
+      EXPO_NO_TELEMETRY: '1'
+      SENTRY_DSN: ''
+      SENTRY_DISABLE_AUTO_UPLOAD: 'true'
+      CI: '1'
+    steps:
+      - name: Checkout exact reviewed main revision
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - name: Set up Java for Maestro
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install locked mobile dependencies
+        working-directory: apps/mobile
+        run: npm ci
+      - name: Validate source and flow definitions
+        working-directory: apps/mobile
+        run: |
+          npm run i18n:check
+          npm run maestro:validate
+          npm test -- scripts/ios-simulator-qa.test.mjs
+      - name: Install verified Maestro CLI
+        env:
+          MAESTRO_VERSION: 2.12.0
+          MAESTRO_SHA256: a6044a84542f522f434c5dc3d609e60c7446d423f3ed1b2ae513f5c48663ec5e
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/maestro.zip"
+          curl --fail --location --retry 3 "https://github.com/mobile-dev-inc/Maestro/releases/download/cli-${MAESTRO_VERSION}/maestro.zip" --output "$archive"
+          printf '%s  %s\n' "$MAESTRO_SHA256" "$archive" | shasum -a 256 --check
+          unzip -q "$archive" -d "$RUNNER_TEMP/maestro"
+          printf '%s\n' "$RUNNER_TEMP/maestro/maestro/bin" >> "$GITHUB_PATH"
+      - name: Build and exercise the native Simulator app
+        run: bash apps/mobile/scripts/ios-simulator-qa.sh
+      - name: Upload bounded native QA evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-simulator-qa-${{ github.sha }}
+          path: ${{ runner.temp }}/billmanager-ios-qa
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Explain acceptance boundary
+        if: always()
+        run: |
+          {
+            echo '## iOS Simulator QA'
+            echo '- Source: `${{ github.sha }}` (main)'
+            echo '- Native Release / iOS Simulator; unsigned, not a device/store artifact.'
+            echo '- HTTPS-only app policy; generated OTA disabled and Sentry upload disabled.'
+            echo '- Existing auth-entry navigation only; no credentials, purchases, email submission or accounts.'
+            echo '- Inspect manifest, JUnit, screenshots and native logs; a failed job is not acceptance.'
+            echo '- Physical-device, signing, authenticated flows and production diagnostics remain separate gates.'
+          } >> "$GITHUB_STEP_SUMMARY"
