@@ -155,3 +155,15 @@ def test_concurrent_guarded_and_legacy_requests_share_one_lock_order(app, settle
         assert sorted(replayed or "original" for _, replayed in results) == ["original", "true"]
     db_session.expire_all()
     assert Payment.query.filter_by(share_id=settlement[0]).count() == (0 if mode == "legacy" and statuses == [200, 200] else 1)
+
+
+@pytest.mark.parametrize("payload", [[], False, 0, True, 1, ""])
+def test_non_object_body_cannot_toggle_existing_payment(client, settlement, db_session, payload):
+    assert post(client, settlement, {}).status_code == 200
+    payment_id = Payment.query.filter_by(share_id=settlement[0]).one().id
+    response = post(client, settlement, payload)
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "invalid_request_body"
+    db_session.expire_all()
+    assert Payment.query.filter_by(share_id=settlement[0]).one().id == payment_id
+    assert db_session.get(BillShare, settlement[0]).recipient_paid_date is not None

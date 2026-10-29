@@ -4611,7 +4611,9 @@ def jwt_leave_share(share_id):
 @jwt_required
 def jwt_mark_share_paid(share_id):
     """Mark recipient's portion of shared bill as paid and create payment record."""
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
     if not isinstance(data, dict):
         return _error_response("invalid_request_body", "Request body must be an object", 400)
     guarded = "expected_due_date" in data
