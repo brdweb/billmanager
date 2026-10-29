@@ -10,15 +10,16 @@ import { useTheme } from '../context/ThemeContext';
 import { getLegacyDataStatus, legacyNoticeKind } from '../data/legacyQuarantine';
 
 export default function LegacyDataNotice() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, requiresOnlineIdentityVerification } = useAuth();
   const { activeProfile } = useServerProfiles();
   const runtime = useMobileRuntime();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const query = useQuery({ queryKey: ['legacy-quarantine', activeProfile.id],
     enabled: isAuthenticated, queryFn: () => getLegacyDataStatus(activeProfile.id) });
-  const kind = query.error ? 'recovery' : legacyNoticeKind(query.data, runtime.lastSyncedAt);
-  if (!isAuthenticated || !kind) return null;
+  const kind = requiresOnlineIdentityVerification ? 'verifyAccount'
+    : query.error ? 'recovery' : legacyNoticeKind(query.data, runtime.lastSyncedAt);
+  if ((!isAuthenticated && !requiresOnlineIdentityVerification) || !kind) return null;
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ backgroundColor: colors.surface }}>
       <View style={[styles.notice, { borderColor: colors.warning }]}>

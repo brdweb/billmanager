@@ -12,4 +12,4 @@ Repeatable mistakes reviewers catch in this repository. Read this file before st
 - **Date:** 2026-10-29
 - **PR:** https://github.com/brdweb/billmanager/issues/236
 - **Mistake:** Treating the last authenticated session as proof of ownership for older mobile cache and queued-change rows. An earlier account's rows can survive a later account's sign-in.
-- **Rule going forward:** Migrate financial/offline work only with trustworthy per-row ownership. Otherwise preserve it in an unreachable encrypted quarantine, explain recovery, and never replay it with the current account's credentials. Treat owner and access/refresh credentials as one atomic envelope during token/profile migrations.
+- **Rule going forward:** Migrate financial/offline work only with trustworthy per-row ownership. Otherwise preserve it in an unreachable encrypted quarantine, explain recovery, and never replay it with the current account's credentials. Treat owner and access/refresh credentials as one atomic envelope during token/profile migrations. A cached user snapshot also cannot establish ownership of an unbound legacy token: only live authentication/identity verification may establish it.

@@ -3,14 +3,14 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mobileCoreResources } from '../features/mobileCoreResources';
 
-const state = vi.hoisted(() => ({ authenticated: true, pending: true, synced: 'today' as string | null,
+const state = vi.hoisted(() => ({ authenticated: true, verify: false, pending: true, synced: 'today' as string | null,
   alert: vi.fn() }));
 vi.mock('react-native', () => ({
   Alert: { alert: state.alert }, Pressable: 'Pressable', Text: 'Text', View: 'View',
   StyleSheet: { create: (value: unknown) => value },
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
-vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isAuthenticated: state.authenticated }) }));
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isAuthenticated: state.authenticated, requiresOnlineIdentityVerification: state.verify }) }));
 vi.mock('../context/ServerProfileContext', () => ({ useServerProfiles: () => ({ activeProfile: { id: 'server' } }) }));
 vi.mock('../context/MobileRuntimeContext', () => ({ useMobileRuntime: () => ({ lastSyncedAt: state.synced }) }));
 vi.mock('../context/ThemeContext', () => ({ useTheme: () => ({ colors: { surface: '#fff', text: '#000', warning: '#800', primary: '#050' } }) }));
@@ -28,7 +28,7 @@ import LegacyDataNotice from './LegacyDataNotice';
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 let renderer: ReactTestRenderer | undefined;
 afterEach(async () => { if (renderer) await act(() => renderer!.unmount()); renderer = undefined;
-  state.authenticated = true; state.pending = true; state.synced = 'today'; });
+  state.authenticated = true; state.verify = false; state.pending = true; state.synced = 'today'; });
 
 describe('earlier offline changes notice', () => {
   it('keeps the recovery warning and owner-verification guidance after normal synchronization', async () => {
@@ -51,4 +51,10 @@ describe('earlier offline changes notice', () => {
     await act(() => renderer!.update(React.createElement(LegacyDataNotice)));
     expect(renderer!.toJSON()).toBeNull();
   });
+  it('explains why a legacy offline session needs online sign-in without displaying account data', async () => {
+    state.authenticated = false; state.verify = true;
+    await act(() => { renderer = create(React.createElement(LegacyDataNotice)); });
+    expect(JSON.stringify(renderer!.toJSON())).toContain(mobileCoreResources.en.recovery.verifyAccount);
+  });
+
 });

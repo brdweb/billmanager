@@ -421,13 +421,13 @@ export class BillManagerApi {
     return Boolean(tokens.accessToken && tokens.principalId === scope.principalId);
   }
 
-  async bindAuthenticatedPrincipal(principalId: string): Promise<void> {
+  async bindAuthenticatedPrincipal(principalId: string, verifiedLive = false): Promise<void> {
     const profileId = this.activeProfile.id;
     const expectedGeneration = sessionGeneration(profileId);
     await serializeProfileSessionMutation(profileId, async () => {
       if (sessionGeneration(profileId) !== expectedGeneration) throw new AuthSessionSupersededError();
       const tokens = await this.tokenStore.load(profileId);
-      if (tokens.principalId && tokens.principalId !== principalId) throw new AuthSessionSupersededError();
+      if (tokens.principalId !== principalId && !(verifiedLive && !tokens.principalId)) throw new AuthSessionSupersededError();
       if (!tokens.accessToken) throw new AuthSessionSupersededError();
       await this.tokenStore.save(profileId, { ...tokens, principalId });
       if (this.activeProfile.id === profileId) this.principalId = principalId;

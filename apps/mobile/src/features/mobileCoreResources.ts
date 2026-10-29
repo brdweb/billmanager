@@ -1,6 +1,7 @@
 export const mobileCoreResources = {
   en: {
     recovery: {
+      verifyAccount: 'Reconnect and sign in to verify this account after the update.',
       reconnect: 'Reconnect to reload your bills after this update.',
       recovery: 'Earlier offline changes are kept on this device and need account verification before recovery.',
       help: 'Recovery help',
@@ -204,6 +205,7 @@ export const mobileCoreResources = {
   },
   de: {
     recovery: {
+      verifyAccount: 'Verbinde dich mit dem Internet und melde dich an, um das Konto nach dem Update zu überprüfen.',
       reconnect: 'Verbinde dich mit dem Internet, um deine Rechnungen nach diesem Update neu zu laden.',
       recovery: 'Frühere Offline-Änderungen bleiben auf diesem Gerät. Vor der Wiederherstellung muss das Konto überprüft werden.',
       help: 'Hilfe zur Wiederherstellung',

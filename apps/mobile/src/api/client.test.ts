@@ -1657,4 +1657,15 @@ describe('BillManagerApi security behavior', () => {
     expect(testMocks.mockClient.post).not.toHaveBeenCalled();
   });
 
+  it('cannot establish ownership from cached identity without explicit live verification', async () => {
+    const { api, tokenStore } = createApi();
+    tokenStore.load.mockResolvedValue({ accessToken: 'legacy', refreshToken: 'legacy-refresh' });
+    await expect(api.bindAuthenticatedPrincipal('1')).rejects.toThrow();
+    expect(tokenStore.save).not.toHaveBeenCalled();
+    await expect(api.bindAuthenticatedPrincipal('1', true)).resolves.toBeUndefined();
+    expect(tokenStore.save).toHaveBeenCalledWith('billmanager-cloud', {
+      accessToken: 'legacy', refreshToken: 'legacy-refresh', principalId: '1',
+    });
+  });
+
 });

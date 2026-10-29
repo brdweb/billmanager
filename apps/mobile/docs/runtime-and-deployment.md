@@ -118,7 +118,10 @@ Earlier app versions did not record a reliable owner for each local row. On
 upgrade, all earlier financial cache and queued changes are retained in encrypted
 quarantine. The last signed-in user is not evidence of ownership, so those rows
 are never automatically assigned or replayed. Reconnect and refresh to download
-the current account's bills. A persistent recovery notice remains if earlier
+the current account's bills. An earlier token with no verified owner cannot
+restore a cached user while offline; reconnect and sign in or complete a live
+identity check first. Already-qualified matching accounts retain offline access.
+A persistent recovery notice remains if earlier
 unsynced changes exist, even after the current account synchronizes successfully.
 
 For recovery, keep the app installed and do not clear its data. Contact your

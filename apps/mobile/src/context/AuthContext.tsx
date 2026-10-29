@@ -29,6 +29,7 @@ import {
 type ServerType = 'cloud' | 'self-hosted' | 'local-dev';
 
 interface AuthState {
+  requiresOnlineIdentityVerification?: boolean;
   isLoading: boolean;
   isAuthenticated: boolean;
   user: User | null;
@@ -137,9 +138,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const prepareSnapshot = useCallback(async (
     token: AuthOperationToken,
     snapshot: AuthenticatedSessionSnapshot,
+    verifiedLive = false,
   ): Promise<AuthenticatedSessionSnapshot | null> => {
     if (!isAuthCurrent(token)) return null;
-    await api.bindAuthenticatedPrincipal(String(snapshot.user.id));
+    await api.bindAuthenticatedPrincipal(String(snapshot.user.id), verifiedLive);
     await cancelOtherPrincipalReminders(token.profileId, String(snapshot.user.id)).catch(() => undefined);
     if (!isAuthCurrent(token)) return null;
     if (!api.getCurrentDatabase() && snapshot.currentDatabase) {
@@ -201,7 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             sessionScope.databaseId,
           );
           if (live) {
-            const prepared = await prepareSnapshot(authOperation, live);
+            const prepared = await prepareSnapshot(authOperation, live, true);
             if (
               prepared
               && await saveSnapshot(authOperation, prepared)
@@ -214,7 +216,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const cached = await cachedPromise;
-        if (cached && canUseCachedSession(hasToken, response.httpStatus)) {
+        if (cached && canUseCachedSession(hasToken, response.httpStatus)
+          && api.captureAuthSessionScope().principalId === String(cached.user.id)) {
           const prepared = await prepareSnapshot(authOperation, cached);
           if (
             prepared
@@ -223,6 +226,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ) {
             replaceState(authenticatedState(prepared, serverType));
           }
+          return;
+        }
+
+        if (cached && canUseCachedSession(hasToken, response.httpStatus) && isAuthCurrent(authOperation)) {
+          replaceState({ ...anonymousState(serverType), requiresOnlineIdentityVerification: true });
           return;
         }
 
