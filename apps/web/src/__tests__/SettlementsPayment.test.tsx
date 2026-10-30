@@ -62,7 +62,7 @@ beforeEach(() => {
       data = { message: 'Updated', recipient_paid_date: paid ? stamp : null };
     } else if (config.url === '/settlements') data = { summary: { owed_to_me: 0, i_owe: 50, net_balance: -50,
       open_count: 1, settled_count: 0, overdue_owed_to_me: 0, overdue_i_owe: 0 },
-      owed_to_me: [], i_owe: [item], settled: [], people: [] };
+      owed_to_me: [], i_owe: item.paid ? [] : [item], settled: item.paid ? [item] : [], people: [] };
     else data = config.url?.startsWith('/bills') ? [bill] : [];
     return { status: 200, statusText: 'OK', headers: {}, config, data: { success: true, data } };
   };
@@ -203,4 +203,49 @@ it('offers a recoverable refresh after initial read credentials refresh within t
   fireEvent.click(await screen.findByTitle('Refresh settlements'));
   expect(await screen.findByRole('button', { name: 'Mark paid' })).toBeVisible();
   expect(requests).toHaveLength(0);
+});
+
+it('retires an uncertain paid intent after observing paid before the same occurrence reopens', async () => {
+  render(wrapped(<Settlements hasDatabase />));
+  fireEvent.click(await screen.findByRole('button', { name: 'Mark paid' }));
+  await waitFor(() => expect(requests).toHaveLength(1));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Mark paid' })).not.toBeDisabled());
+  item = { ...item, paid: true, share_updated_at: '2026-10-29T13:00:00Z' };
+  fireEvent.click(screen.getByTitle('Refresh settlements'));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Mark paid' })).not.toBeInTheDocument());
+  await screen.findByTitle('Refresh settlements');
+  paid = false; item = { ...item, paid: false, share_updated_at: '2026-10-29T14:00:00Z' };
+  fireEvent.click(screen.getByTitle('Refresh settlements'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Mark paid' }));
+  await waitFor(() => expect(requests).toHaveLength(2));
+  expect(requests[1].client_mutation_id).not.toBe(requests[0].client_mutation_id);
+  expect(paid).toBe(true);
+});
+
+it('retires an uncertain unpay intent after a fresh unpaid BillList observation before it is paid again', async () => {
+  paid = true; bill.share_info!.my_portion_paid = true;
+  const adapter = transport.defaults.adapter as import('axios').AxiosAdapter;
+  let reads = 0;
+  transport.defaults.adapter = async config => {
+    if (config.url?.startsWith('/bills')) reads += 1;
+    return adapter(config);
+  };
+  const mounted = render(wrapped(list()));
+  fireEvent.click(await screen.findByTitle('Mark as unpaid'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Mark Unpaid' }));
+  await waitFor(() => expect(requests).toHaveLength(1));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Mark Unpaid' })).not.toBeDisabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(reads).toBeGreaterThan(0));
+  const before = reads;
+  bill = { ...bill, share_info: { ...bill.share_info!, my_portion_paid: false, share_updated_at: '2026-10-29T13:00:00Z' } };
+  mounted.rerender(wrapped(list()));
+  await waitFor(() => expect(reads).toBeGreaterThan(before));
+  await act(async () => {});
+  paid = true; bill = { ...bill, share_info: { ...bill.share_info!, my_portion_paid: true, share_updated_at: '2026-10-29T14:00:00Z' } };
+  mounted.rerender(wrapped(list()));
+  fireEvent.click(await screen.findByTitle('Mark as unpaid'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Mark Unpaid' }));
+  await waitFor(() => expect(requests).toHaveLength(2));
+  expect(requests[1].client_mutation_id).not.toBe(requests[0].client_mutation_id); expect(paid).toBe(false);
 });

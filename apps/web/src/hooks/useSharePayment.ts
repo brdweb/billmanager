@@ -3,6 +3,7 @@ import * as api from '../api/client';
 import i18n from '../i18n';
 import { useAuth } from '../context/AuthContext';
 
+export interface PaymentObservation { shareId: number; dueDate: string; paid: boolean }
 export interface PaymentSnapshot {
   shareId: number; shareVersion?: string; billVersion?: string; dueDate: string; desiredPaid: boolean;
 }
@@ -15,7 +16,7 @@ export function useSharePayment(viewKey = '') {
   const lease = useMemo(() => ({ busy: false, scope, viewKey }), [scope, viewKey]);
   const active = useRef<typeof lease | null>(lease);
   const [, render] = useState(0);
-  const attempts = useRef(new Map<string, { intent: api.SharePaymentIntent; blocked: boolean }>());
+  const attempts = useRef(new Map<string, { shareId: number; intent: api.SharePaymentIntent; blocked: boolean }>());
   useLayoutEffect(() => {
     active.current = lease;
     return () => { if (active.current === lease) active.current = null; };
@@ -24,11 +25,16 @@ export function useSharePayment(viewKey = '') {
     && api.isPaymentScopeCurrent(api.capturePaymentScope(user!.id)) && api.capturePaymentScope(user!.id).database === currentDb,
   [lease, isLoggedIn, user, currentDb]);
   const revision = useRef(0);
+  const inFlight = useRef(0);
   const beginRead = useCallback(() => revision.current, []);
-  const freshRead = useCallback((readRevision: number) => {
-    if (readRevision !== revision.current) return;
-    for (const [key, attempt] of attempts.current) if (attempt.blocked && key.startsWith(`${scope}:`)) attempts.current.delete(key);
+  const freshRead = useCallback((readRevision: number, observed: PaymentObservation[]) => {
+    if (readRevision !== revision.current || inFlight.current) return;
+    for (const [key, attempt] of attempts.current) {
+      if (key.startsWith(`${scope}:`) && (attempt.blocked || observed.some(item => item.shareId === attempt.shareId
+        && item.dueDate === attempt.intent.expected_due_date && item.paid === attempt.intent.desired_paid))) attempts.current.delete(key);
+    }
   }, [scope]);
+  const hasUncertain = useCallback(() => [...attempts.current].some(([key, attempt]) => key.startsWith(`${scope}:`) && !attempt.blocked), [scope]);
   const run = async (item: PaymentSnapshot, currentView: () => boolean, success: () => Promise<void> | void, conflict: () => Promise<void> | void) => {
     if (!isCurrent() || lease.busy || !currentView()) return;
     const requestScope = api.capturePaymentScope(user!.id);
@@ -46,11 +52,13 @@ export function useSharePayment(viewKey = '') {
       let attempt = attempts.current.get(key);
       if (attempt?.blocked) { await conflict(); throw new Error(i18n.t('sharedPayment.refreshRequired')); }
       if (!attempt) {
-        attempt = { blocked: false, intent: { client_mutation_id: crypto.randomUUID(), base_updated_at: item.shareVersion!,
+        attempt = { shareId: item.shareId, blocked: false, intent: { client_mutation_id: crypto.randomUUID(), base_updated_at: item.shareVersion!,
           base_bill_updated_at: item.billVersion!, expected_due_date: item.dueDate, desired_paid: item.desiredPaid } };
         attempts.current.set(key, attempt);
       }
-      await api.markSharePaid(item.shareId, attempt.intent, requestScope);
+      inFlight.current += 1;
+      try { await api.markSharePaid(item.shareId, attempt.intent, requestScope); }
+      finally { inFlight.current -= 1; revision.current += 1; }
       attempt.blocked = true; revision.current += 1;
       if (current()) await success();
     } catch (error) {
@@ -67,5 +75,5 @@ export function useSharePayment(viewKey = '') {
       if (isCurrent()) render(value => value + 1);
     }
   };
-  return { run, busy: lease.busy, isCurrent, freshRead, beginRead };
+  return { run, busy: lease.busy, isCurrent, freshRead, beginRead, hasUncertain };
 }

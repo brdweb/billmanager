@@ -136,7 +136,7 @@ export function BillList({
   const [confirmPayBill, setConfirmPayBill] = useState<Bill | null>(null);
   const viewKey = JSON.stringify([confirmPayBill?.id, confirmPayBill?.last_updated,
     confirmPayBill?.share_info, bills.find(bill => bill.id === confirmPayBill?.id)]);
-  const { run, busy: paymentLoading, isCurrent, beginRead, freshRead } = useSharePayment(viewKey);
+  const { run, busy: paymentLoading, isCurrent, beginRead, freshRead, hasUncertain } = useSharePayment(viewKey);
   const modal = useRef(confirmPayBill);
   useLayoutEffect(() => { modal.current = confirmPayBill; }, [confirmPayBill]);
 
@@ -151,9 +151,11 @@ export function BillList({
     const refresh = async () => {
       const revision = beginRead();
       const requestScope = capturePaymentScope(user!.id);
-      await getBills(true, undefined, requestScope);
+      const rows = await getBills(true, undefined, requestScope);
       if (!isPaymentScopeCurrent(requestScope) || !isCurrent() || modal.current !== bill) return;
-      freshRead(revision); onRefresh?.(); setConfirmPayBill(null);
+      freshRead(revision, rows.filter(row => row.share_info).map(row => ({ shareId: row.share_info!.share_id,
+        dueDate: row.next_due, paid: row.share_info!.my_portion_paid })));
+      onRefresh?.(); setConfirmPayBill(null);
     };
     try {
       await run({ shareId: bill.share_info.share_id, shareVersion: bill.share_info.share_updated_at,
@@ -171,6 +173,18 @@ export function BillList({
         message: error instanceof Error ? error.message : t('billList.notifications.updateFailed'), color: 'red' });
     }
   };
+
+  // Only a new scoped server read can resolve an uncertain intent observed via refreshed bill props.
+  useEffect(() => {
+    if (!isCurrent() || !hasUncertain()) return;
+    const revision = beginRead();
+    const requestScope = capturePaymentScope(user!.id);
+    void getBills(true, undefined, requestScope).then(rows => {
+      if (isCurrent() && isPaymentScopeCurrent(requestScope)) freshRead(revision, rows.filter(row => row.share_info).map(row => ({
+        shareId: row.share_info!.share_id, dueDate: row.next_due, paid: row.share_info!.my_portion_paid,
+      })));
+    }).catch(() => {});
+  }, [bills, isCurrent, hasUncertain, beginRead, freshRead, user]);
 
   // Fetch accounts list when logged in
   useEffect(() => {

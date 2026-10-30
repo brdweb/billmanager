@@ -233,7 +233,7 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
       const response = await api.getSettlements(requestScope);
       if (!isCurrent() || id !== requestId.current) return;
       if (!api.isPaymentScopeCurrent(requestScope)) throw new Error('Read session refreshed');
-      freshRead(revision);
+      freshRead(revision, [...response.i_owe, ...response.settled.filter(item => item.direction === 'i_owe')].map(item => ({ shareId: item.share_id, dueDate: item.due_date, paid: item.paid })));
       setDataScope(scopeKey);
       setData(response);
     } catch {
