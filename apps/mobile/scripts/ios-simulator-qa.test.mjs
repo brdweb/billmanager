@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, globSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Script } from 'node:vm';
@@ -18,7 +20,14 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     expect(job.if).toBe("github.ref == 'refs/heads/main'");
     expect(job['runs-on']).toBe('macos-26');
     expect(job['timeout-minutes']).toBe(90);
-    expect(JSON.stringify(workflow)).not.toMatch(/secrets\.|ios-production|eas-cli|submit|workflow_call/);
+    expect(JSON.stringify(workflow)).not.toMatch(/eas-cli|workflow_call/);
+    expect(workflow.on.workflow_dispatch.inputs.authenticated.default).toBe(false);
+    expect(job.environment).toBe("${{ inputs.authenticated && 'ios-production' || '' }}");
+    const secretSteps = job.steps.filter(step => JSON.stringify(step).includes('secrets.'));
+    expect(secretSteps).toHaveLength(1);
+    expect(secretSteps[0].if).toBe('inputs.authenticated');
+    expect(secretSteps[0].name).toBe('Capture private synthetic reviewer screens');
+    expect(job.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with.path).not.toMatch(/private|debug|simulator\.log|final-screen/);
     expect(job.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with['retention-days']).toBe(3);
   });
 
@@ -57,12 +66,34 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     expect(commands.filter(command => command.tapOn).map(command => command.tapOn.text))
       .toEqual(['Forgot password?', 'Back to sign in']);
     expect(script).toContain('test .maestro/ios/auth-entry.yaml');
+    expect(script).toContain('for family in iphone ipad; do');
+    expect(script).toContain('node scripts/ios-qa-devices.mjs');
+    expect(script.match(/xcodebuild -workspace/g)).toHaveLength(1);
   });
 
   it('parses the runner shell and embedded evidence scripts before using macOS', () => {
     execFileSync('bash', ['-n', fileURLToPath(scriptUrl)]);
     const blocks = [...script.matchAll(/<<'NODE'\n([\s\S]*?)\nNODE/g)];
-    expect(blocks).toHaveLength(2);
+    expect(blocks).toHaveLength(1);
     for (const [, source] of blocks) expect(() => new Script(source)).not.toThrow();
   });
+});
+
+it('uploads only named anonymous captures from Maestro timestamp/flow nesting', () => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-anonymous-glob-'));
+  const upload = workflow.jobs.simulator.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with.path;
+  const patterns = upload.trim().split('\n').filter(pattern => pattern.includes('/screenshots/'));
+  const expected = [];
+  try {
+    for (const family of ['iphone', 'ipad']) {
+      const nested = join(root, 'billmanager-ios-qa', family, 'screenshots', '2026-10-30_120000', 'auth-entry', 'screenshots');
+      mkdirSync(nested, { recursive: true });
+      for (const name of ['auth-login.png', 'auth-password-recovery.png', 'screenshot-failure.png', 'commands.json', 'maestro.log']) {
+        const file = join(nested, name); writeFileSync(file, 'fixture');
+        if (name.startsWith('auth-')) expected.push(file);
+      }
+    }
+    const matched = patterns.flatMap(pattern => globSync(pattern.replace('${{ runner.temp }}', root)));
+    expect(matched.sort()).toEqual(expected.sort());
+  } finally { rmSync(root, { recursive: true }); }
 });

@@ -2,6 +2,11 @@ name: iOS Simulator QA
 
 on:
   workflow_dispatch:
+    inputs:
+      authenticated:
+        description: Capture synthetic reviewer screens (requires production approval)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -16,6 +21,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: macos-26
     timeout-minutes: 90
+    environment: ${{ inputs.authenticated && 'ios-production' || '' }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       BILLMANAGER_DEVELOPMENT_BUILD: 'false'
@@ -49,7 +55,7 @@ jobs:
         run: |
           npm run i18n:check
           npm run maestro:validate
-          npm test -- scripts/ios-simulator-qa.test.mjs
+          npm test -- scripts/ios-simulator-qa.test.mjs scripts/ios-qa-devices.test.mjs scripts/ios-store-capture.test.mjs
       - name: Install verified Maestro CLI
         env:
           MAESTRO_VERSION: 2.12.0
@@ -62,13 +68,38 @@ jobs:
           unzip -q "$archive" -d "$RUNNER_TEMP/maestro"
           printf '%s\n' "$RUNNER_TEMP/maestro/maestro/bin" >> "$GITHUB_PATH"
       - name: Build and exercise the native Simulator app
+        env:
+          IOS_QA_AUTHENTICATED: ${{ inputs.authenticated }}
         run: bash apps/mobile/scripts/ios-simulator-qa.sh
+      - name: Capture private synthetic reviewer screens
+        if: inputs.authenticated
+        working-directory: apps/mobile
+        env:
+          QA_REVIEWER_PASSWORD: ${{ secrets.QA_REVIEWER_PASSWORD }}
+        run: |
+          set +x
+          printf '%s' "$QA_REVIEWER_PASSWORD" | env -u QA_REVIEWER_PASSWORD node scripts/ios-store-capture.mjs
       - name: Upload bounded native QA evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: ios-simulator-qa-${{ github.sha }}
-          path: ${{ runner.temp }}/billmanager-ios-qa
+          # Explicit allowlist. Never upload private Maestro debug/hierarchy/logs.
+          path: |
+            ${{ runner.temp }}/billmanager-ios-qa/manifest.json
+            ${{ runner.temp }}/billmanager-ios-qa/result.json
+            ${{ runner.temp }}/billmanager-ios-qa/selected-devices.json
+            ${{ runner.temp }}/billmanager-ios-qa/store-capture.json
+            ${{ runner.temp }}/billmanager-ios-qa/store-screenshots/*.png
+            ${{ runner.temp }}/billmanager-ios-qa/BillManager-simulator.app.zip
+            ${{ runner.temp }}/billmanager-ios-qa/binary-architectures.txt
+            ${{ runner.temp }}/billmanager-ios-qa/xcode-build.log
+            ${{ runner.temp }}/billmanager-ios-qa/iphone/maestro.xml
+            ${{ runner.temp }}/billmanager-ios-qa/ipad/maestro.xml
+            ${{ runner.temp }}/billmanager-ios-qa/iphone/screenshots/**/auth-login.png
+            ${{ runner.temp }}/billmanager-ios-qa/iphone/screenshots/**/auth-password-recovery.png
+            ${{ runner.temp }}/billmanager-ios-qa/ipad/screenshots/**/auth-login.png
+            ${{ runner.temp }}/billmanager-ios-qa/ipad/screenshots/**/auth-password-recovery.png
           if-no-files-found: warn
           retention-days: 3
       - name: Explain acceptance boundary
@@ -79,7 +110,7 @@ jobs:
             echo '- Source: `${{ github.sha }}` (main)'
             echo '- Native Release / iOS Simulator; unsigned, not a device/store artifact.'
             echo '- HTTPS-only app policy; generated OTA disabled and Sentry upload disabled.'
-            echo '- Existing auth-entry navigation only; no credentials, purchases, email submission or accounts.'
+            echo '- Anonymous by default; optional approved synthetic reviewer read-only screens on iPhone and iPad.'
             echo '- Inspect manifest, JUnit, screenshots and native logs; a failed job is not acceptance.'
             echo '- Physical-device, signing, authenticated flows and production diagnostics remain separate gates.'
           } >> "$GITHUB_STEP_SUMMARY"
