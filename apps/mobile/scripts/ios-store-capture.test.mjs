@@ -168,3 +168,20 @@ it('rejects absent public preparation before any API or UI dispatch', async () =
     expect(JSON.parse(readFileSync(join(out, 'store-capture.json'), 'utf8'))).toMatchObject({ passed: false, stage: 'local-devices' });
   } finally { rmSync(root, { recursive: true }); }
 });
+
+it.each(['read', 'write'])('always deletes private state when cleanup-report %s fails', async operation => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-cleanup-io-')); const out = join(root, 'billmanager-ios-qa'); mkdirSync(out); writePrepared(out);
+  let injected = false;
+  try {
+    await expect(runCapture(password, { runnerTemp: root, request: api(),
+      run: (command, args) => command === 'xcrun' && args[1] === 'list' ? stateResult() : { status: command === 'maestro' ? 1 : 0, stdout: password },
+      recordCleanup: () => { injected = true; throw new Error(`${operation} failed: ${password} Bearer fixture-token`); },
+    })).rejects.toThrow('Private screenshot capture failed; raw diagnostics withheld');
+    expect(injected).toBe(true);
+    expect(readdirSync(root)).toEqual(['billmanager-ios-qa']);
+    expect(existsSync(join(out, 'store-screenshots'))).toBe(false);
+    const report = readFileSync(join(out, 'store-capture.json'), 'utf8');
+    expect(JSON.parse(report).stage).toBe('iphone-login');
+    expect(report).not.toMatch(/synthetic-fixture|Bearer|fixture-token/);
+  } finally { rmSync(root, { recursive: true }); }
+});

@@ -136,7 +136,8 @@ export function safeCommandFailure(directory, result) {
   return report;
 }
 
-export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEMP, run = spawnSync, request = fetch } = {}) {
+const persistCleanup = (path, cleanup) => writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')), cleanup }));
+export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEMP, run = spawnSync, request = fetch, recordCleanup = persistCleanup } = {}) {
   ensure(password.length >= 24 && password.length <= 256 && !/[\r\n\0]/.test(password));
   ensure(runnerTemp && resolve(runnerTemp) !== resolve(tmpdir(), 'billmanager-ios-qa'));
   const output = join(runnerTemp, 'billmanager-ios-qa');
@@ -206,12 +207,13 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
     writeFileSync(join(output, 'store-capture.json'), JSON.stringify({ passed: false, code: 'private_capture_failed', stage, commandTimings, ...(failure ? { failure } : {}) }));
     throw new Error('Private screenshot capture failed; raw diagnostics withheld');
   } finally {
-    if (active) {
-      const cleanup = shutdownForCleanup(devices.find(device => device.udid === active), run);
-      const path = join(output, 'store-capture.json');
-      writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')), cleanup }));
-    }
-    rmSync(privateDir, { recursive: true, force: true });
+    try {
+      if (active) {
+        const cleanup = shutdownForCleanup(devices.find(device => device.udid === active), run);
+        recordCleanup(join(output, 'store-capture.json'), cleanup);
+      }
+    } catch { /* Optional cleanup evidence must not replace the original safe failure. */ }
+    finally { rmSync(privateDir, { recursive: true, force: true }); }
   }
 }
 
