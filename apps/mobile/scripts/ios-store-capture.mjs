@@ -79,9 +79,9 @@ export function safeScreenshots(directory, family) {
 export function safeCommandFailure(directory, result) {
   const kinds = ['tapOnElement', 'assertConditionCommand', 'inputTextCommand', 'launchAppCommand',
     'applyConfigurationCommand', 'openLinkCommand', 'hideKeyboardCommand', 'takeScreenshotCommand'];
-  const process = result.error?.code === 'ETIMEDOUT' ? 'timeout'
+  const processOutcome = result.error?.code === 'ETIMEDOUT' ? 'timeout'
     : result.error?.code === 'ENOBUFS' ? 'output_limit' : result.error ? 'launch_failed' : 'nonzero_exit';
-  const report = { process, exitCode: Number.isInteger(result.status) ? result.status : null };
+  const report = { process: processOutcome, exitCode: Number.isInteger(result.status) ? result.status : null };
   const pending = [];
   const walk = path => {
     for (const name of readdirSync(path)) {
