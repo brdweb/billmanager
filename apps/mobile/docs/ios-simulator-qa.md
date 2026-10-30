@@ -101,3 +101,21 @@ hierarchy and images remain private and are deleted. Missing/truncated reports
 produce no invented command diagnosis. The parser follows the pinned
 [Maestro 2.12 command-report schema](https://github.com/mobile-dev-inc/Maestro/blob/cli-2.12.0/maestro-orchestra/src/main/kotlin/maestro/orchestra/debug/TestOutputWriter.kt).
 The capture-only retry is diagnostic until every native flow actually passes.
+
+The first archive-reuse retry (41070745696) passed native verification but failed
+identity preflight before any UI command. The coordinator's subsequent safe
+read-back confirmed one additional payment in the synthetic tenant: the original
+payment IDs 654/655 remained, and all three payments belonged to group 23 and
+approved DEMO bills 71–74. The previous exact-two count was therefore stale;
+the origin of the additional payment is unknown. Preflight now permits 2–100
+unique payments only within those exact approved tenant/bill boundaries and
+requires both original payments. It reports the actual count without deleting
+or changing any reviewer data. Four expected DEMO bills, sole owner/tenant, Pro,
+no portal, and empty settlements remain mandatory.
+
+Preflight failures publish only fixed substage/category enums and a numeric HTTP
+status when applicable. They distinguish local device metadata, login, identity,
+billing, bills, payments and settlements from UI failures without publishing
+responses, tokens or exception text. This corrects a confirmed QA preflight
+assumption; the original native iPhone login failure is still unresolved and
+has not prompted speculative selector, timeout or application changes.
