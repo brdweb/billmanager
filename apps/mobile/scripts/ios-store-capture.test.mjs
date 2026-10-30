@@ -10,7 +10,7 @@ const data = {
   '/billing/status': { effective_tier: 'pro', status: 'active', plan: 'review_demo', can_manage_subscription: false },
   '/bills?include_archived=true': ['Salary', 'Rent', 'Utilities', 'Internet'].map((n, i) => ({ id: 71 + i, name: `DEMO ${n}`, database_id: 23 })),
   '/settlements': { owed_to_me: [], i_owe: [], settled: [], people: [] },
-  '/payments': [{ bill_id: 72, database_id: 23 }, { bill_id: 73, database_id: 23 }],
+  '/payments': [{ id: 654, bill_id: 72, database_id: 23 }, { id: 655, bill_id: 73, database_id: 23 }],
 };
 const api = (values = data, calls = []) => async (url, options) => {
   calls.push({ url, options }); return { status: 200, json: async () => ({ success: true, data: values[url.replace('https://app.billmanager.app/api/v2', '')] }) };
@@ -106,5 +106,48 @@ it('exports only bounded command type/status/index, never private values or erro
     expect(report).toEqual({ process: 'nonzero_exit', exitCode: 1, category: 'element_not_found', command: { ordinal: 2, type: 'inputTextCommand', status: 'FAILED' } });
     expect(JSON.stringify(report)).not.toMatch(/synthetic-fixture|Bearer|fixture-token/);
     expect(safeCommandFailure('/missing-fixture', { error: { code: 'ETIMEDOUT', message: password }, status: null }).process).toBe('timeout');
+  } finally { rmSync(root, { recursive: true }); }
+});
+
+it('accepts the observed third legitimate demo payment while retaining both baseline payments', async () => {
+  const current = structuredClone(data);
+  current['/payments'].push({ id: 656, bill_id: 71, database_id: 23 });
+  await expect(verifyDemo(password, api(current))).resolves.toEqual({ user: 25, database: 23, bills: 4, payments: 3 });
+});
+
+it.each(['foreign tenant', 'unapproved bill', 'missing baseline', 'duplicate ID', 'excess rows'])('rejects additional-payment boundary drift: %s', async kind => {
+  const current = structuredClone(data);
+  current['/payments'].push({ id: 656, bill_id: 71, database_id: 23 });
+  if (kind === 'foreign tenant') current['/payments'][2].database_id = 24;
+  if (kind === 'unapproved bill') current['/payments'][2].bill_id = 999;
+  if (kind === 'missing baseline') current['/payments'][0].id = 657;
+  if (kind === 'duplicate ID') current['/payments'][2].id = 654;
+  if (kind === 'excess rows') current['/payments'].push(...Array.from({ length: 98 }, (_, i) => ({ id: 700 + i, bill_id: 71, database_id: 23 })));
+  await expect(verifyDemo(password, api(current))).rejects.toMatchObject({ diagnostic: { substage: 'payments', category: 'payment_boundary' } });
+});
+
+it.each([
+  ['login', '/auth/login'], ['me', '/me'], ['billing', '/billing/status'],
+  ['bills', '/bills?include_archived=true'], ['payments', '/payments'], ['settlements', '/settlements'],
+])('reports only fixed %s preflight substage and bounded HTTP status', async (substage, path) => {
+  const normal = api();
+  const request = (url, options) => url === 'https://app.billmanager.app/api/v2' + path
+    ? Promise.resolve({ status: 403, json: async () => ({ error: password, token: 'fixture-token' }) }) : normal(url, options);
+  await expect(verifyDemo(password, request)).rejects.toMatchObject({ diagnostic: { substage, category: 'http_rejected', httpStatus: 403 } });
+});
+
+it('fails closed before UI and exports no request/response/error secrets on preflight failure', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-preflight-privacy-')); const out = join(root, 'billmanager-ios-qa'); mkdirSync(out);
+  writeFileSync(join(out, 'selected-devices.json'), '[]');
+  let commands = 0;
+  try {
+    await expect(runCapture(password, { runnerTemp: root, run: () => { commands++; return { status: 0 }; },
+      request: async () => { throw new Error(`${password} Bearer fixture-token`); } })).rejects.toThrow('raw diagnostics withheld');
+    const result = readFileSync(join(out, 'store-capture.json'), 'utf8');
+    expect(JSON.parse(result)).toEqual({ passed: false, code: 'private_capture_failed', stage: 'identity', failure: { preflight: { substage: 'login', category: 'transport' } } });
+    expect(result).not.toMatch(/synthetic-fixture|Bearer|fixture-token/);
+    expect(commands).toBe(0);
+    expect(readdirSync(root)).toEqual(['billmanager-ios-qa']);
+    expect(existsSync(join(out, 'store-screenshots'))).toBe(false);
   } finally { rmSync(root, { recursive: true }); }
 });

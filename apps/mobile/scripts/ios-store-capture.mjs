@@ -11,30 +11,57 @@ const NAMES = ['DEMO Salary', 'DEMO Rent', 'DEMO Utilities', 'DEMO Internet'];
 const API = 'https://app.billmanager.app/api/v2';
 const ensure = condition => { if (!condition) throw new Error('QA boundary assertion failed'); };
 
+class PreflightFailure extends Error {
+  constructor(diagnostic) { super('QA boundary assertion failed'); this.diagnostic = diagnostic; }
+}
+
 export async function verifyDemo(password, request = fetch) {
-  const call = async (path, token, body) => {
-    const response = await request(API + path, { method: body ? 'POST' : 'GET', redirect: 'error',
-      signal: AbortSignal.timeout(20000), headers: { 'Content-Type': 'application/json', 'X-Database': GROUP,
-        ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
-    ensure(response.status === 200);
-    const result = await response.json(); ensure(result.success === true); return result.data;
+  let substage = 'login';
+  const fail = (category, extra = {}) => { throw new PreflightFailure({ substage, category, ...extra }); };
+  const check = (condition, category) => { if (!condition) fail(category); };
+  const call = async (step, path, token, body) => {
+    substage = step;
+    let response;
+    try {
+      response = await request(API + path, { method: body ? 'POST' : 'GET', redirect: 'error',
+        signal: AbortSignal.timeout(20000), headers: { 'Content-Type': 'application/json', 'X-Database': GROUP,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    } catch { fail('transport'); }
+    if (response.status !== 200) {
+      fail('http_rejected', Number.isInteger(response.status) && response.status >= 100 && response.status <= 599
+        ? { httpStatus: response.status } : {});
+    }
+    let result;
+    try { result = await response.json(); } catch { fail('response_format'); }
+    check(result?.success === true, 'api_contract'); return result.data;
   };
-  const login = await call('/auth/login', null, { username: 'store-review', password });
-  ensure(typeof login.access_token === 'string' && login.access_token.length > 0);
-  const token = login.access_token;
-  const me = await call('/me', token);
-  ensure(me.user?.id === 25 && me.user.username === 'store-review' && me.user.role === 'admin' && me.user.is_account_owner === true);
-  ensure(me.databases?.length === 1 && me.databases[0].id === 23 && me.databases[0].name === GROUP);
-  const billing = await call('/billing/status', token);
-  ensure(billing.effective_tier === 'pro' && billing.status === 'active' && billing.plan === 'review_demo' && billing.can_manage_subscription === false);
-  const bills = await call('/bills?include_archived=true', token);
-  ensure(Array.isArray(bills) && bills.length === 4 && new Set(bills.map(b => b.name)).size === 4);
-  ensure(bills.every(b => NAMES.includes(b.name) && b.database_id === 23 && !b.is_shared));
-  const payments = await call('/payments', token);
-  ensure(Array.isArray(payments) && payments.length === 2 && payments.every(p => p.database_id === 23 && bills.some(b => b.id === p.bill_id)));
-  const settlements = await call('/settlements', token);
-  ensure(['owed_to_me', 'i_owe', 'settled', 'people'].every(key => Array.isArray(settlements[key]) && settlements[key].length === 0));
-  return { user: 25, database: 23, bills: 4, payments: 2 };
+  try {
+    const login = await call('login', '/auth/login', null, { username: 'store-review', password });
+    check(typeof login?.access_token === 'string' && login.access_token.length > 0, 'login_contract');
+    const token = login.access_token;
+    const me = await call('me', '/me', token);
+    check(me?.user?.id === 25 && me.user.username === 'store-review' && me.user.role === 'admin' && me.user.is_account_owner === true, 'account_boundary');
+    check(Array.isArray(me.databases) && me.databases.length === 1 && me.databases[0].id === 23 && me.databases[0].name === GROUP, 'tenant_boundary');
+    const billing = await call('billing', '/billing/status', token);
+    check(billing?.effective_tier === 'pro' && billing.status === 'active' && billing.plan === 'review_demo' && billing.can_manage_subscription === false, 'entitlement_boundary');
+    const bills = await call('bills', '/bills?include_archived=true', token);
+    const approvedBillIds = new Set([71, 72, 73, 74]);
+    check(Array.isArray(bills) && bills.length === 4 && bills.every(b => b && approvedBillIds.has(b.id) && NAMES.includes(b.name) && b.database_id === 23 && !b.is_shared)
+      && new Set(bills.map(b => b.id)).size === 4 && new Set(bills.map(b => b.name)).size === 4, 'bill_boundary');
+    const payments = await call('payments', '/payments', token);
+    // Reusable reviewers may record additional synthetic payments. Retain the
+    // reviewed history and strict tenant/bill boundaries; never require deleting data.
+    check(Array.isArray(payments) && payments.length >= 2 && payments.length <= 100
+      && payments.every(p => p && p.database_id === 23 && approvedBillIds.has(p.bill_id) && Number.isSafeInteger(p.id) && p.id > 0)
+      && new Set(payments.map(p => p.id)).size === payments.length
+      && [654, 655].every(id => payments.some(p => p.id === id)), 'payment_boundary');
+    const settlements = await call('settlements', '/settlements', token);
+    check(settlements && ['owed_to_me', 'i_owe', 'settled', 'people'].every(key => Array.isArray(settlements[key]) && settlements[key].length === 0), 'settlement_boundary');
+    return { user: 25, database: 23, bills: 4, payments: payments.length };
+  } catch (error) {
+    if (error instanceof PreflightFailure) throw error;
+    fail('contract');
+  }
 }
 
 const absentAuth = [{ assertNotVisible: { id: 'auth-login-screen' } }, { assertNotVisible: { text: '^Password$' } }];
@@ -129,9 +156,10 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
     writeFileSync(file, `appId: com.brdweb.billmanager\n---\n${JSON.stringify(commands, null, 2)}\n`, { mode: 0o600 }); return file;
   };
   let devices;
-  const screenshots = []; let active; let stage = 'identity';
+  const screenshots = []; let active; let stage = 'local-devices';
   try {
     devices = JSON.parse(readFileSync(join(output, 'selected-devices.json'), 'utf8'));
+    stage = 'identity';
     const identity = await verifyDemo(password, request);
     const login = flow('login', loginCommands), capture = flow('capture', captureCommands);
     for (const device of devices) {
@@ -159,7 +187,8 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
       acceptance: 'native Simulator read-only synthetic demo; not physical-device or signed-device acceptance' };
     const text = JSON.stringify(manifest, null, 2); ensure(!text.includes(password) && !/Bearer |access_token|refresh_token|eyJ[A-Za-z0-9_-]+\./.test(text));
     writeFileSync(join(output, 'store-capture.json'), text);
-  } catch {
+  } catch (error) {
+    if (error instanceof PreflightFailure) failure = { preflight: error.diagnostic };
     rmSync(promoted, { recursive: true, force: true });
     writeFileSync(join(output, 'store-capture.json'), JSON.stringify({ passed: false, code: 'private_capture_failed', stage, ...(failure ? { failure } : {}) }));
     throw new Error('Private screenshot capture failed; raw diagnostics withheld');
