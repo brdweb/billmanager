@@ -94,6 +94,8 @@ jobs:
             ${{ runner.temp }}/billmanager-ios-qa/BillManager-simulator.app.zip
             ${{ runner.temp }}/billmanager-ios-qa/binary-architectures.txt
             ${{ runner.temp }}/billmanager-ios-qa/xcode-build.log
+            ${{ runner.temp }}/billmanager-ios-qa/iphone/maestro.xml
+            ${{ runner.temp }}/billmanager-ios-qa/ipad/maestro.xml
             ${{ runner.temp }}/billmanager-ios-qa/iphone/screenshots/*.png
             ${{ runner.temp }}/billmanager-ios-qa/ipad/screenshots/*.png
           if-no-files-found: warn
