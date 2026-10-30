@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import {
   Table,
   Group,
@@ -23,7 +23,9 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { exportBillsToCSV, exportBillsToPDF, printBills } from '../utils/export';
 import type { Bill } from '../api/client';
-import { getAccounts, getCategories, markSharePaid } from '../api/client';
+import { getAccounts, getCategories, getBills, capturePaymentScope, isPaymentScopeCurrent } from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import { useSharePayment } from '../hooks/useSharePayment';
 import { BillIcon } from './BillIcon';
 import { formatCurrency } from '../lib/currency';
 import { formatDateString } from '../utils/date';
@@ -121,6 +123,7 @@ export function BillList({
   isAllBucketsMode = false,
 }: BillListProps) {
   const { t } = useTranslation();
+  const { user } = useAuth();
   // Accounts list for filtering
   const [accounts, setAccounts] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -131,32 +134,57 @@ export function BillList({
 
   // Confirmation modal state for shared bill payment
   const [confirmPayBill, setConfirmPayBill] = useState<Bill | null>(null);
-  const [paymentLoading, setPaymentLoading] = useState(false);
+  const viewKey = JSON.stringify([confirmPayBill?.id, confirmPayBill?.last_updated,
+    confirmPayBill?.share_info, bills.find(bill => bill.id === confirmPayBill?.id)]);
+  const { run, busy: paymentLoading, isCurrent, beginRead, freshRead, hasUncertain } = useSharePayment(viewKey);
+  const modal = useRef(confirmPayBill);
+  useLayoutEffect(() => { modal.current = confirmPayBill; }, [confirmPayBill]);
 
-  // Handler for marking shared bill portion as paid
   const handleMarkPaid = async (bill: Bill) => {
-    if (!bill.is_shared || !bill.share_info) return;
-
-    setPaymentLoading(true);
+    if (!bill.is_shared || !bill.share_info || modal.current !== bill) return;
+    const currentBill = bills.find(candidate => candidate.id === bill.id);
+    if (!currentBill || currentBill.last_updated !== bill.last_updated
+      || currentBill.share_info?.share_updated_at !== bill.share_info.share_updated_at
+      || currentBill.share_info?.my_portion_paid !== bill.share_info.my_portion_paid) {
+      setConfirmPayBill(null); onRefresh?.(); return;
+    }
+    const refresh = async () => {
+      const revision = beginRead();
+      const requestScope = capturePaymentScope(user!.id);
+      const rows = await getBills(true, undefined, requestScope);
+      if (!isPaymentScopeCurrent(requestScope) || !isCurrent() || modal.current !== bill) return;
+      freshRead(revision, rows.filter(row => row.share_info).map(row => ({ shareId: row.share_info!.share_id,
+        dueDate: row.next_due, paid: row.share_info!.my_portion_paid })));
+      onRefresh?.(); setConfirmPayBill(null);
+    };
     try {
-      await markSharePaid(bill.share_info.share_id);
-      notifications.show({
-        title: t('billList.notifications.success'),
-        message: bill.share_info.my_portion_paid ? t('billList.notifications.markedUnpaid') : t('billList.notifications.markedPaid'),
-        color: 'green',
+      await run({ shareId: bill.share_info.share_id, shareVersion: bill.share_info.share_updated_at,
+        billVersion: bill.last_updated, dueDate: bill.next_due, desiredPaid: !bill.share_info.my_portion_paid },
+      () => modal.current === bill, async () => {
+        notifications.show({ title: t('billList.notifications.success'),
+          message: bill.share_info!.my_portion_paid ? t('billList.notifications.markedUnpaid') : t('billList.notifications.markedPaid'), color: 'green' });
+        await refresh();
+      }, async () => {
+        notifications.show({ title: t('billList.notifications.error'), message: t('sharedPayment.refreshRequired'), color: 'red' });
+        await refresh();
       });
-      onRefresh?.();
-      setConfirmPayBill(null);
-    } catch {
-      notifications.show({
-        title: t('billList.notifications.error'),
-        message: t('billList.notifications.updateFailed'),
-        color: 'red',
-      });
-    } finally {
-      setPaymentLoading(false);
+    } catch (error) {
+      if (isCurrent() && modal.current === bill) notifications.show({ title: t('billList.notifications.error'),
+        message: error instanceof Error ? error.message : t('billList.notifications.updateFailed'), color: 'red' });
     }
   };
+
+  // Only a new scoped server read can resolve an uncertain intent observed via refreshed bill props.
+  useEffect(() => {
+    if (!isCurrent() || !hasUncertain()) return;
+    const revision = beginRead();
+    const requestScope = capturePaymentScope(user!.id);
+    void getBills(true, undefined, requestScope).then(rows => {
+      if (isCurrent() && isPaymentScopeCurrent(requestScope)) freshRead(revision, rows.filter(row => row.share_info).map(row => ({
+        shareId: row.share_info!.share_id, dueDate: row.next_due, paid: row.share_info!.my_portion_paid,
+      })));
+    }).catch(() => {});
+  }, [bills, isCurrent, hasUncertain, beginRead, freshRead, user]);
 
   // Fetch accounts list when logged in
   useEffect(() => {
@@ -577,7 +605,7 @@ export function BillList({
       {/* Confirmation modal for shared bill payment */}
       <Modal
         opened={!!confirmPayBill}
-        onClose={() => setConfirmPayBill(null)}
+        onClose={() => { modal.current = null; setConfirmPayBill(null); }}
         title={confirmPayBill?.share_info?.my_portion_paid ? t('billList.markUnpaidTitle') : t('billList.confirmPaymentTitle')}
         centered
         size="sm"
@@ -598,7 +626,7 @@ export function BillList({
               </Paper>
             )}
             <Group justify="flex-end" gap="sm">
-              <Button variant="default" onClick={() => setConfirmPayBill(null)}>
+              <Button variant="default" onClick={() => { modal.current = null; setConfirmPayBill(null); }}>
                 {t('common.actions.cancel')}
               </Button>
               <Button

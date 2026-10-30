@@ -1,4 +1,5 @@
 {
+  "sharedPayment": {"serverRequired": "Update the server and refresh this page before changing a shared payment.", "refreshRequired": "This payment changed. Refresh before confirming it again."},
   "_meta": {
     "languageName": "English"
   },

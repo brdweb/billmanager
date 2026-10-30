@@ -15,11 +15,22 @@ const api = axios.create({
   },
 });
 
+export interface PaymentRequestScope { token: string | null; database: string | null; principalId: number }
+export const capturePaymentScope = (principalId: number): PaymentRequestScope => ({ token: TokenStorage.getAccessToken(), database: TokenStorage.getCurrentDatabase(), principalId });
+export const isPaymentScopeCurrent = (scope: PaymentRequestScope) => {
+  if (!scope.token || !scope.database || scope.token !== TokenStorage.getAccessToken() || scope.database !== TokenStorage.getCurrentDatabase()) return false;
+  try { return JSON.parse(atob(scope.token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).user_id === scope.principalId; }
+  catch { return false; }
+};
+type PaymentConfig = AxiosRequestConfig & { paymentScope?: PaymentRequestScope };
+
 let refreshInFlight: Promise<string | null> | null = null;
 
 // Request interceptor - add JWT token and database header
 api.interceptors.request.use(
   (config) => {
+    const paymentScope = (config as PaymentConfig).paymentScope;
+    if (paymentScope && !isPaymentScopeCurrent(paymentScope)) return Promise.reject(new Error('Payment session changed'));
     const accessToken = TokenStorage.getAccessToken();
     const currentDb = TokenStorage.getCurrentDatabase();
 
@@ -261,6 +272,7 @@ export interface Bill {
   frequency_type: 'simple' | 'specific_dates' | 'multiple_weekly';
   frequency_config: string;
   next_due: string;
+  last_updated?: string;
   auto_payment: boolean;
   reminder_enabled?: boolean;
   reminder_days?: number[];
@@ -277,6 +289,7 @@ export interface Bill {
   share_count?: number;  // Number of people this bill is shared with (for owned bills)
   share_info?: {
     share_id: number;
+    share_updated_at?: string;
     owner_name: string;
     my_portion: number | null;
     my_portion_paid: boolean;
@@ -456,12 +469,12 @@ export const acceptInvite = (token: string, username: string, password: string) 
   ));
 
 // Bills API
-export const getBills = (includeArchived = false, type?: 'expense' | 'deposit') => {
+export const getBills = (includeArchived = false, type?: 'expense' | 'deposit', paymentScope?: PaymentRequestScope) => {
   let url = `/bills${includeArchived ? '?include_archived=true' : ''}`;
   if (type) {
     url += includeArchived ? `&type=${type}` : `?type=${type}`;
   }
-  return unwrap(api.get<ApiResponse<Bill[]>>(url));
+  return unwrap(api.get<ApiResponse<Bill[]>>(url, { paymentScope } as PaymentConfig));
 };
 
 export const addBill = (bill: Partial<Bill>) =>
@@ -634,6 +647,7 @@ export const getVersion = () =>
 
 // App Config API (v2)
 export interface AppConfig {
+  mobile?: { features?: { settlement_payment_desired_state?: boolean } };
   deployment_mode: 'saas' | 'self-hosted';
   billing_enabled: boolean;
   registration_enabled: boolean;
@@ -825,6 +839,8 @@ export interface SharedBill {
 }
 
 export interface SettlementItem {
+  share_updated_at?: string;
+  bill_updated_at?: string;
   share_id: number;
   direction: 'owed_to_me' | 'i_owe';
   bill_id: number;
@@ -918,8 +934,8 @@ export const getSharedBills = () =>
   unwrap(api.get<ApiResponse<SharedBill[]>>('/shared-bills'));
 
 // Get shared-bill settlement ledger
-export const getSettlements = () =>
-  unwrap(api.get<ApiResponse<SettlementsResponse>>('/settlements'));
+export const getSettlements = (paymentScope?: PaymentRequestScope) =>
+  unwrap(api.get<ApiResponse<SettlementsResponse>>('/settlements', { paymentScope } as PaymentConfig));
 
 // Get pending share invitations
 export const getPendingShares = () =>
@@ -937,9 +953,15 @@ export const declineShare = (shareId: number) =>
 export const leaveShare = (shareId: number) =>
   unwrap(api.post<ApiResponse<{ message: string }>>(`/shares/${shareId}/leave`));
 
-// Mark recipient's portion of shared bill as paid (toggle)
-export const markSharePaid = (shareId: number) =>
-  unwrap(api.post<ApiResponse<{ message: string; recipient_paid_date: string | null }>>(`/shares/${shareId}/mark-paid`));
+export interface SharePaymentIntent {
+  client_mutation_id: string;
+  base_updated_at: string;
+  base_bill_updated_at: string;
+  expected_due_date: string;
+  desired_paid: boolean;
+}
+export const markSharePaid = (shareId: number, intent: SharePaymentIntent, scope: PaymentRequestScope) =>
+  unwrap(api.post<ApiResponse<{ message: string; recipient_paid_date: string | null }>>(`/shares/${shareId}/mark-paid`, intent, { paymentScope: scope } as PaymentConfig));
 
 // Search users for sharing
 export const searchUsers = (query: string) =>
