@@ -47,3 +47,18 @@ A bill `FOR UPDATE` followed by a share lock can deadlock with an existing share
 - **PR:** https://github.com/brdweb/billmanager/pull/240
 - **Mistake:** Dispatched another iOS Simulator run assuming it would queue, but the workflow's `cancel-in-progress: true` setting interrupted the existing native build.
 - **Rule going forward:** Inspect the exact concurrency group and cancellation policy before every overlapping workflow dispatch. Wait for an existing QA run to finish unless canceling it is intentional; distinguish saved diagnostic artifacts from completed build acceptance.
+
+- **Date:** 2026-10-29
+- **PR:** https://github.com/brdweb/billmanager/pull/252
+- **Mistake:** A successful detail refresh override permanently hid subsequent newer runtime snapshots.
+- **Rule going forward:** Reconcile scoped server snapshots against independent share and bill watermarks at full timestamp precision. Preserve unresolved mutation intent and reject older replayed data while accepting causally newer state.
+
+- **Date:** 2026-10-29
+- **PR:** https://github.com/brdweb/billmanager/pull/254
+- **Mistake:** Strict token-bound reads hid recovery UI after a same-account refresh, and unknown payment intents survived a later confirmed paid/reopened state.
+- **Rule going forward:** Keep mutation dispatch tied to captured identity and credentials, but make interrupted reads recoverable. Retire uncertain intents only after a scoped read that starts after dispatch completion observes the requested state; test lost responses, token refresh and reopening together.
+
+- **Date:** 2026-10-29
+- **PR:** https://github.com/brdweb/billmanager/pull/255
+- **Mistake:** A retained portal callback and late response remained valid after the same account lost portal availability.
+- **Rule going forward:** Tie portal actions to a separate availability/owner lease checked before dispatch and before opening a URL, while retaining the shared busy guard and independent free-user checkout eligibility.
