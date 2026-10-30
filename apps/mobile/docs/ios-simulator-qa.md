@@ -119,3 +119,25 @@ billing, bills, payments and settlements from UI failures without publishing
 responses, tokens or exception text. This corrects a confirmed QA preflight
 assumption; the original native iPhone login failure is still unresolved and
 has not prompted speculative selector, timeout or application changes.
+
+Run 41074824488 passed identity but timed out in the grouped simulator setup
+stage. It did not identify which setup command stalled. Preparation now runs
+without reviewer credentials, serially booting, checking, installing and shutting
+down each device before the secret step. A precise stage and elapsed/budget
+milliseconds accompany each command. Only `bootstatus -b` gets 600 seconds; state,
+locale, installation and shutdown retain 180-second limits. Readiness requires
+both successful bootstatus and an explicit Booted state; Booted alone is not
+accepted. Private capture repeats bounded warm-boot readiness. Cleanup targets
+only the selected task devices and records the observed final state, preserving
+the original failure if cleanup also fails. No raw output or failure images are
+added to the upload allowlist.
+
+Preparation selects the installed runtime matching the active Simulator SDK and
+requires the retained archive's DTSDKName to match. The reviewed archive uses
+`iphonesimulator26.5`; the earlier first-device selector chose iOS 26.4. Runtime
+alignment is justified hardening, not a proven explanation of the timeout: the
+earlier anonymous run succeeded on 26.4. Missing matching runtime fails closed;
+no runtime download or larger runner is requested. Full native PNG dimensions,
+all-eight success and privacy checks remain unchanged. See the
+[GitHub runner inventory](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)
+and [Chromium's bootstatus readiness semantics](https://chromium.googlesource.com/chromium/src/+/93b31d4424cb0fddb7cb5a901f21eb9859270658/ios/build/bots/scripts/iossim_util.py).

@@ -16,6 +16,12 @@ const api = (values = data, calls = []) => async (url, options) => {
   calls.push({ url, options }); return { status: 200, json: async () => ({ success: true, data: values[url.replace('https://app.billmanager.app/api/v2', '')] }) };
 };
 const png = (width, height) => { const b = Buffer.alloc(24); Buffer.from('89504e470d0a1a0a', 'hex').copy(b); b.writeUInt32BE(width, 16); b.writeUInt32BE(height, 20); return b; };
+const preparedDevices = [{ family: 'iphone', udid: 'fixture' }, { family: 'ipad', udid: 'fixture2' }];
+const writePrepared = (out, devices = preparedDevices) => {
+  writeFileSync(join(out, 'selected-devices.json'), JSON.stringify(devices));
+  writeFileSync(join(out, 'simulator-readiness.json'), JSON.stringify({ passed: true, devices }));
+};
+const stateResult = () => ({ status: 0, stdout: JSON.stringify({ devices: { 'iOS-26-5': ['fixture', 'fixture2', 'phone', 'pad'].map(udid => ({ udid, state: 'Booted' })) } }) });
 describe('private native demo screenshot boundaries', () => {
   it('requires exact owner, sole database, manual Pro and synthetic records before UI', async () => {
     const calls = []; expect(await verifyDemo(password, api(data, calls))).toEqual({ user: 25, database: 23, bills: 4, payments: 2 });
@@ -51,11 +57,11 @@ describe('private native demo screenshot boundaries', () => {
   });
   it('suppresses secret-bearing failures, promotes no images and cleans private state', async () => {
     const root = mkdtempSync(join(tmpdir(), 'qa-driver-test-')); const out = join(root, 'billmanager-ios-qa'); mkdirSync(out);
-    writeFileSync(join(out, 'selected-devices.json'), JSON.stringify([{ family: 'iphone', udid: 'fixture' }, { family: 'ipad', udid: 'fixture2' }]));
+    writePrepared(out);
     const calls = [];
     try {
       await expect(runCapture(password, { runnerTemp: root, request: api(), run: (command, args, options) => {
-        calls.push({ command, args, options }); return { status: command === 'maestro' ? 1 : 0, stdout: password, stderr: 'Bearer fixture-token' };
+        calls.push({ command, args, options }); if (command === 'xcrun' && args[1] === 'list') return stateResult(); return { status: command === 'maestro' ? 1 : 0, stdout: password, stderr: 'Bearer fixture-token' };
       } })).rejects.toThrow('raw diagnostics withheld');
       expect(calls.some(c => c.command === 'maestro')).toBe(true);
       expect(calls.filter(c => c.command === 'maestro').every(c => c.options.env.MAESTRO_CLI_NO_ANALYTICS === 'true')).toBe(true);
@@ -72,10 +78,11 @@ describe('private native demo screenshot boundaries', () => {
 it('promotes eight allowlisted PNGs only after both complete; later-device failure removes all', async () => {
   for (const failSecond of [false, true]) {
     const root = mkdtempSync(join(tmpdir(), 'qa-promotion-test-')); const out = join(root, 'billmanager-ios-qa'); mkdirSync(out);
-    writeFileSync(join(out, 'selected-devices.json'), JSON.stringify([{ family: 'iphone', udid: 'phone' }, { family: 'ipad', udid: 'pad' }]));
+    writePrepared(out, [{ family: 'iphone', udid: 'phone' }, { family: 'ipad', udid: 'pad' }]);
     writeFileSync(join(out, 'manifest.json'), JSON.stringify({ sourceCommit: 'reviewed-fixture' }));
     let completed = 0;
     const run = (command, args) => {
+      if (command === 'xcrun' && args[1] === 'list') return stateResult();
       if (command === 'maestro' && args[3].endsWith('capture.yaml')) {
         expect(existsSync(join(out, 'store-screenshots'))).toBe(false);
         if (failSecond && completed === 1) return { status: 1, stdout: password };
@@ -138,16 +145,26 @@ it.each([
 
 it('fails closed before UI and exports no request/response/error secrets on preflight failure', async () => {
   const root = mkdtempSync(join(tmpdir(), 'qa-preflight-privacy-')); const out = join(root, 'billmanager-ios-qa'); mkdirSync(out);
-  writeFileSync(join(out, 'selected-devices.json'), '[]');
+  writePrepared(out);
   let commands = 0;
   try {
     await expect(runCapture(password, { runnerTemp: root, run: () => { commands++; return { status: 0 }; },
       request: async () => { throw new Error(`${password} Bearer fixture-token`); } })).rejects.toThrow('raw diagnostics withheld');
     const result = readFileSync(join(out, 'store-capture.json'), 'utf8');
-    expect(JSON.parse(result)).toEqual({ passed: false, code: 'private_capture_failed', stage: 'identity', failure: { preflight: { substage: 'login', category: 'transport' } } });
+    expect(JSON.parse(result)).toEqual({ passed: false, code: 'private_capture_failed', stage: 'identity', commandTimings: [], failure: { preflight: { substage: 'login', category: 'transport' } } });
     expect(result).not.toMatch(/synthetic-fixture|Bearer|fixture-token/);
     expect(commands).toBe(0);
     expect(readdirSync(root)).toEqual(['billmanager-ios-qa']);
     expect(existsSync(join(out, 'store-screenshots'))).toBe(false);
+  } finally { rmSync(root, { recursive: true }); }
+});
+it('rejects absent public preparation before any API or UI dispatch', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-unprepared-')); const out = join(root, 'billmanager-ios-qa'); mkdirSync(out);
+  writeFileSync(join(out, 'selected-devices.json'), JSON.stringify(preparedDevices));
+  let calls = 0;
+  try {
+    await expect(runCapture(password, { runnerTemp: root, request: async () => { calls++; }, run: () => { calls++; } })).rejects.toThrow();
+    expect(calls).toBe(0);
+    expect(JSON.parse(readFileSync(join(out, 'store-capture.json'), 'utf8'))).toMatchObject({ passed: false, stage: 'local-devices' });
   } finally { rmSync(root, { recursive: true }); }
 });

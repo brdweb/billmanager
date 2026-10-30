@@ -60,7 +60,7 @@ jobs:
         run: |
           npm run i18n:check
           npm run maestro:validate
-          npm test -- scripts/ios-simulator-qa.test.mjs scripts/ios-qa-devices.test.mjs scripts/ios-store-capture.test.mjs scripts/ios-qa-reuse.test.mjs
+          npm test -- scripts/ios-simulator-qa.test.mjs scripts/ios-qa-devices.test.mjs scripts/ios-store-capture.test.mjs scripts/ios-qa-reuse.test.mjs scripts/ios-simulator-readiness.test.mjs
       - name: Install verified Maestro CLI
         env:
           MAESTRO_VERSION: 2.12.0
@@ -93,6 +93,10 @@ jobs:
         env:
           IOS_QA_AUTHENTICATED: ${{ inputs.authenticated }}
         run: bash apps/mobile/scripts/ios-simulator-qa.sh
+      - name: Prepare both Simulator devices without reviewer credentials
+        if: inputs.authenticated
+        working-directory: apps/mobile
+        run: node scripts/ios-simulator-readiness.mjs
       - name: Capture private synthetic reviewer screens
         if: inputs.authenticated
         working-directory: apps/mobile
@@ -101,6 +105,10 @@ jobs:
         run: |
           set +x
           printf '%s' "$QA_REVIEWER_PASSWORD" | env -u QA_REVIEWER_PASSWORD node scripts/ios-store-capture.mjs
+      - name: Shut down only task Simulator devices
+        if: always() && inputs.authenticated
+        working-directory: apps/mobile
+        run: node scripts/ios-simulator-readiness.mjs --cleanup
       - name: Upload bounded native QA evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -112,6 +120,8 @@ jobs:
             ${{ runner.temp }}/billmanager-ios-qa/result.json
             ${{ runner.temp }}/billmanager-ios-qa/selected-devices.json
             ${{ runner.temp }}/billmanager-ios-qa/store-capture.json
+            ${{ runner.temp }}/billmanager-ios-qa/simulator-readiness.json
+            ${{ runner.temp }}/billmanager-ios-qa/simulator-cleanup.json
             ${{ runner.temp }}/billmanager-ios-qa/store-screenshots/*.png
             ${{ runner.temp }}/billmanager-ios-qa/BillManager-simulator.app.zip
             ${{ runner.temp }}/billmanager-ios-qa/binary-architectures.txt
