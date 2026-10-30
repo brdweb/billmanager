@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, globSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Script } from 'node:vm';
@@ -75,4 +77,23 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     expect(blocks).toHaveLength(1);
     for (const [, source] of blocks) expect(() => new Script(source)).not.toThrow();
   });
+});
+
+it('uploads only named anonymous captures from Maestro timestamp/flow nesting', () => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-anonymous-glob-'));
+  const upload = workflow.jobs.simulator.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with.path;
+  const patterns = upload.trim().split('\n').filter(pattern => pattern.includes('/screenshots/'));
+  const expected = [];
+  try {
+    for (const family of ['iphone', 'ipad']) {
+      const nested = join(root, 'billmanager-ios-qa', family, 'screenshots', '2026-10-30_120000', 'auth-entry', 'screenshots');
+      mkdirSync(nested, { recursive: true });
+      for (const name of ['auth-login.png', 'auth-password-recovery.png', 'screenshot-failure.png', 'commands.json', 'maestro.log']) {
+        const file = join(nested, name); writeFileSync(file, 'fixture');
+        if (name.startsWith('auth-')) expected.push(file);
+      }
+    }
+    const matched = patterns.flatMap(pattern => globSync(pattern.replace('${{ runner.temp }}', root)));
+    expect(matched.sort()).toEqual(expected.sort());
+  } finally { rmSync(root, { recursive: true }); }
 });

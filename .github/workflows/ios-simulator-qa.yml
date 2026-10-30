@@ -96,8 +96,10 @@ jobs:
             ${{ runner.temp }}/billmanager-ios-qa/xcode-build.log
             ${{ runner.temp }}/billmanager-ios-qa/iphone/maestro.xml
             ${{ runner.temp }}/billmanager-ios-qa/ipad/maestro.xml
-            ${{ runner.temp }}/billmanager-ios-qa/iphone/screenshots/*.png
-            ${{ runner.temp }}/billmanager-ios-qa/ipad/screenshots/*.png
+            ${{ runner.temp }}/billmanager-ios-qa/iphone/screenshots/**/auth-login.png
+            ${{ runner.temp }}/billmanager-ios-qa/iphone/screenshots/**/auth-password-recovery.png
+            ${{ runner.temp }}/billmanager-ios-qa/ipad/screenshots/**/auth-login.png
+            ${{ runner.temp }}/billmanager-ios-qa/ipad/screenshots/**/auth-password-recovery.png
           if-no-files-found: warn
           retention-days: 3
       - name: Explain acceptance boundary
