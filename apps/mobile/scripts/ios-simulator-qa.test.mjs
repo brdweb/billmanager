@@ -97,3 +97,15 @@ it('uploads only named anonymous captures from Maestro timestamp/flow nesting', 
     expect(matched.sort()).toEqual(expected.sort());
   } finally { rmSync(root, { recursive: true }); }
 });
+
+it('prepares devices without credentials before private capture and always cleans only task devices', () => {
+  const steps = workflow.jobs.simulator.steps;
+  const prepare = steps.findIndex(step => step.name === 'Prepare both Simulator devices without reviewer credentials');
+  const capture = steps.findIndex(step => step.env?.QA_REVIEWER_PASSWORD);
+  expect(prepare).toBeGreaterThan(0);
+  expect(prepare).toBeLessThan(capture);
+  expect(JSON.stringify(steps[prepare])).not.toMatch(/secrets\.|QA_REVIEWER_PASSWORD/);
+  const cleanup = steps.find(step => step.name === 'Shut down only task Simulator devices');
+  expect(cleanup.if).toBe('always() && inputs.authenticated');
+  expect(cleanup.run).toContain('--cleanup');
+});

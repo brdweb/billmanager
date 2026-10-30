@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { waitUntilReady, deviceState, shutdownForCleanup } from './ios-simulator-readiness.mjs';
 
 const GROUP = 'reviewer-demo';
 const NAMES = ['DEMO Salary', 'DEMO Rent', 'DEMO Utilities', 'DEMO Internet'];
@@ -135,7 +136,8 @@ export function safeCommandFailure(directory, result) {
   return report;
 }
 
-export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEMP, run = spawnSync, request = fetch } = {}) {
+const persistCleanup = (path, cleanup) => writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')), cleanup }));
+export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEMP, run = spawnSync, request = fetch, recordCleanup = persistCleanup } = {}) {
   ensure(password.length >= 24 && password.length <= 256 && !/[\r\n\0]/.test(password));
   ensure(runnerTemp && resolve(runnerTemp) !== resolve(tmpdir(), 'billmanager-ios-qa'));
   const output = join(runnerTemp, 'billmanager-ios-qa');
@@ -143,13 +145,20 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
   rmSync(promoted, { recursive: true, force: true });
   const privateDir = mkdtempSync(join(runnerTemp, 'billmanager-ios-private-')); // umask 077
   const env = { ...process.env, MAESTRO_CLI_NO_ANALYTICS: 'true' }; delete env.QA_REVIEWER_PASSWORD;
-  let failure;
-  const execute = (command, args, secrets = false) => {
+  let failure; const commandTimings = [];
+  const execute = (command, args, secrets = false, timeout = 180000) => {
+    const started = Date.now();
     const result = run(command, args, { cwd: privateDir, env: secrets ? { ...env, MAESTRO_QA_REVIEWER_PASSWORD: password } : env,
-      encoding: 'utf8', timeout: 180000, maxBuffer: 16 * 1024 * 1024 });
+      encoding: 'utf8', timeout, ...(command === 'xcrun' ? { killSignal: 'SIGKILL' } : {}), maxBuffer: 16 * 1024 * 1024 });
     // Raw command output can include secrets. Never format it into thrown errors.
     writeFileSync(join(privateDir, 'last-command.log'), `${result.stdout ?? ''}\n${result.stderr ?? ''}`, { mode: 0o600 });
-    if (result.status !== 0 || result.error) { failure = safeCommandFailure(privateDir, result); ensure(false); }
+    const entry = { step: stage, elapsedMs: Math.max(0, Date.now() - started), timeoutMs: timeout, success: result.status === 0 && !result.error };
+    if (command === 'xcrun' && args[0] === 'simctl' && args[1] === 'list' && entry.success) {
+      try { entry.state = deviceState(JSON.parse(result.stdout), active); } catch { entry.state = 'unknown'; }
+    }
+    commandTimings.push(entry);
+    if (!entry.success) { failure ??= { ...safeCommandFailure(privateDir, result), stage }; ensure(false); }
+    return result;
   };
   const flow = (name, commands) => {
     const file = join(privateDir, `${name}.yaml`);
@@ -159,15 +168,18 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
   const screenshots = []; let active; let stage = 'local-devices';
   try {
     devices = JSON.parse(readFileSync(join(output, 'selected-devices.json'), 'utf8'));
+    const prepared = JSON.parse(readFileSync(join(output, 'simulator-readiness.json'), 'utf8'));
+    ensure(prepared.passed === true && JSON.stringify(prepared.devices) === JSON.stringify(devices));
+    ensure(devices.length === 2 && new Set(devices.map(device => device.family)).size === 2);
     stage = 'identity';
     const identity = await verifyDemo(password, request);
     const login = flow('login', loginCommands), capture = flow('capture', captureCommands);
     for (const device of devices) {
-      ensure(['iphone', 'ipad'].includes(device.family)); active = device.udid; stage = `${device.family}-boot-install`;
-      execute('xcrun', ['simctl', 'boot', active]); execute('xcrun', ['simctl', 'bootstatus', active, '-b']);
-      execute('xcrun', ['simctl', 'spawn', active, 'defaults', 'write', 'NSGlobalDomain', 'AppleLanguages', '-array', 'en']);
-      execute('xcrun', ['simctl', 'spawn', active, 'defaults', 'write', 'NSGlobalDomain', 'AppleLocale', 'en_US']);
-      execute('xcrun', ['simctl', 'install', active, join(runnerTemp, 'billmanager-ios-derived/Build/Products/Release-iphonesimulator/BillManager.app')]);
+      ensure(['iphone', 'ipad'].includes(device.family)); active = device.udid;
+      waitUntilReady(device, (step, args, timeout) => {
+        stage = `${device.family}-${step}`;
+        return execute('xcrun', args, false, timeout);
+      });
       const deviceDir = join(privateDir, device.family); mkdirSync(deviceDir);
       stage = `${device.family}-login`;
       execute('maestro', ['--device', active, 'test', login, '--test-output-dir', join(deviceDir, 'login'), '--debug-output', join(deviceDir, 'login-debug')], true);
@@ -175,6 +187,7 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
       execute('maestro', ['--device', active, 'test', capture, '--test-output-dir', join(deviceDir, 'capture'), '--debug-output', join(deviceDir, 'capture-debug')]);
       stage = `${device.family}-png-validation`;
       screenshots.push(...safeScreenshots(join(deviceDir, 'capture'), device.family).map(s => ({ ...s, family: device.family })));
+      stage = `${device.family}-shutdown`;
       execute('xcrun', ['simctl', 'shutdown', active]); active = undefined;
     }
     ensure(devices.length === 2 && new Set(devices.map(d => d.family)).size === 2 && screenshots.length === 8);
@@ -182,19 +195,25 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
     // Nothing is promoted until BOTH devices completed every assertion. No login/failure captures.
     mkdirSync(promoted);
     for (const s of screenshots) copyFileSync(s.file, join(promoted, `${s.family}-${s.name}`));
-    const manifest = { passed: true, identity, devices, screenshots: screenshots.map(({ file, ...s }) => s),
+    const manifest = { passed: true, identity, devices, commandTimings, screenshots: screenshots.map(({ file, ...s }) => s),
       sourceCommit: JSON.parse(readFileSync(join(output, 'manifest.json'), 'utf8')).sourceCommit,
       acceptance: 'native Simulator read-only synthetic demo; not physical-device or signed-device acceptance' };
     const text = JSON.stringify(manifest, null, 2); ensure(!text.includes(password) && !/Bearer |access_token|refresh_token|eyJ[A-Za-z0-9_-]+\./.test(text));
     writeFileSync(join(output, 'store-capture.json'), text);
   } catch (error) {
     if (error instanceof PreflightFailure) failure = { preflight: error.diagnostic };
+    if (failure?.stage) stage = failure.stage;
     rmSync(promoted, { recursive: true, force: true });
-    writeFileSync(join(output, 'store-capture.json'), JSON.stringify({ passed: false, code: 'private_capture_failed', stage, ...(failure ? { failure } : {}) }));
+    writeFileSync(join(output, 'store-capture.json'), JSON.stringify({ passed: false, code: 'private_capture_failed', stage, commandTimings, ...(failure ? { failure } : {}) }));
     throw new Error('Private screenshot capture failed; raw diagnostics withheld');
   } finally {
-    if (active) run('xcrun', ['simctl', 'shutdown', active], { stdio: 'ignore', timeout: 30000 });
-    rmSync(privateDir, { recursive: true, force: true });
+    try {
+      if (active) {
+        const cleanup = shutdownForCleanup(devices.find(device => device.udid === active), run);
+        recordCleanup(join(output, 'store-capture.json'), cleanup);
+      }
+    } catch { /* Optional cleanup evidence must not replace the original safe failure. */ }
+    finally { rmSync(privateDir, { recursive: true, force: true }); }
   }
 }
 

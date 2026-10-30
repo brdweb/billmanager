@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-export function selectDevices(inventory) {
+export function selectDevices(inventory, sdkVersion) {
+  if (sdkVersion !== undefined && !/^\d+\.\d+(?:\.\d+)?$/.test(sdkVersion)) throw new Error('Invalid Simulator SDK version');
+  const matchingRuntime = sdkVersion === undefined ? undefined : `com.apple.CoreSimulator.SimRuntime.iOS-${sdkVersion.replaceAll('.', '-')}`;
   const devices = Object.entries(inventory.devices ?? {})
-    .filter(([runtime]) => runtime.includes('iOS-'))
+    .filter(([runtime]) => matchingRuntime ? runtime === matchingRuntime : runtime.includes('iOS-'))
     .flatMap(([runtime, items]) => items.filter(item => item.isAvailable).map(item => ({ ...item, runtime })));
   return ['iphone', 'ipad'].map(family => {
     const prefix = family === 'iphone' ? 'iPhone' : 'iPad';
