@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { AxiosError } from 'axios';
+import axios, { AxiosError } from 'axios';
 import transport, { type Bill, type SettlementItem } from '../api/client';
 import { TokenStorage } from '../utils/tokenStorage';
 import { Settlements } from '../pages/Settlements';
@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({ user: { id: 7 }, currentDb: 'Demo', isLoggedIn
 vi.mock('../context/AuthContext', () => ({ useAuth: () => state }));
 vi.mock('@mantine/notifications', () => ({ notifications: { show: vi.fn() } }));
 const originalAdapter = transport.defaults.adapter;
+const originalRefreshAdapter = axios.defaults.adapter;
 const stamp = '2026-10-29T10:00:00Z';
 let item: SettlementItem;
 let bill: Bill;
@@ -66,7 +67,7 @@ beforeEach(() => {
     return { status: 200, statusText: 'OK', headers: {}, config, data: { success: true, data } };
   };
 });
-afterEach(() => { transport.defaults.adapter = originalAdapter; TokenStorage.clearTokens(); });
+afterEach(() => { axios.defaults.adapter = originalRefreshAdapter; transport.defaults.adapter = originalAdapter; TokenStorage.clearTokens(); });
 const wrapped = (child: React.ReactNode) => <MantineProvider>{child}</MantineProvider>;
 const list = () => <BillList bills={[bill]} onRefresh={refresh} onEdit={vi.fn()} onPay={vi.fn()} onAdd={vi.fn()}
   onViewPayments={vi.fn()} isLoggedIn hasDatabase filter={{ searchQuery: '', dateRange: 'all', selectedDate: null, type: 'all', account: null, category: null }} onFilterChange={vi.fn()} />;
@@ -183,4 +184,23 @@ it('keeps the original uncertain intent even after a read supplies newer version
   fireEvent.click(await screen.findByRole('button', { name: 'Mark paid' }));
   await waitFor(() => expect(requests).toHaveLength(2));
   expect(requests[1]).toEqual(requests[0]);
+});
+
+it('offers a recoverable refresh after initial read credentials refresh within the same account', async () => {
+  const previous = transport.defaults.adapter as import('axios').AxiosAdapter;
+  let expired = true;
+  transport.defaults.adapter = async config => {
+    if (config.url === '/settlements' && expired) {
+      expired = false;
+      throw new AxiosError('Expired', 'ERR_BAD_REQUEST', config, undefined,
+        { status: 401, statusText: 'Unauthorized', headers: {}, config, data: { error: 'Expired' } });
+    }
+    return previous(config);
+  };
+  axios.defaults.adapter = async config => ({ status: 200, statusText: 'OK', headers: {}, config,
+    data: { success: true, data: { access_token: `header.${btoa(JSON.stringify({ user_id: 7 }))}.refreshed` } } });
+  render(wrapped(<Settlements hasDatabase />));
+  fireEvent.click(await screen.findByTitle('Refresh settlements'));
+  expect(await screen.findByRole('button', { name: 'Mark paid' })).toBeVisible();
+  expect(requests).toHaveLength(0);
 });

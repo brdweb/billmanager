@@ -231,12 +231,13 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
     setError(null);
     try {
       const response = await api.getSettlements(requestScope);
-      if (!isCurrent() || !api.isPaymentScopeCurrent(requestScope) || id !== requestId.current) return;
+      if (!isCurrent() || id !== requestId.current) return;
+      if (!api.isPaymentScopeCurrent(requestScope)) throw new Error('Read session refreshed');
       freshRead(revision);
       setDataScope(scopeKey);
       setData(response);
     } catch {
-      if (!isCurrent() || !api.isPaymentScopeCurrent(requestScope) || id !== requestId.current) return;
+      if (!isCurrent() || id !== requestId.current) return;
       setError(t('settlementsPage.loadFailed'));
       setData(null);
     } finally {
