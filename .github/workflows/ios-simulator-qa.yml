@@ -7,9 +7,14 @@ on:
         description: Capture synthetic reviewer screens (requires production approval)
         type: boolean
         default: false
+      reuse_reviewed_build:
+        description: Reuse only the pinned reviewed 41054807810 native archive for private capture
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ios-simulator-qa-${{ github.ref }}
@@ -55,7 +60,7 @@ jobs:
         run: |
           npm run i18n:check
           npm run maestro:validate
-          npm test -- scripts/ios-simulator-qa.test.mjs scripts/ios-qa-devices.test.mjs scripts/ios-store-capture.test.mjs
+          npm test -- scripts/ios-simulator-qa.test.mjs scripts/ios-qa-devices.test.mjs scripts/ios-store-capture.test.mjs scripts/ios-qa-reuse.test.mjs
       - name: Install verified Maestro CLI
         env:
           MAESTRO_VERSION: 2.12.0
@@ -67,7 +72,24 @@ jobs:
           printf '%s  %s\n' "$MAESTRO_SHA256" "$archive" | shasum -a 256 --check
           unzip -q "$archive" -d "$RUNNER_TEMP/maestro"
           printf '%s\n' "$RUNNER_TEMP/maestro/maestro/bin" >> "$GITHUB_PATH"
+      - name: Verify and reuse the reviewed native Simulator archive
+        if: inputs.reuse_reviewed_build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CAPTURE_ENABLED: ${{ inputs.authenticated }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$CAPTURE_ENABLED" == true ]]
+          incoming="$RUNNER_TEMP/billmanager-ios-reuse"
+          mkdir -p "$incoming"
+          gh api repos/brdweb/billmanager/actions/runs/41054807810 > "$incoming/run.json"
+          gh api repos/brdweb/billmanager/actions/runs/41054807810/jobs > "$incoming/jobs.json"
+          gh run download 41054807810 --repo brdweb/billmanager \
+            --name ios-simulator-qa-1b51cd6edc7a31265cb94b338113f355a49ae175 --dir "$incoming"
+          node apps/mobile/scripts/ios-qa-reuse.mjs "$incoming"
       - name: Build and exercise the native Simulator app
+        if: '!inputs.reuse_reviewed_build'
         env:
           IOS_QA_AUTHENTICATED: ${{ inputs.authenticated }}
         run: bash apps/mobile/scripts/ios-simulator-qa.sh

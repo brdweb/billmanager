@@ -76,3 +76,28 @@ this does not replace physical-device or production diagnostics acceptance.
 
 The private driver uses the Maestro-supported `MAESTRO_` shell-variable prefix
 ([official parameters reference](https://docs.maestro.dev/maestro-flows/flow-control-and-logic/parameters-and-constants)); no secret is passed through `-e` arguments.
+
+Capture-only diagnosis may set `reuse_reviewed_build=true` together with
+`authenticated=true`. This accepts only the pinned native archive from manual
+main run 41054807810, source `1b51cd6`, SHA-256
+`a6858200b085981fab88fdf6a3759decfc64258d4fe51629bb72f3074563e622`.
+That run compiled successfully but failed at private `iphone-login`, producing
+no promoted PNGs. Deleted private diagnostics cannot identify its exact failing
+command; this is not evidence of an application or selector defect.
+
+Before extracting or installing the archive, the helper verifies repository,
+manual main-run/workflow identity, successful native build step, exact source,
+archive hash and Release manifest. It then verifies the actual ARM64 Simulator
+binary, HTTPS/OTA settings, embedded JavaScript hash and production/non-debug
+app configuration. Fresh runner device identifiers replace the old identifiers.
+The manifest retains the original compiled source and records the new capture
+harness commit and reused build run. The protected approval and separate secret
+step remain mandatory; reuse never accepts arbitrary PR or fork artifacts.
+
+On a private command failure, only fixed process/category enums, numeric exit
+status, and (when Maestro wrote its command report) a bounded failed command
+ordinal/type/status are published. Command values, selectors, exception text,
+hierarchy and images remain private and are deleted. Missing/truncated reports
+produce no invented command diagnosis. The parser follows the pinned
+[Maestro 2.12 command-report schema](https://github.com/mobile-dev-inc/Maestro/blob/cli-2.12.0/maestro-orchestra/src/main/kotlin/maestro/orchestra/debug/TestOutputWriter.kt).
+The capture-only retry is diagnostic until every native flow actually passes.
