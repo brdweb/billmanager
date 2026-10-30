@@ -1,4 +1,5 @@
 {
+  "sharedPayment": {"serverRequired": "Aktualisiere den Server und diese Seite, bevor du eine geteilte Zahlung änderst.", "refreshRequired": "Diese Zahlung wurde geändert. Lade die Daten neu, bevor du sie erneut bestätigst."},
   "_meta": {
     "languageName": "Deutsch"
   },

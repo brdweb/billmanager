@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -31,6 +31,8 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import * as api from '../api/client';
 import type { SettlementItem, SettlementsResponse } from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import { useSharePayment } from '../hooks/useSharePayment';
 import { BillIcon } from '../components/BillIcon';
 import { formatCurrency, getLocale } from '../lib/currency';
 
@@ -152,7 +154,7 @@ function SettlementCard({
               <Button
                 size="xs"
                 leftSection={<IconCheck size={14} />}
-                loading={actionLoading === item.share_id}
+                loading={actionLoading !== null}
                 onClick={() => onMarkPaid(item.share_id)}
               >
                 {t('settlementsPage.markPaidButton')}
@@ -209,7 +211,11 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
   const [data, setData] = useState<SettlementsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const { user, currentDb } = useAuth();
+  const { run, busy, isCurrent, beginRead, freshRead } = useSharePayment();
+  const scopeKey = JSON.stringify([user?.id, currentDb]);
+  const [dataScope, setDataScope] = useState('');
+  const requestId = useRef(0);
 
   const loadSettlements = useCallback(async () => {
     if (!hasDatabase) {
@@ -217,40 +223,43 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
       setData(null);
       return;
     }
+    if (!isCurrent()) return;
+    const requestScope = api.capturePaymentScope(user!.id);
+    const id = ++requestId.current;
+    const revision = beginRead();
     setLoading(true);
     setError(null);
     try {
-      const response = await api.getSettlements();
+      const response = await api.getSettlements(requestScope);
+      if (!isCurrent() || !api.isPaymentScopeCurrent(requestScope) || id !== requestId.current) return;
+      freshRead(revision);
+      setDataScope(scopeKey);
       setData(response);
     } catch {
+      if (!isCurrent() || !api.isPaymentScopeCurrent(requestScope) || id !== requestId.current) return;
       setError(t('settlementsPage.loadFailed'));
       setData(null);
     } finally {
-      setLoading(false);
+      if (isCurrent() && id === requestId.current) setLoading(false);
     }
-  }, [hasDatabase, t]);
+  }, [hasDatabase, t, isCurrent, beginRead, freshRead, scopeKey, user]);
 
   useEffect(() => {
     loadSettlements();
   }, [loadSettlements]);
 
   const handleMarkPaid = async (shareId: number) => {
-    setActionLoading(shareId);
+    const item = data?.i_owe.find(item => item.share_id === shareId);
+    if (!item || dataScope !== scopeKey) return;
     try {
-      await api.markSharePaid(shareId);
-      notifications.show({
-        message: t('settlementsPage.markPaidSuccess'),
-        color: 'green',
-      });
-      await loadSettlements();
-    } catch {
-      notifications.show({
-        title: t('settlementsPage.markPaidFailedTitle'),
-        message: t('settlementsPage.markPaidFailedBody'),
-        color: 'red',
-      });
-    } finally {
-      setActionLoading(null);
+      await run({ shareId, shareVersion: item.share_updated_at, billVersion: item.bill_updated_at,
+        dueDate: item.due_date, desiredPaid: true }, () => true, async () => {
+        notifications.show({ message: t('settlementsPage.markPaidSuccess'), color: 'green' });
+        await loadSettlements();
+      }, loadSettlements);
+    } catch (error) {
+      if (isCurrent()) notifications.show({ title: t('settlementsPage.markPaidFailedTitle'),
+        message: error instanceof Error ? error.message : t('settlementsPage.markPaidFailedBody'), color: 'red' });
     }
   };
 
@@ -267,7 +276,7 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
     );
   }
 
-  if (loading) {
+  if (loading || (hasDatabase && dataScope !== scopeKey && !error)) {
     return (
       <Center py="xl">
         <Loader />
@@ -337,13 +346,13 @@ export function Settlements({ hasDatabase }: SettlementsProps) {
               title={t('settlementsPage.owedToMe')}
               empty={t('settlementsPage.noOneOwesYou')}
               items={data.owed_to_me}
-              actionLoading={actionLoading}
+              actionLoading={busy ? -1 : null}
             />
             <SettlementColumn
               title={t('settlementsPage.iOwe')}
               empty={t('settlementsPage.noOpenBalances')}
               items={data.i_owe}
-              actionLoading={actionLoading}
+              actionLoading={busy ? -1 : null}
               onMarkPaid={handleMarkPaid}
             />
           </SimpleGrid>
