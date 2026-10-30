@@ -33,6 +33,8 @@ describe('private native demo screenshot boundaries', () => {
   it('keeps password out of flow literals and uses only read-only navigation after login', () => {
     expect(JSON.stringify(loginCommands)).toContain('${MAESTRO_QA_REVIEWER_PASSWORD}');
     expect(loginCommands.some(c => c.takeScreenshot)).toBe(false);
+    const firstLink = loginCommands.findIndex(c => c.openLink);
+    expect(loginCommands[firstLink - 1]).toEqual({ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 30000 } });
     expect(captureCommands.some(c => c.inputText || c.tapOn)).toBe(false);
     expect(captureCommands.filter(c => c.takeScreenshot).map(c => c.takeScreenshot)).toEqual(['bills', 'payment-history', 'settlements', 'billing']);
     expect(captureCommands.filter(c => c.assertNotVisible?.id === 'auth-login-screen')).toHaveLength(4);

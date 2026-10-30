@@ -45,6 +45,7 @@ export const loginCommands = [
   { tapOn: { text: '^Username$', index: 1 } }, { inputText: 'store-review' },
   { tapOn: { text: '^Password$', index: 1 } }, { inputText: '${MAESTRO_QA_REVIEWER_PASSWORD}' },
   { hideKeyboard: {} }, { tapOn: { text: '^Sign in$', index: 1 } },
+  { extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 30000 } },
   route('bills'), wait('.*DEMO Rent.*'), ...absentAuth,
 ];
 export const captureCommands = [
