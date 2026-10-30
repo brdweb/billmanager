@@ -11,9 +11,6 @@ finish() {
   status=$?
   trap - EXIT
   if [[ -n "$simulator_id" ]]; then
-    xcrun simctl io "$simulator_id" screenshot "$output/final-screen.png" >/dev/null 2>&1 || true
-    xcrun simctl spawn "$simulator_id" log show --style compact --last 10m \
-      --predicate 'process == "BillManager"' > "$output/simulator.log" 2>&1 || true
     xcrun simctl shutdown "$simulator_id" >/dev/null 2>&1 || true
   fi
   printf '{"exitCode":%s,"acceptance":"simulator-only"}\n' "$status" > "$output/result.json"
@@ -47,17 +44,8 @@ printf 'QA phase: pods\n'
 pod install --project-directory=ios > "$output/pods.log" 2>&1
 
 xcrun simctl list devices available -j > "$output/devices.json"
-simulator_id="$(node - "$output/devices.json" <<'NODE'
-const fs = require('node:fs');
-const devices = Object.entries(JSON.parse(fs.readFileSync(process.argv[2], 'utf8')).devices)
-  .filter(([runtime]) => runtime.includes('.iOS-'))
-  .flatMap(([runtime, items]) => items.map(item => ({ ...item, runtime })))
-  .filter(item => item.isAvailable && item.name.startsWith('iPhone'));
-const device = devices.find(item => item.name === 'iPhone 17') ?? devices[0];
-if (!device) throw new Error('No installed iPhone Simulator runtime available');
-process.stdout.write(device.udid);
-NODE
-)"
+node scripts/ios-qa-devices.mjs "$output/devices.json" > "$output/selected-devices.json"
+simulator_id="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1]))[0].udid' "$output/selected-devices.json")"
 xcrun simctl boot "$simulator_id" || [[ "$(xcrun simctl list devices booted -j)" == *"$simulator_id"* ]]
 xcrun simctl bootstatus "$simulator_id" -b
 xcrun simctl spawn "$simulator_id" defaults write NSGlobalDomain AppleLanguages -array en
@@ -91,17 +79,37 @@ fs.writeFileSync(`${output}/manifest.json`, JSON.stringify({
   sourceCommit: git('rev-parse','HEAD'), sourceTree: git('rev-parse','HEAD^{tree}'),
   mobileVersion: JSON.parse(fs.readFileSync('package.json','utf8')).version,
   configuration:'Release', platform:'iOS Simulator', simulatorUdid:udid,
+  captureDevices:JSON.parse(fs.readFileSync(`${output}/selected-devices.json`,'utf8')),
   binaryArchitectures:fs.readFileSync(`${output}/binary-architectures.txt`,'utf8').trim().split(/\s+/),
   productionTransport:true, signing:false, designPreview:false,
   generatedOtaEnabled:false, sentryUploadEnabled:false, sentryDsnConfigured:false,
   appArchiveSha256:hash(`${output}/BillManager-simulator.app.zip`),
   embeddedJavaScriptSha256:hash(`${app}/main.jsbundle`),
-  nodeVersion:process.version, acceptance:'compile and anonymous auth-entry navigation only',
+  nodeVersion:process.version, acceptance:process.env.IOS_QA_AUTHENTICATED === 'true'
+    ? 'compile only; separate store-capture.json must pass' : 'compile and anonymous auth-entry navigation only',
 }, null, 2));
 NODE
-printf 'QA phase: install\n'
-xcrun simctl install "$simulator_id" "$app"
-printf 'QA phase: Maestro anonymous auth-entry smoke\n'
-maestro --device "$simulator_id" test .maestro/ios/auth-entry.yaml \
-  --format JUNIT --output "$output/maestro.xml" \
-  --test-output-dir "$output/screenshots" --debug-output "$output/maestro-debug"
+# Authenticated capture is a separate post-build step: no password exists here.
+if [[ "${IOS_QA_AUTHENTICATED:-false}" == true ]]; then
+  xcrun simctl shutdown "$simulator_id"
+  simulator_id=''
+  exit 0
+fi
+# One compiled ARM64 Simulator app serves both device families, sequentially.
+for family in iphone ipad; do
+  simulator_id="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1])).find(d => d.family === process.argv[2]).udid' "$output/selected-devices.json" "$family")"
+  device_output="$output/$family"
+  mkdir -p "$device_output"
+  xcrun simctl boot "$simulator_id" || [[ "$(xcrun simctl list devices booted -j)" == *"$simulator_id"* ]]
+  xcrun simctl bootstatus "$simulator_id" -b
+  xcrun simctl spawn "$simulator_id" defaults write NSGlobalDomain AppleLanguages -array en
+  xcrun simctl spawn "$simulator_id" defaults write NSGlobalDomain AppleLocale en_US
+  printf 'QA phase: install (%s)\n' "$family"
+  xcrun simctl install "$simulator_id" "$app"
+  printf 'QA phase: Maestro anonymous auth-entry smoke (%s)\n' "$family"
+  maestro --device "$simulator_id" test .maestro/ios/auth-entry.yaml \
+    --format JUNIT --output "$device_output/maestro.xml" \
+    --test-output-dir "$device_output/screenshots" --debug-output "$device_output/maestro-debug"
+  xcrun simctl shutdown "$simulator_id"
+  simulator_id=''
+done
