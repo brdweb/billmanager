@@ -18,6 +18,7 @@ export interface ServerCapabilities {
   sharing: boolean;
   settlements: boolean;
   settlementPaymentPreconditions?: boolean;
+  settlementPaymentDesiredState?: boolean;
 }
 
 export interface ServerProfile {

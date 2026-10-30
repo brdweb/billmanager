@@ -1703,12 +1703,12 @@ export class BillManagerApi {
 
   // ============ Bill Sharing ============
 
-  async markSharePaid(shareId: number, requestedScope?: AuthSessionScope, clientMutationId?: string, expectedState?: { baseUpdatedAt: string; baseBillUpdatedAt: string; expectedDueDate: string }): Promise<ApiResponse<{ recipient_paid_date: string | null }>> {
+  async markSharePaid(shareId: number, requestedScope?: AuthSessionScope, clientMutationId?: string, expectedState?: { baseUpdatedAt: string; baseBillUpdatedAt: string; expectedDueDate: string; desiredPaid?: boolean }): Promise<ApiResponse<{ recipient_paid_date: string | null }>> {
     try {
       const binding = await this.authenticationBinding(requestedScope);
       const response = await this.client.post<ApiResponse<{ recipient_paid_date: string | null }>>(`/shares/${shareId}/mark-paid`, clientMutationId || expectedState ? {
         ...(clientMutationId ? { client_mutation_id: clientMutationId } : {}),
-        ...(expectedState ? { base_updated_at: expectedState.baseUpdatedAt, base_bill_updated_at: expectedState.baseBillUpdatedAt, expected_due_date: expectedState.expectedDueDate } : {}),
+        ...(expectedState ? { base_updated_at: expectedState.baseUpdatedAt, base_bill_updated_at: expectedState.baseBillUpdatedAt, expected_due_date: expectedState.expectedDueDate, ...(expectedState.desiredPaid !== undefined ? { desired_paid: expectedState.desiredPaid } : {}) } : {}),
       } : undefined, this.authenticationRequestConfig(binding));
       return response.data;
     } catch (error) {
