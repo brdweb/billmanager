@@ -18,7 +18,14 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     expect(job.if).toBe("github.ref == 'refs/heads/main'");
     expect(job['runs-on']).toBe('macos-26');
     expect(job['timeout-minutes']).toBe(90);
-    expect(JSON.stringify(workflow)).not.toMatch(/secrets\.|ios-production|eas-cli|submit|workflow_call/);
+    expect(JSON.stringify(workflow)).not.toMatch(/eas-cli|workflow_call/);
+    expect(workflow.on.workflow_dispatch.inputs.authenticated.default).toBe(false);
+    expect(job.environment).toBe("${{ inputs.authenticated && 'ios-production' || '' }}");
+    const secretSteps = job.steps.filter(step => JSON.stringify(step).includes('secrets.'));
+    expect(secretSteps).toHaveLength(1);
+    expect(secretSteps[0].if).toBe('inputs.authenticated');
+    expect(secretSteps[0].name).toBe('Capture private synthetic reviewer screens');
+    expect(job.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with.path).not.toMatch(/private|debug|simulator\.log|final-screen/);
     expect(job.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with['retention-days']).toBe(3);
   });
 
@@ -57,12 +64,15 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     expect(commands.filter(command => command.tapOn).map(command => command.tapOn.text))
       .toEqual(['Forgot password?', 'Back to sign in']);
     expect(script).toContain('test .maestro/ios/auth-entry.yaml');
+    expect(script).toContain('for family in iphone ipad; do');
+    expect(script).toContain('node scripts/ios-qa-devices.mjs');
+    expect(script.match(/xcodebuild -workspace/g)).toHaveLength(1);
   });
 
   it('parses the runner shell and embedded evidence scripts before using macOS', () => {
     execFileSync('bash', ['-n', fileURLToPath(scriptUrl)]);
     const blocks = [...script.matchAll(/<<'NODE'\n([\s\S]*?)\nNODE/g)];
-    expect(blocks).toHaveLength(2);
+    expect(blocks).toHaveLength(1);
     for (const [, source] of blocks) expect(() => new Script(source)).not.toThrow();
   });
 });
