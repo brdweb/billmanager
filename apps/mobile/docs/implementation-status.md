@@ -18,10 +18,9 @@ and keep the mandatory gates below open until candidate-specific proof exists.
 The [October 29 market launch plan](../../../docs/market-launch-plan.md) is the
 current source for release jobs and store status. It supersedes the historical
 October 9 store observations below: Apple privacy now has ten published data
-types after explicit owner approval, Google's ten-type Data safety update is in
-review, and the iOS draft is 1.2.0 with manual release selected. Android 1.2.0
-native emulator QA passed; signed candidates, authenticated/device acceptance,
-reviewer access and binary submissions remain open. These metadata changes do
+types after explicit owner approval, Google's ten-type Data safety update has
+passed review and been published, and the iOS draft is 1.2.0 with manual release selected. Android 1.2.0
+native emulator QA and ARM64 iOS Simulator entry navigation passed on earlier candidate revisions. Reviewer contact and reusable synthetic Pro access are saved in both stores; Google's access update is in review. Signed candidates, final-source authenticated/device acceptance and binary submissions remain open. These metadata changes do
 not establish a reviewed or publicly available binary.
 
 ## Follow-up verification — 2026-10-11
