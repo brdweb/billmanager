@@ -74,6 +74,40 @@ export function safeScreenshots(directory, family) {
   });
 }
 
+// Maestro 2.12 commands.json schema: CommandDebugWrapper{command, metadata}.
+// Only fixed enum labels and bounded numeric ordinals leave the private directory.
+export function safeCommandFailure(directory, result) {
+  const kinds = ['tapOnElement', 'assertConditionCommand', 'inputTextCommand', 'launchAppCommand',
+    'applyConfigurationCommand', 'openLinkCommand', 'hideKeyboardCommand', 'takeScreenshotCommand'];
+  const process = result.error?.code === 'ETIMEDOUT' ? 'timeout'
+    : result.error?.code === 'ENOBUFS' ? 'output_limit' : result.error ? 'launch_failed' : 'nonzero_exit';
+  const report = { process, exitCode: Number.isInteger(result.status) ? result.status : null };
+  const pending = [];
+  const walk = path => {
+    for (const name of readdirSync(path)) {
+      const file = join(path, name), stat = lstatSync(file);
+      if (stat.isSymbolicLink()) continue;
+      if (stat.isDirectory()) walk(file);
+      else if (/^commands(?:-.*)?\.json$/.test(name) && stat.size <= 2_000_000) {
+        const rows = JSON.parse(readFileSync(file, 'utf8'));
+        if (!Array.isArray(rows) || rows.length > 1000) continue;
+        rows.forEach((row, index) => {
+          if (!['FAILED', 'RUNNING'].includes(row?.metadata?.status)) return;
+          pending.push({ ordinal: index + 1, type: kinds.find(kind => row.command?.[kind] != null) ?? 'unknown', status: row.metadata.status });
+        });
+      }
+    }
+  };
+  try { walk(directory); } catch { /* Missing/truncated debug output is not evidence. */ }
+  const command = pending.find(row => row.status === 'FAILED') ?? pending.at(-1);
+  if (command) report.command = command;
+  const raw = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+  report.category = /Element not found|No elements found/i.test(raw) ? 'element_not_found'
+    : /Failed to parse|Unable to parse|Invalid YAML|Unrecognized field/i.test(raw) ? 'flow_parse'
+      : /Failed to (?:start|connect to).*driver|Unable to connect to.*driver/i.test(raw) ? 'driver_unavailable' : 'unclassified';
+  return report;
+}
+
 export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEMP, run = spawnSync, request = fetch } = {}) {
   ensure(password.length >= 24 && password.length <= 256 && !/[\r\n\0]/.test(password));
   ensure(runnerTemp && resolve(runnerTemp) !== resolve(tmpdir(), 'billmanager-ios-qa'));
@@ -82,12 +116,13 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
   rmSync(promoted, { recursive: true, force: true });
   const privateDir = mkdtempSync(join(runnerTemp, 'billmanager-ios-private-')); // umask 077
   const env = { ...process.env, MAESTRO_CLI_NO_ANALYTICS: 'true' }; delete env.QA_REVIEWER_PASSWORD;
+  let failure;
   const execute = (command, args, secrets = false) => {
     const result = run(command, args, { cwd: privateDir, env: secrets ? { ...env, MAESTRO_QA_REVIEWER_PASSWORD: password } : env,
       encoding: 'utf8', timeout: 180000, maxBuffer: 16 * 1024 * 1024 });
     // Raw command output can include secrets. Never format it into thrown errors.
     writeFileSync(join(privateDir, 'last-command.log'), `${result.stdout ?? ''}\n${result.stderr ?? ''}`, { mode: 0o600 });
-    ensure(result.status === 0 && !result.error);
+    if (result.status !== 0 || result.error) { failure = safeCommandFailure(privateDir, result); ensure(false); }
   };
   const flow = (name, commands) => {
     const file = join(privateDir, `${name}.yaml`);
@@ -126,7 +161,7 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
     writeFileSync(join(output, 'store-capture.json'), text);
   } catch {
     rmSync(promoted, { recursive: true, force: true });
-    writeFileSync(join(output, 'store-capture.json'), JSON.stringify({ passed: false, code: 'private_capture_failed', stage }));
+    writeFileSync(join(output, 'store-capture.json'), JSON.stringify({ passed: false, code: 'private_capture_failed', stage, ...(failure ? { failure } : {}) }));
     throw new Error('Private screenshot capture failed; raw diagnostics withheld');
   } finally {
     if (active) run('xcrun', ['simctl', 'shutdown', active], { stdio: 'ignore', timeout: 30000 });

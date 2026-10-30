@@ -15,7 +15,7 @@ const flow = parseAllDocuments(readFileSync(new URL('../.maestro/ios/auth-entry.
 describe('credential-free iOS Simulator lane boundaries', () => {
   it('runs only manually from reviewed main on a standard bounded Mac runner', () => {
     expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch']);
-    expect(workflow.permissions).toEqual({ contents: 'read' });
+    expect(workflow.permissions).toEqual({ contents: 'read', actions: 'read' });
     const job = workflow.jobs.simulator;
     expect(job.if).toBe("github.ref == 'refs/heads/main'");
     expect(job['runs-on']).toBe('macos-26');

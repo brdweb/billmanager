@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture } from './ios-store-capture.mjs';
+import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure } from './ios-store-capture.mjs';
 const password = 'synthetic-fixture-only-not-a-credential';
 const data = {
   '/auth/login': { access_token: 'fixture-token' },
@@ -61,7 +61,7 @@ describe('private native demo screenshot boundaries', () => {
       expect(calls.filter(c => c.command === 'maestro').every(c => c.options.env.MAESTRO_CLI_NO_ANALYTICS === 'true')).toBe(true);
       expect(calls.every(c => !JSON.stringify(c.args).includes(password))).toBe(true);
       expect(calls.filter(c => c.options.env?.MAESTRO_QA_REVIEWER_PASSWORD).map(c => c.command)).toEqual(['maestro']);
-      expect(JSON.parse(readFileSync(join(out, 'store-capture.json'), 'utf8')).stage).toBe('iphone-login');
+      expect(JSON.parse(readFileSync(join(out, 'store-capture.json'), 'utf8'))).toMatchObject({ stage: 'iphone-login', failure: { process: 'nonzero_exit', exitCode: 1, category: 'unclassified' } });
       expect(calls.every(c => !c.options.env || c.options.env.HOME === process.env.HOME)).toBe(true);
       expect(existsSync(join(out, 'store-screenshots'))).toBe(false);
       expect(readdirSync(root)).toEqual(['billmanager-ios-qa']);
@@ -92,4 +92,19 @@ it('promotes eight allowlisted PNGs only after both complete; later-device failu
       expect(readdirSync(root)).toEqual(['billmanager-ios-qa']);
     } finally { rmSync(root, { recursive: true }); }
   }
+});
+
+it('exports only bounded command type/status/index, never private values or errors', () => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-command-diagnostic-'));
+  try {
+    const nested = join(root, '2026-10-30', 'login'); mkdirSync(nested, { recursive: true });
+    writeFileSync(join(nested, 'commands-(login).json'), JSON.stringify([
+      { command: { launchAppCommand: {} }, metadata: { status: 'COMPLETED' } },
+      { command: { inputTextCommand: { text: password } }, metadata: { status: 'FAILED', error: { message: password, debugMessage: 'Bearer fixture-token' } } },
+    ]));
+    const report = safeCommandFailure(root, { status: 1, stdout: `Element not found: ${password}` });
+    expect(report).toEqual({ process: 'nonzero_exit', exitCode: 1, category: 'element_not_found', command: { ordinal: 2, type: 'inputTextCommand', status: 'FAILED' } });
+    expect(JSON.stringify(report)).not.toMatch(/synthetic-fixture|Bearer|fixture-token/);
+    expect(safeCommandFailure('/missing-fixture', { error: { code: 'ETIMEDOUT', message: password }, status: null }).process).toBe('timeout');
+  } finally { rmSync(root, { recursive: true }); }
 });
