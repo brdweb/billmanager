@@ -16,6 +16,7 @@ import MoneyText from '../../components/adaptive/MoneyText';
 import SectionHeader from '../../components/adaptive/SectionHeader';
 import { AdaptivePlatform, typography } from '../../design/tokens';
 import { useAdaptiveLayout } from '../../design/useAdaptiveLayout';
+import { useAndroidTopInset } from '../../design/useAndroidTopInset';
 import { useAdaptiveTheme } from '../../design/useAdaptiveTheme';
 import {
   CollaborationActions,
@@ -160,13 +161,14 @@ export default function CollaborationScreen({ model, actions, platform = Platfor
   const { t } = useTranslation();
   const theme = useAdaptiveTheme(platform);
   const layout = useAdaptiveLayout();
+  const topInset = useAndroidTopInset(platform);
   if (model.status === 'loading') return <StatusPanel platform={platform} title={t('mobileParity.collaboration.loadingTitle')} body={t('mobileParity.collaboration.loadingBody')} loading />;
   if (model.status === 'error') return <StatusPanel platform={platform} title={t('mobileParity.collaboration.unavailableTitle')} body={model.errorMessage ?? t('mobileParity.collaboration.unavailableBody')} onRetry={actions.onRetry} />;
   if (model.status === 'permission-denied') return <StatusPanel platform={platform} title={t('mobileParity.collaboration.restrictedTitle')} body={model.permissionMessage ?? t('mobileParity.collaboration.restrictedBody')} />;
 
   const empty = model.sharedBills.length === 0 && model.pendingInvites.length === 0;
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.screen, { backgroundColor: theme.colors.background }, topInset > 0 && { paddingTop: topInset }]}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         refreshControl={<RefreshControl refreshing={Boolean(model.refreshing)} onRefresh={actions.onRefresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}

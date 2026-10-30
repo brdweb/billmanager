@@ -15,6 +15,7 @@ import AdaptiveSurface from '../../components/adaptive/AdaptiveSurface';
 import SectionHeader from '../../components/adaptive/SectionHeader';
 import { AdaptivePlatform, typography } from '../../design/tokens';
 import { useAdaptiveLayout } from '../../design/useAdaptiveLayout';
+import { useAndroidTopInset } from '../../design/useAndroidTopInset';
 import { useAdaptiveTheme } from '../../design/useAdaptiveTheme';
 import {
   BillingActions,
@@ -121,13 +122,14 @@ export default function BillingScreen({ model, actions, platform = Platform.OS =
   const { t } = useTranslation();
   const theme = useAdaptiveTheme(platform);
   const layout = useAdaptiveLayout();
+  const topInset = useAndroidTopInset(platform);
   if (model.status === 'loading') return <StatusPanel platform={platform} title={t('mobileParity.billing.loadingPlan')} body={t('mobileParity.billing.loadingBody')} loading />;
   if (model.status === 'error') return <StatusPanel platform={platform} title={t('mobileParity.billing.unavailableTitle')} body={model.errorMessage ?? t('mobileParity.billing.planUnavailable')} onRetry={actions.onRetry} />;
   if (model.status === 'permission-denied') return <StatusPanel platform={platform} title={t('mobileParity.billing.restrictedTitle')} body={model.permissionMessage ?? t('mobileParity.billing.ownerOnly')} />;
 
   const selfHosted = model.deploymentMode === 'self_hosted';
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.screen, { backgroundColor: theme.colors.background }, topInset > 0 && { paddingTop: topInset }]}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         refreshControl={<RefreshControl refreshing={Boolean(model.refreshing)} onRefresh={actions.onRefresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}

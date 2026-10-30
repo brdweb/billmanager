@@ -24,6 +24,7 @@ import SectionHeader from '../../components/adaptive/SectionHeader';
 import SegmentedControl from '../../components/adaptive/SegmentedControl';
 import { AdaptivePlatform, typography } from '../../design/tokens';
 import { useAdaptiveLayout } from '../../design/useAdaptiveLayout';
+import { useAndroidTopInset } from '../../design/useAndroidTopInset';
 import { useAdaptiveTheme } from '../../design/useAdaptiveTheme';
 import {
   AnalyticsActions,
@@ -121,6 +122,7 @@ export default function AnalyticsScreen({
   const { t } = useTranslation();
   const theme = useAdaptiveTheme(platform);
   const layout = useAdaptiveLayout();
+  const topInset = useAndroidTopInset(platform);
 
   if (model.status === 'loading') return <StatusPanel platform={platform} heading={t('mobileParity.analytics.loadingTitle')} body={t('mobileParity.analytics.loadingBody')} loading />;
   if (model.status === 'error') return <StatusPanel platform={platform} heading={t('mobileParity.analytics.unavailableTitle')} body={model.errorMessage ?? t('mobileParity.analytics.unavailableBody')} onRetry={actions.onRetry} />;
@@ -148,7 +150,7 @@ export default function AnalyticsScreen({
   const cashFlowLabel = model.cashFlow.length === 0 ? t('mobileParity.analytics.noCashFlowA11y') : t('mobileParity.analytics.cashFlowA11y', { count: model.cashFlow.filter((point) => point.forecast).length, first: model.cashFlow[0].label, last: model.cashFlow[model.cashFlow.length - 1].label, start: formatMoney(model.cashFlow[0].endingBalance, model), end: formatMoney(model.cashFlow[model.cashFlow.length - 1].endingBalance, model) });
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.screen, { backgroundColor: theme.colors.background }, topInset > 0 && { paddingTop: topInset }]}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         refreshControl={<RefreshControl refreshing={Boolean(model.refreshing)} onRefresh={actions.onRefresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}

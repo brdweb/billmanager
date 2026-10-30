@@ -16,6 +16,7 @@ import SectionHeader from '../../components/adaptive/SectionHeader';
 import SegmentedControl from '../../components/adaptive/SegmentedControl';
 import { AdaptivePlatform, typography } from '../../design/tokens';
 import { useAdaptiveLayout } from '../../design/useAdaptiveLayout';
+import { useAndroidTopInset } from '../../design/useAndroidTopInset';
 import { useAdaptiveTheme } from '../../design/useAdaptiveTheme';
 import {
   AdminGroupItem,
@@ -129,6 +130,7 @@ export default function AdministrationScreen({ model, actions, platform = Platfo
   const { t } = useTranslation();
   const theme = useAdaptiveTheme(platform);
   const layout = useAdaptiveLayout();
+  const topInset = useAndroidTopInset(platform);
   if (model.status === 'loading') return <StatusPanel platform={platform} title={t('mobileParity.administration.loadingTitle')} body={t('mobileParity.administration.loadingBody')} loading />;
   if (model.status === 'error') return <StatusPanel platform={platform} title={t('mobileParity.administration.unavailableTitle')} body={model.errorMessage ?? t('mobileParity.administration.unavailableBody')} onRetry={actions.onRetry} />;
   if (model.status === 'permission-denied') return <StatusPanel platform={platform} title={t('mobileParity.administration.restrictedTitle')} body={model.permissionMessage ?? t('mobileParity.administration.restrictedBody')} />;
@@ -141,7 +143,7 @@ export default function AdministrationScreen({ model, actions, platform = Platfo
   const sectionTitle: Record<AdminSection, string> = { users: t('mobileParity.administration.users'), invites: t('mobileParity.administration.pendingInvites'), groups: t('mobileParity.administration.groupsAccess') };
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.screen, { backgroundColor: theme.colors.background }, topInset > 0 && { paddingTop: topInset }]}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         refreshControl={<RefreshControl refreshing={Boolean(model.refreshing)} onRefresh={actions.onRefresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}

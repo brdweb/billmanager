@@ -16,6 +16,7 @@ import MoneyText from '../../components/adaptive/MoneyText';
 import SectionHeader from '../../components/adaptive/SectionHeader';
 import { AdaptivePlatform, typography } from '../../design/tokens';
 import { useAdaptiveLayout } from '../../design/useAdaptiveLayout';
+import { useAndroidTopInset } from '../../design/useAndroidTopInset';
 import { useAdaptiveTheme } from '../../design/useAdaptiveTheme';
 import { SettlementPersonRollup, SettlementsActions, SettlementsViewModel } from './models';
 import { useTranslation } from 'react-i18next';
@@ -103,13 +104,14 @@ export default function SettlementsScreen({ model, actions, platform = Platform.
   const { t } = useTranslation();
   const theme = useAdaptiveTheme(platform);
   const layout = useAdaptiveLayout();
+  const topInset = useAndroidTopInset(platform);
 
   if (model.status === 'loading') return <StatusPanel platform={platform} title={t('mobileParity.settlements.loadingTitle')} body={t('mobileParity.settlements.loadingBody')} loading />;
   if (model.status === 'error') return <StatusPanel platform={platform} title={t('mobileParity.settlements.unavailableTitle')} body={model.errorMessage ?? t('mobileParity.settlements.unavailableBody')} onRetry={actions.onRetry} />;
   if (model.status === 'permission-denied') return <StatusPanel platform={platform} title={t('mobileParity.settlements.restrictedTitle')} body={model.permissionMessage ?? t('mobileParity.settlements.restrictedBody')} />;
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.screen, { backgroundColor: theme.colors.background }, topInset > 0 && { paddingTop: topInset }]}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         refreshControl={<RefreshControl refreshing={Boolean(model.refreshing)} onRefresh={actions.onRefresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}

@@ -30,6 +30,7 @@ import MoneyText from '../../components/adaptive/MoneyText';
 import SegmentedControl from '../../components/adaptive/SegmentedControl';
 import { AdaptivePlatform, typography } from '../../design/tokens';
 import { useAdaptiveLayout } from '../../design/useAdaptiveLayout';
+import { useAndroidTopInset } from '../../design/useAndroidTopInset';
 import { useAdaptiveTheme } from '../../design/useAdaptiveTheme';
 import {
   PaymentExportFormat,
@@ -243,6 +244,7 @@ export default function PaymentHistoryScreen({
   const displayTitle = title ?? t('mobileParity.payments.title');
   const theme = useAdaptiveTheme(platform);
   const layout = useAdaptiveLayout();
+  const topInset = useAndroidTopInset(platform);
 
   if (model.status === 'loading') {
     return <StatusPanel platform={platform} title={t('mobileParity.payments.loadingTitle')} message={t('mobileParity.payments.loadingBody')} loading />;
@@ -374,7 +376,7 @@ export default function PaymentHistoryScreen({
   );
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.screen, { backgroundColor: theme.colors.background }, topInset > 0 && { paddingTop: topInset }]}>
       <FlashList
         data={model.payments}
         keyExtractor={(item) => item.id}

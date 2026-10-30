@@ -14,6 +14,7 @@ vi.mock('react-native', () => {
 vi.mock('lucide-react-native', () => Object.fromEntries(['Check', 'ChevronRight', 'Crown', 'ExternalLink', 'Infinity', 'Server', 'Sparkles'].map((key) => [key, 'i'])));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('../../design/useAdaptiveTheme', () => ({ useAdaptiveTheme: () => ({ colors: {}, minimumHitSize: 48 }) }));
+vi.mock('../../design/useAndroidTopInset', () => ({ useAndroidTopInset: () => 0 }));
 vi.mock('../../design/useAdaptiveLayout', () => ({ useAdaptiveLayout: () => ({ horizontalPadding: 16 }) }));
 vi.mock('../../components/adaptive/AdaptiveSurface', () => ({ default: ({ children }: { children: React.ReactNode }) => React.createElement('section', null, children) }));
 vi.mock('../../components/adaptive/SectionHeader', () => ({ default: ({ title }: { title: string }) => React.createElement('h2', null, title) }));
