@@ -1962,6 +1962,15 @@ export interface components {
              */
             expected_due_date?: string;
         };
+        SubscriptionStatusResponse: components["schemas"]["ObjectDataResponse"] & {
+            data?: {
+                has_subscription: boolean;
+                /** @description Account owner has a provider customer and configured customer portal access. Local subscription entitlements alone do not imply management availability. No provider identifiers exposed. */
+                can_manage_subscription: boolean;
+            } & {
+                [key: string]: unknown;
+            };
+        };
         ObjectDataResponse: {
             /** @enum {boolean} */
             success: true;
@@ -5054,7 +5063,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ObjectDataResponse"];
+                    "application/json": components["schemas"]["SubscriptionStatusResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];

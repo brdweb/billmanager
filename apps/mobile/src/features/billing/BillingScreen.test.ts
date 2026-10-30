@@ -19,7 +19,7 @@ vi.mock('../../components/adaptive/AdaptiveSurface', () => ({ default: ({ childr
 vi.mock('../../components/adaptive/SectionHeader', () => ({ default: ({ title }: { title: string }) => React.createElement('h2', null, title) }));
 
 const model: BillingViewModel = { status: 'ready', offline: false, deploymentMode: 'saas', locale: 'en-US', currency: 'USD',
-  subscription: { state: 'active', planName: 'Existing Pro account' }, usage: [], canManageBilling: true,
+  subscription: { state: 'active', planName: 'Existing Pro account' }, usage: [], canManageBilling: true, canOpenPortal: true,
   plans: [{ id: 'pro-month', name: 'Pro', amount: 2.99, currency: 'USD', interval: 'month', description: 'Paid plan', features: [], current: false }] };
 const actions = { onSelectPlan: vi.fn(), onOpenPortal: vi.fn(), onRefresh: vi.fn(), onRetry: vi.fn() };
 
@@ -38,4 +38,16 @@ describe('billing purchase surfaces', () => {
     expect(html).toContain('billing.openPortalA11y');
     expect(html.match(/disabled=""/g)).toHaveLength(2);
   });
+});
+
+
+it('hides a local Pro portal while retaining eligible iOS checkout actions', () => {
+  const html = renderToStaticMarkup(React.createElement(BillingScreen, { model: { ...model, canOpenPortal: false }, actions, platform: 'ios' }));
+  expect(html).toContain('Existing Pro account');
+  expect(html).not.toContain('billing.openPortalA11y');
+  expect(html).toContain('billing.choose');
+});
+it('retains the account-owner gate even when provider management is available', () => {
+  const html = renderToStaticMarkup(React.createElement(BillingScreen, { model: { ...model, canManageBilling: false, canOpenPortal: true }, actions, platform: 'ios' }));
+  expect(html).not.toContain('billing.openPortalA11y');
 });

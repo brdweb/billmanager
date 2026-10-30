@@ -91,6 +91,7 @@ export function Billing() {
   };
 
   const handleManage = async () => {
+    if (status?.can_manage_subscription !== true) return;
     setActionLoading(true);
     try {
       const response = await api.createPortalSession();
@@ -272,7 +273,7 @@ export function Billing() {
           )}
         </Stack>
 
-        {status?.has_subscription && (
+        {status?.can_manage_subscription === true && (
           <Group mt="lg">
             <Button
               leftSection={<IconCreditCard size={16} />}

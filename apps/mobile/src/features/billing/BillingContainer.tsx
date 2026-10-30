@@ -68,7 +68,10 @@ export default function BillingContainer() {
     const interval = planId.endsWith('-month') ? 'monthly' : 'annual';
     return runAction(() => api.createCheckoutSession('pro', interval, requestedScope), 'mobileParity.billing.checkoutFailed');
   };
-  const openPortal = () => runAction(() => api.createPortalSession(requestedScope), 'mobileParity.billing.portalFailed');
+  const openPortal = () => {
+    if (subscription?.can_manage_subscription !== true) return;
+    return runAction(() => api.createPortalSession(requestedScope), 'mobileParity.billing.portalFailed');
+  };
 
   return (
     <BillingScreen
@@ -101,6 +104,7 @@ export default function BillingContainer() {
         })),
         plans: selfHosted || !purchasesAllowed ? [] : plans,
         canManageBilling: purchasesAllowed && Boolean(user?.is_account_owner),
+        canOpenPortal: subscription?.can_manage_subscription === true,
         actionBusy: actionScope.busy,
         refreshing: query.isFetching,
       }}
