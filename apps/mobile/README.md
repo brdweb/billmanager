@@ -46,6 +46,13 @@ the local Android version code remains the preview/sideload baseline. Final
 bundles must also be checked for 16 KB page alignment before promotion in Play
 Console.
 
+Production Android overrides the EAS image's `GRADLE_OPTS` with a 3 GiB heap,
+2 GiB metaspace, one Gradle worker and parallel tasks disabled. Android native
+Ninja builds also use one job; Kotlin stays in the Gradle process. This keeps
+the existing medium builder and supported ABIs. The previous build warned of
+insufficient JVM metaspace before its daemon disappeared; an OS out-of-memory
+kill was not established. A successful native retry is still required.
+
 New preview and production builds use only their embedded JavaScript and assets;
 Expo OTA updates are disabled for launch. App changes require a new installed or
 store-delivered binary. Existing older installations are unaffected until users
