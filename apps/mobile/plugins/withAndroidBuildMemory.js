@@ -1,10 +1,11 @@
 const { withGradleProperties } = require('@expo/config-plugins');
 
 const COMMENT =
-  'EAS medium workers have 4 vCPU and about 16 GB, and the build image forces Gradle to run parallel. Cap the worker count, and compile Kotlin inside the Gradle JVM, so a second compiler process cannot stack on the 4 GB Gradle heap.';
+  'EAS medium workers have 4 vCPU and about 16 GB. Serialize Gradle tasks and compile Kotlin inside the Gradle JVM; production Android also overrides the image JVM budget through GRADLE_OPTS.';
 
 const MEMORY_PROPERTIES = [
-  ['org.gradle.workers.max', '2'],
+  ['org.gradle.workers.max', '1'],
+  ['org.gradle.parallel', 'false'],
   ['kotlin.compiler.execution.strategy', 'in-process'],
 ];
 
@@ -18,9 +19,8 @@ function upsertProperty(items, key, value) {
 }
 
 /**
- * The release build also runs several Ninja compiles. EAS still sets
- * org.gradle.parallel=true on the command line, which overrides
- * gradle.properties, so the worker cap is the limit that actually applies.
+ * The production Android profile overrides EAS command-line defaults; these
+ * properties provide the same serial task limits for other Android builds.
  * scripts/limit-android-native-jobs.mjs caps each Ninja invocation.
  */
 function withAndroidBuildMemory(config) {
