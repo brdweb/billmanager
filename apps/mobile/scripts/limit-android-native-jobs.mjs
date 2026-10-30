@@ -2,7 +2,7 @@ import { chmodSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, s
 import path from 'node:path';
 
 const MARKER = 'billmanager-native-job-cap';
-const JOBS = '2';
+const JOBS = '1';
 
 function sdkRoots(argv = process.argv) {
   const rootFlag = argv.indexOf('--sdk-root');
@@ -68,8 +68,14 @@ fi
 
 function wrapNinja(ninjaPath) {
   const header = readFileSync(ninjaPath).subarray(0, 256).toString('utf8');
-  if (header.includes(MARKER)) return 'already-capped';
   const realPath = `${ninjaPath}.real`;
+  if (header.includes(MARKER)) {
+    if (!existsSync(realPath)) throw new Error('Native job wrapper has no original binary');
+    // Cached SDKs can retain an older cap; update only our marked wrapper.
+    writeFileSync(ninjaPath, wrapperScript(), { mode: 0o755 });
+    chmodSync(ninjaPath, 0o755);
+    return 'already-capped';
+  }
   if (existsSync(realPath)) return 'real-binary-already-present';
   renameSync(ninjaPath, realPath);
   writeFileSync(ninjaPath, wrapperScript(), { mode: 0o755 });
