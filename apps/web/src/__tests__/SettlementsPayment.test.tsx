@@ -98,8 +98,8 @@ it.each([false, true])('preserves intentional paid/unpaid state=%s through BillL
   expect(requests[1]).toEqual(requests[0]); expect(requests[0].desired_paid).toBe(!initiallyPaid); expect(paid).toBe(!initiallyPaid);
 });
 
-it('blocks both directions when only the older preconditions capability is advertised', async () => {
-  supported = false; bill.share_info!.my_portion_paid = true;
+it.each([false, 'false'])('blocks unpay when desired-state support is not boolean true (%s)', async flag => {
+  supported = flag as unknown as boolean; bill.share_info!.my_portion_paid = true;
   render(wrapped(list()));
   fireEvent.click(await screen.findByTitle('Mark as unpaid'));
   fireEvent.click(await screen.findByRole('button', { name: 'Mark Unpaid' }));

@@ -40,7 +40,7 @@ export function useSharePayment(viewKey = '') {
     try {
       const config = await api.getAppConfig();
       if (!current()) return;
-      if (!config.mobile?.features?.settlement_payment_desired_state || !version(item.shareVersion) || !version(item.billVersion)) {
+      if (config.mobile?.features?.settlement_payment_desired_state !== true || !version(item.shareVersion) || !version(item.billVersion)) {
         throw new Error(i18n.t('sharedPayment.serverRequired'));
       }
       let attempt = attempts.current.get(key);
