@@ -80,7 +80,7 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
   const promoted = join(output, 'store-screenshots');
   rmSync(promoted, { recursive: true, force: true });
   const privateDir = mkdtempSync(join(runnerTemp, 'billmanager-ios-private-')); // umask 077
-  const env = { ...process.env, HOME: privateDir, MAESTRO_CLI_NO_ANALYTICS: '1' }; delete env.QA_REVIEWER_PASSWORD;
+  const env = { ...process.env, MAESTRO_CLI_NO_ANALYTICS: '1' }; delete env.QA_REVIEWER_PASSWORD;
   const execute = (command, args, secrets = false) => {
     const result = run(command, args, { cwd: privateDir, env: secrets ? { ...env, MAESTRO_QA_REVIEWER_PASSWORD: password } : env,
       encoding: 'utf8', timeout: 180000, maxBuffer: 16 * 1024 * 1024 });
@@ -93,24 +93,28 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
     writeFileSync(file, `appId: com.brdweb.billmanager\n---\n${JSON.stringify(commands, null, 2)}\n`, { mode: 0o600 }); return file;
   };
   let devices;
-  const screenshots = []; let active;
+  const screenshots = []; let active; let stage = 'identity';
   try {
     devices = JSON.parse(readFileSync(join(output, 'selected-devices.json'), 'utf8'));
     const identity = await verifyDemo(password, request);
     const login = flow('login', loginCommands), capture = flow('capture', captureCommands);
     for (const device of devices) {
-      ensure(['iphone', 'ipad'].includes(device.family)); active = device.udid;
+      ensure(['iphone', 'ipad'].includes(device.family)); active = device.udid; stage = `${device.family}-boot-install`;
       execute('xcrun', ['simctl', 'boot', active]); execute('xcrun', ['simctl', 'bootstatus', active, '-b']);
       execute('xcrun', ['simctl', 'spawn', active, 'defaults', 'write', 'NSGlobalDomain', 'AppleLanguages', '-array', 'en']);
       execute('xcrun', ['simctl', 'spawn', active, 'defaults', 'write', 'NSGlobalDomain', 'AppleLocale', 'en_US']);
       execute('xcrun', ['simctl', 'install', active, join(runnerTemp, 'billmanager-ios-derived/Build/Products/Release-iphonesimulator/BillManager.app')]);
       const deviceDir = join(privateDir, device.family); mkdirSync(deviceDir);
+      stage = `${device.family}-login`;
       execute('maestro', ['--device', active, 'test', login, '--test-output-dir', join(deviceDir, 'login'), '--debug-output', join(deviceDir, 'login-debug')], true);
+      stage = `${device.family}-read-only-capture`;
       execute('maestro', ['--device', active, 'test', capture, '--test-output-dir', join(deviceDir, 'capture'), '--debug-output', join(deviceDir, 'capture-debug')]);
+      stage = `${device.family}-png-validation`;
       screenshots.push(...safeScreenshots(join(deviceDir, 'capture'), device.family).map(s => ({ ...s, family: device.family })));
       execute('xcrun', ['simctl', 'shutdown', active]); active = undefined;
     }
     ensure(devices.length === 2 && new Set(devices.map(d => d.family)).size === 2 && screenshots.length === 8);
+    stage = 'promotion';
     // Nothing is promoted until BOTH devices completed every assertion. No login/failure captures.
     mkdirSync(promoted);
     for (const s of screenshots) copyFileSync(s.file, join(promoted, `${s.family}-${s.name}`));
@@ -121,7 +125,7 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
     writeFileSync(join(output, 'store-capture.json'), text);
   } catch {
     rmSync(promoted, { recursive: true, force: true });
-    writeFileSync(join(output, 'store-capture.json'), '{"passed":false,"code":"private_capture_failed"}\n');
+    writeFileSync(join(output, 'store-capture.json'), JSON.stringify({ passed: false, code: 'private_capture_failed', stage }));
     throw new Error('Private screenshot capture failed; raw diagnostics withheld');
   } finally {
     if (active) run('xcrun', ['simctl', 'shutdown', active], { stdio: 'ignore', timeout: 30000 });

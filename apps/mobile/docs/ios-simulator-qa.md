@@ -61,14 +61,16 @@ four DEMO bills, two scoped payments and empty settlements through HTTPS login
 and GETs before UI login. Mobile history starts at Any date. It uses the real
 embedded app and server data, with no account/data edits, payment actions or
 purchases. Maestro password input can appear in diagnostics: all raw flows,
-logs, hierarchy, failure images and Maestro HOME are private runner-temporary
-siblings of the upload directory and are deleted on completion or failure.
+logs, hierarchy and failure images use private runner-temporary siblings of the
+upload directory and are deleted on completion or failure. Standard HOME is not
+changed; any CLI global state stays on the ephemeral runner with umask 077 and
+is never allowlisted for upload.
 No login or automatic final-screen image is published. Only after both devices
 pass all assertions are eight explicitly named post-auth PNGs promoted. Their
 native dimensions must match the accepted iPhone 1206×2622 and iPad 2048×2732 or
 2064×2752 sizes. There is no resizing, framing or fabricated data. The uploader
 uses an explicit allowlist; sanitized counts, source, devices, dimensions and
-hashes accompany the PNGs. Any failure publishes only a controlled failure code,
+hashes accompany the PNGs. Any failure publishes only a controlled failure code and stage,
 not raw authenticated diagnostics. Inspect these screenshots before store upload;
 this does not replace physical-device or production diagnostics acceptance.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture } from './ios-store-capture.mjs';
@@ -58,6 +58,8 @@ describe('private native demo screenshot boundaries', () => {
       expect(calls.some(c => c.command === 'maestro')).toBe(true);
       expect(calls.every(c => !JSON.stringify(c.args).includes(password))).toBe(true);
       expect(calls.filter(c => c.options.env?.MAESTRO_QA_REVIEWER_PASSWORD).map(c => c.command)).toEqual(['maestro']);
+      expect(JSON.parse(readFileSync(join(out, 'store-capture.json'), 'utf8')).stage).toBe('iphone-login');
+      expect(calls.every(c => !c.options.env || c.options.env.HOME === process.env.HOME)).toBe(true);
       expect(existsSync(join(out, 'store-screenshots'))).toBe(false);
       expect(readdirSync(root)).toEqual(['billmanager-ios-qa']);
     } finally { rmSync(root, { recursive: true }); }
