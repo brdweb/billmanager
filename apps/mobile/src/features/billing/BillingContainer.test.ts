@@ -63,3 +63,25 @@ it.each(['owner', 'member', 'android'] as const)('preserves provider portal role
   expect(mocks.request).toHaveBeenCalledTimes(kind === 'owner' ? 1 : 0);
   expect(mocks.openUrl).toHaveBeenCalledTimes(kind === 'owner' ? 1 : 0);
 });
+
+it('expires a retained portal callback when availability is revoked on the same account', async () => {
+  mocks.status = { can_manage_subscription: true };
+  await act(async () => { root.update(React.createElement(BillingContainer)); });
+  const retained = mocks.actions!.onOpenPortal;
+  mocks.status = { can_manage_subscription: false };
+  await act(async () => { root.update(React.createElement(BillingContainer)); });
+  await act(async () => { retained(); });
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+it('does not open a pending portal URL after provider management is revoked', async () => {
+  mocks.status = { can_manage_subscription: true };
+  await act(async () => { root.update(React.createElement(BillingContainer)); });
+  let finish!: (response: unknown) => void;
+  mocks.request.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  await act(async () => { mocks.actions!.onOpenPortal(); });
+  expect(mocks.request).toHaveBeenCalledOnce();
+  mocks.status = { can_manage_subscription: false };
+  await act(async () => { root.update(React.createElement(BillingContainer)); });
+  await act(async () => { finish({ success: true, data: { url: 'https://billing.stripe.com/unit' } }); });
+  expect(mocks.openUrl).not.toHaveBeenCalled();
+});
