@@ -8,6 +8,7 @@ import { useServerProfiles } from '../../context/ServerProfileContext';
 import type { ApiResponse, Bill } from '../../types';
 import { useActionScope } from '../useActionScope';
 import { hasSettlementPreconditions } from './attemptLedger';
+import { newerBillSnapshot } from './billSnapshot';
 
 /** Detail changes express a desired state, never a toggle. Unknown retries pin the original intent. */
 export function useSharePaymentAction(
@@ -56,6 +57,13 @@ export function useSharePaymentAction(
       active.databaseId === scope.databaseId
     );
   };
+  // After resolution, adopt runtime snapshots only when both versions are at
+  // least as new as the authoritative read. Keep this watermark so later cache
+  // replays cannot regress the display or the next intent. Unresolved intents
+  // always retain their original display/versions regardless of runtime updates.
+  if (!session.intent && session.fresh) {
+    session.fresh = newerBillSnapshot(bill, session.fresh);
+  }
   // Keep the amount, occurrence and paid label the user acted on visible across uncertain retries.
   const displayedBill = session.intent?.bill ?? session.fresh ?? bill;
   const refresh = async () => {

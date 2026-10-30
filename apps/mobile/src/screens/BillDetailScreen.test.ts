@@ -341,3 +341,22 @@ it('expires retained actions when the mounted detail changes bill', async () => 
   });
   expect(m.posts).not.toHaveBeenCalled();
 });
+
+it('adopts newer runtime versions after refresh and rejects older replay at microsecond precision', async () => {
+  m.posts.mockResolvedValue({ success: true });
+  m.read.mockResolvedValue({ success: true, data: bill(true, '2026-10-29T12:00:00.123455+00:00') });
+  await press();
+  m.bill = { ...bill(false, '2026-10-29T12:00:00.123456+00:00'), amount: 40, next_due: '2026-11-29' };
+  await update();
+  const visible = () => root.root.findAllByType('Text').map((node: any) => node.children.join(''));
+  expect(visible()).toContain('-40');
+  expect(visible()).toContain('2026-11-29');
+  expect(button().findAllByType('Text')[0].props.children).toBe('common.markMyPortionPaid');
+  m.bill = { ...bill(true, '2026-10-29T12:00:00.123455Z'), amount: 20 };
+  await update();
+  expect(visible()).toContain('-40');
+  expect(visible()).toContain('2026-11-29');
+  m.posts.mockResolvedValue({ success: false, error: 'unknown' });
+  await press();
+  expect(m.posts.mock.calls[1][3]).toMatchObject({ desiredPaid: true, baseUpdatedAt: '2026-10-29T12:00:00.123456+00:00', baseBillUpdatedAt: '2026-10-29T12:00:00.123456+00:00', expectedDueDate: '2026-11-29' });
+});
