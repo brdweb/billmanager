@@ -43,6 +43,7 @@ describe('server capability negotiation', () => {
       sharing: true,
       settlements: true,
       settlementPaymentPreconditions: false,
+      settlementPaymentDesiredState: false,
     });
   });
 
@@ -83,6 +84,15 @@ describe('server capability negotiation', () => {
     expect(parseServerCapabilities({ mobile: { ...payload.mobile, features: {
       settlements: true, settlement_payment_preconditions: true,
     } } }).settlementPaymentPreconditions).toBe(true);
+  });
+
+  it('requires explicit desired-state support independently of the original payment guard', () => {
+    expect(parseServerCapabilities({ mobile: { mobile_contract_version: 1, features: {
+      settlement_payment_preconditions: true,
+    } } }).settlementPaymentDesiredState).toBe(false);
+    expect(parseServerCapabilities({ mobile: { mobile_contract_version: 1, features: {
+      settlement_payment_desired_state: true,
+    } } }).settlementPaymentDesiredState).toBe(true);
   });
 
 });

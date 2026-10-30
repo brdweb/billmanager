@@ -28,6 +28,7 @@ import {
   parseMoneyInput,
 } from '../i18n/format';
 import { Bill, Payment } from '../types';
+import { useSharePaymentAction } from '../features/settlements/useSharePaymentAction';
 import ShareBillModal from '../components/ShareBillModal';
 import { useTranslation } from 'react-i18next';
 
@@ -49,8 +50,10 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   const { billId } = route.params;
   const { colors } = useTheme();
   const runtime = useMobileRuntime();
-  const bill = [...runtime.bills, ...runtime.archivedBills]
+  const cachedBill = [...runtime.bills, ...runtime.archivedBills]
     .find((candidate) => candidate.id === billId) ?? null;
+  const sharePayment = useSharePaymentAction(billId, cachedBill, runtime.online, runtime.syncNow);
+  const bill = sharePayment.bill;
   const payments = runtime.payments.filter((payment) => payment.bill_id === billId);
   const [showPayModal, setShowPayModal] = useState(false);
   const [payAmount, setPayAmount] = useState('');
@@ -104,22 +107,6 @@ export default function BillDetailScreen({ route, navigation }: Props) {
       Alert.alert(t('mobileParity.common.success'), t('mobileParity.billDetail.recorded'));
     } catch (reason) {
       Alert.alert(t('mobileParity.common.error'), reason instanceof Error ? reason.message : t('mobileParity.billDetail.recordFailed'));
-    }
-    setIsSubmitting(false);
-  };
-
-  const handleMarkPortionPaid = async () => {
-    if (!bill?.share_info) return;
-
-    setIsSubmitting(true);
-    const result = await api.markSharePaid(bill.share_info.share_id);
-
-    if (result.success) {
-      await runtime.syncNow().catch(() => null);
-      const wasPaid = bill.share_info.my_portion_paid;
-      Alert.alert(t('mobileParity.common.success'), wasPaid ? t('mobileParity.billDetail.markedUnpaid') : t('mobileParity.billDetail.markedPaid'));
-    } else {
-      Alert.alert(t('mobileParity.common.error'), result.error || t('mobileParity.billDetail.updateFailed'));
     }
     setIsSubmitting(false);
   };
@@ -388,10 +375,10 @@ export default function BillDetailScreen({ route, navigation }: Props) {
 
             <TouchableOpacity
               style={[styles.markPaidButton, bill.share_info.my_portion_paid && styles.markUnpaidButton]}
-              onPress={handleMarkPortionPaid}
-              disabled={isSubmitting}
+              onPress={sharePayment.onPress}
+              disabled={sharePayment.busy || isSubmitting}
             >
-              {isSubmitting ? (
+              {sharePayment.busy ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <Text style={styles.markPaidButtonText}>

@@ -3480,7 +3480,7 @@ components:
           type: integer
         reason:
           type: string
-          enum: [modified, occurrence_changed, already_paid]
+          enum: [modified, occurrence_changed, already_paid, already_unpaid]
         base_updated_at:
           type: string
           format: date-time
@@ -3515,6 +3515,13 @@ components:
         - $ref: '#/components/schemas/MutationControl'
         - type: object
           properties:
+            desired_paid:
+              type: boolean
+              description: >-
+                Explicit desired payment state. Requires client_mutation_id and
+                all guarded preconditions; never toggles a matching state.
+                Requires settlement_payment_desired_state support. Omission in a
+                guarded request preserves Mark paid intent.
             base_bill_updated_at:
               type: string
               format: date-time
@@ -3525,7 +3532,7 @@ components:
               description: >-
                 Optional guarded mark-paid intent for this occurrence. Requires
                 base_updated_at and base_bill_updated_at. Checks the current bill due date and version under row locks
-                and never unmarks an already-paid share. Omission preserves legacy
+                and only changes to the desired state (paid when desired_paid is omitted). Omission preserves legacy
                 toggle behavior. Requires settlement_payment_preconditions support.
 
     ObjectDataResponse:
@@ -3828,6 +3835,7 @@ components:
             sharing: {type: boolean}
             settlements: {type: boolean}
             settlement_payment_preconditions: {type: boolean}
+            settlement_payment_desired_state: {type: boolean}
             telemetry: {type: boolean}
             delta_sync: {type: boolean}
             idempotent_mutations: {type: boolean}
@@ -4040,6 +4048,10 @@ components:
             share_id:
               type: integer
               description: ID of the share record
+            share_updated_at:
+              type: string
+              format: date-time
+              nullable: true
             owner_name:
               type: string
               description: Username of the bill owner

@@ -1924,7 +1924,7 @@ export interface components {
             entity: "bill" | "payment" | "share";
             entity_id: number;
             /** @enum {string} */
-            reason: "modified" | "occurrence_changed" | "already_paid";
+            reason: "modified" | "occurrence_changed" | "already_paid" | "already_unpaid";
             /** Format: date-time */
             base_updated_at?: string;
             /** Format: date-time */
@@ -1949,6 +1949,8 @@ export interface components {
             base_updated_at?: string;
         };
         SharePaidMutationInput: components["schemas"]["MutationControl"] & {
+            /** @description Explicit desired payment state. Requires client_mutation_id and all guarded preconditions; never toggles a matching state. Requires settlement_payment_desired_state support. Omission in a guarded request preserves Mark paid intent. */
+            desired_paid?: boolean;
             /**
              * Format: date-time
              * @description Original bill_updated_at version; required with expected_due_date.
@@ -1956,7 +1958,7 @@ export interface components {
             base_bill_updated_at?: string;
             /**
              * Format: date
-             * @description Optional guarded mark-paid intent for this occurrence. Requires base_updated_at and base_bill_updated_at. Checks the current bill due date and version under row locks and never unmarks an already-paid share. Omission preserves legacy toggle behavior. Requires settlement_payment_preconditions support.
+             * @description Optional guarded mark-paid intent for this occurrence. Requires base_updated_at and base_bill_updated_at. Checks the current bill due date and version under row locks and only changes to the desired state (paid when desired_paid is omitted). Omission preserves legacy toggle behavior. Requires settlement_payment_preconditions support.
              */
             expected_due_date?: string;
         };
@@ -2137,6 +2139,7 @@ export interface components {
                 sharing: boolean;
                 settlements: boolean;
                 settlement_payment_preconditions?: boolean;
+                settlement_payment_desired_state?: boolean;
                 telemetry: boolean;
                 delta_sync: boolean;
                 idempotent_mutations: boolean;
@@ -2241,6 +2244,8 @@ export interface components {
             share_info?: {
                 /** @description ID of the share record */
                 share_id?: number;
+                /** Format: date-time */
+                share_updated_at?: string | null;
                 /** @description Username of the bill owner */
                 owner_name?: string;
                 /** @description Amount the recipient owes */
