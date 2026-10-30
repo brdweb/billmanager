@@ -80,7 +80,7 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
   const promoted = join(output, 'store-screenshots');
   rmSync(promoted, { recursive: true, force: true });
   const privateDir = mkdtempSync(join(runnerTemp, 'billmanager-ios-private-')); // umask 077
-  const env = { ...process.env, MAESTRO_CLI_NO_ANALYTICS: '1' }; delete env.QA_REVIEWER_PASSWORD;
+  const env = { ...process.env, MAESTRO_CLI_NO_ANALYTICS: 'true' }; delete env.QA_REVIEWER_PASSWORD;
   const execute = (command, args, secrets = false) => {
     const result = run(command, args, { cwd: privateDir, env: secrets ? { ...env, MAESTRO_QA_REVIEWER_PASSWORD: password } : env,
       encoding: 'utf8', timeout: 180000, maxBuffer: 16 * 1024 * 1024 });

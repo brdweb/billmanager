@@ -56,6 +56,7 @@ describe('private native demo screenshot boundaries', () => {
         calls.push({ command, args, options }); return { status: command === 'maestro' ? 1 : 0, stdout: password, stderr: 'Bearer fixture-token' };
       } })).rejects.toThrow('raw diagnostics withheld');
       expect(calls.some(c => c.command === 'maestro')).toBe(true);
+      expect(calls.filter(c => c.command === 'maestro').every(c => c.options.env.MAESTRO_CLI_NO_ANALYTICS === 'true')).toBe(true);
       expect(calls.every(c => !JSON.stringify(c.args).includes(password))).toBe(true);
       expect(calls.filter(c => c.options.env?.MAESTRO_QA_REVIEWER_PASSWORD).map(c => c.command)).toEqual(['maestro']);
       expect(JSON.parse(readFileSync(join(out, 'store-capture.json'), 'utf8')).stage).toBe('iphone-login');
