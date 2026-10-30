@@ -49,3 +49,18 @@ it('keeps self-hosted billing unlimited with no purchase action', async () => {
   expect(screen.queryByRole('button', { name: 'Get Pro' })).not.toBeInTheDocument();
   expect(screen.getByText('Unlimited family members and users')).toBeInTheDocument();
 });
+
+
+it.each([false, undefined])('does not offer Manage for local Pro without explicit provider availability (%s)', async (availability) => {
+  mocks.getSubscriptionStatus.mockResolvedValue({ has_subscription: true, is_active: true,
+    status: 'active', effective_tier: 'pro', can_manage_subscription: availability });
+  show();
+  await screen.findByText('Current Plan');
+  expect(screen.queryByRole('button', { name: 'Manage Subscription' })).not.toBeInTheDocument();
+});
+it('retains Manage for an eligible provider customer', async () => {
+  mocks.getSubscriptionStatus.mockResolvedValue({ has_subscription: true, status: 'active',
+    effective_tier: 'pro', can_manage_subscription: true });
+  show();
+  expect(await screen.findByRole('button', { name: 'Manage Subscription' })).toBeInTheDocument();
+});

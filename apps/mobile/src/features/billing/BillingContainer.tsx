@@ -45,6 +45,8 @@ export default function BillingContainer() {
       ? 'trialing'
       : subscription?.status ?? (subscription?.has_subscription ? 'active' : 'free');
   const actionScope = useActionScope(JSON.stringify([activeProfile.id, user?.id]));
+  const portalScope = useActionScope(JSON.stringify([activeProfile.id, user?.id,
+    Boolean(user?.is_account_owner), subscription?.can_manage_subscription === true]));
   const isActionCurrent = () => {
     const active = api.captureAuthSessionScope();
     return actionScope.isActive() && active.serverProfileId === requestedScope.serverProfileId
@@ -53,9 +55,9 @@ export default function BillingContainer() {
   const purchasesAllowed = allowsExternalPurchases(Platform.OS);
   const plans = proPlans(t, tier, subscription?.billing_interval);
 
-  const runAction = (request: () => ReturnType<typeof api.createPortalSession>, failureKey: string) => runBillingAction({
+  const runAction = (request: () => ReturnType<typeof api.createPortalSession>, failureKey: string, portal = false) => runBillingAction({
     gate: actionScope.gate,
-    isActive: isActionCurrent,
+    isActive: () => isActionCurrent() && (!portal || portalScope.isActive()),
     allowed: purchasesAllowed && Boolean(user?.is_account_owner) && runtime.online && !selfHosted,
     isCurrent: () => api.isPrincipalScopeAuthenticated(requestedScope),
     request,
@@ -68,7 +70,10 @@ export default function BillingContainer() {
     const interval = planId.endsWith('-month') ? 'monthly' : 'annual';
     return runAction(() => api.createCheckoutSession('pro', interval, requestedScope), 'mobileParity.billing.checkoutFailed');
   };
-  const openPortal = () => runAction(() => api.createPortalSession(requestedScope), 'mobileParity.billing.portalFailed');
+  const openPortal = () => {
+    if (subscription?.can_manage_subscription !== true) return;
+    return runAction(() => api.createPortalSession(requestedScope), 'mobileParity.billing.portalFailed', true);
+  };
 
   return (
     <BillingScreen
@@ -101,6 +106,7 @@ export default function BillingContainer() {
         })),
         plans: selfHosted || !purchasesAllowed ? [] : plans,
         canManageBilling: purchasesAllowed && Boolean(user?.is_account_owner),
+        canOpenPortal: subscription?.can_manage_subscription === true,
         actionBusy: actionScope.busy,
         refreshing: query.isFetching,
       }}

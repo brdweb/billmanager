@@ -716,6 +716,7 @@ export interface TierLimits {
 
 export interface SubscriptionStatus {
   has_subscription: boolean;
+  can_manage_subscription?: boolean;
   status?: string;
   plan?: string;
   tier?: string;

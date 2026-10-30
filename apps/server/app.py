@@ -65,6 +65,7 @@ from services.email import (
 from services.stripe_service import (
     create_checkout_session,
     create_portal_session,
+    is_portal_configured,
     construct_webhook_event,
     get_subscription,
     cancel_subscription,
@@ -2098,6 +2099,7 @@ def billing_status():
                 "data": {
                     "status": "none",
                     "has_subscription": False,
+                    "can_manage_subscription": False,
                     "is_active": False,
                     "is_trialing": False,
                     "tier": "free",
@@ -2118,6 +2120,8 @@ def billing_status():
             "data": {
                 "status": subscription.status,
                 "has_subscription": True,
+                "can_manage_subscription": bool(is_saas() and user.is_account_owner
+                    and subscription.stripe_customer_id and is_portal_configured()),
                 "is_active": subscription.is_active,
                 "is_trialing": subscription.is_trialing,
                 "is_trial_expired": subscription.is_trial_expired,

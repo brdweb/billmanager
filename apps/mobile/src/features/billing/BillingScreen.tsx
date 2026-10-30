@@ -168,7 +168,7 @@ export default function BillingScreen({ model, actions, platform = Platform.OS =
                 <View style={styles.titleWithIcon}><Text style={[typography.section, { color: theme.colors.text }]}>{model.subscription.planName}</Text><View style={[styles.badge, { backgroundColor: model.subscription.state === 'past_due' ? theme.colors.accentContainer : theme.colors.surfaceMuted }]}><Text style={[typography.caption, { color: model.subscription.state === 'past_due' ? theme.colors.accent : theme.colors.textSecondary }]}>{localizedSubscriptionState(t, model.subscription.state)}</Text></View></View>
                 <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{model.subscription.renewalLabel ?? model.subscription.cancelAtLabel ?? t('mobileParity.billing.noRenewal')}</Text>
               </View>
-              {allowsExternalPurchases(platform) && model.canManageBilling ? (
+              {allowsExternalPurchases(platform) && model.canManageBilling && model.canOpenPortal ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('mobileParity.billing.openPortalA11y')}

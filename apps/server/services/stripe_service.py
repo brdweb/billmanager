@@ -160,13 +160,18 @@ def create_checkout_session(
         return {'error': 'Payment service error. Please try again.'}
 
 
+def is_portal_configured() -> bool:
+    """Local capability check only; never contact the provider or expose keys."""
+    return bool(STRIPE_AVAILABLE and STRIPE_SECRET_KEY)
+
+
 def create_portal_session(customer_id: str) -> dict:
     """
     Create a Stripe Customer Portal session for subscription management.
 
     Returns dict with 'url' for redirect or 'error' on failure.
     """
-    if not STRIPE_AVAILABLE or not STRIPE_SECRET_KEY:
+    if not is_portal_configured():
         return {'error': 'Stripe not configured'}
 
     stripe.api_key = STRIPE_SECRET_KEY

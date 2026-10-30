@@ -179,6 +179,7 @@ export interface DatabaseWithAccess extends DatabaseInfo {
 // Subscription types
 export interface SubscriptionStatus {
   has_subscription: boolean;
+  can_manage_subscription?: boolean;
   status?: 'active' | 'canceled' | 'past_due' | 'trialing';
   tier?: 'free' | 'pro' | 'basic' | 'plus';
   effective_tier: 'free' | 'pro' | 'basic' | 'plus';

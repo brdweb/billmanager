@@ -46,6 +46,7 @@ export interface BillingViewModel {
   usage: BillingUsageItem[];
   plans: BillingPlanItem[];
   canManageBilling: boolean;
+  canOpenPortal: boolean;
   actionBusy?: boolean;
   refreshing?: boolean;
 }

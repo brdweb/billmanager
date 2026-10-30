@@ -2214,7 +2214,7 @@ paths:
           description: Subscription status
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/ObjectDataResponse'}
+              schema: {$ref: '#/components/schemas/SubscriptionStatusResponse'}
         '401': {$ref: '#/components/responses/Unauthorized'}
 
   /webhooks/stripe:
@@ -3534,6 +3534,24 @@ components:
                 base_updated_at and base_bill_updated_at. Checks the current bill due date and version under row locks
                 and only changes to the desired state (paid when desired_paid is omitted). Omission preserves legacy
                 toggle behavior. Requires settlement_payment_preconditions support.
+
+    SubscriptionStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/ObjectDataResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [has_subscription, can_manage_subscription]
+              additionalProperties: true
+              properties:
+                has_subscription: {type: boolean}
+                can_manage_subscription:
+                  type: boolean
+                  description: >-
+                    Account owner has a provider customer and configured customer
+                    portal access. Local subscription entitlements alone do not
+                    imply management availability. No provider identifiers exposed.
 
     ObjectDataResponse:
       type: object
