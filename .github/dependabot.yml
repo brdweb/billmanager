@@ -31,6 +31,9 @@ updates:
       - dependency-name: "@expo/*"
       - dependency-name: react
       - dependency-name: react-dom
+      # react-test-renderer peers on the exact react version, so it must move
+      # with react through `npx expo install`, not as an independent bump.
+      - dependency-name: react-test-renderer
       - dependency-name: "react-native*"
       - dependency-name: "@react-native-community/*"
       - dependency-name: "@shopify/react-native-skia"
