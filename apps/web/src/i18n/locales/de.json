@@ -932,7 +932,7 @@
     "proFeature4": "Export nach CSV/PDF",
     "proFeature5": "Vollständige Analysen",
     "getPro": "Pro wählen",
-    "trialFooter": "Neue Konten starten mit einer 30-tägigen kostenlosen Testphase, ohne Zahlungsmethode. Mit dem Abonnement beginnt die kostenpflichtige Abrechnung sofort.",
+    "trialFooter": "Neue Konten starten mit einer 30-tägigen kostenlosen Testphase, ohne Zahlungsmethode. Ein Abonnement während der Testphase beendet diese und startet sofort die kostenpflichtige Abrechnung.",
     "renewalDisclosureMonthly": "{{price}} pro Monat, fällig bei Abschluss. Ihr Abonnement verlängert sich automatisch jeden Monat, bis Sie kündigen. Kündigen Sie jederzeit über „Abonnement verwalten“ im Abrechnungsportal.",
     "renewalDisclosureAnnual": "{{price}} pro Jahr, fällig bei Abschluss. Ihr Abonnement verlängert sich automatisch jedes Jahr, bis Sie kündigen. Kündigen Sie jederzeit über „Abonnement verwalten“ im Abrechnungsportal.",
     "renewalLegal": "Mit dem Abonnement stimmen Sie den <termsLink>AGB</termsLink> und der <privacyLink>Datenschutzrichtlinie</privacyLink> zu.",

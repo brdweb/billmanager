@@ -48,13 +48,14 @@ const PRICING = {
 export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'cancel' } = {}) {
   const { t } = useTranslation();
   const { isSelfHosted } = useConfig();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [status, setStatus] = useState<SubscriptionStatus | null>(null);
   const [usage, setUsage] = useState<BillingUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('monthly');
+  const [checkoutConfirmed, setCheckoutConfirmed] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -93,6 +94,17 @@ export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'canc
     awaitingCheckout && !loading && !paidPro,
     handlePolledStatus
   );
+
+  // Once Pro is confirmed, drop session_id so a reload or Back does not replay activation.
+  useEffect(() => {
+    if (!awaitingCheckout || !paidPro) return;
+    setCheckoutConfirmed(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('session_id');
+      return next;
+    }, { replace: true });
+  }, [awaitingCheckout, paidPro, setSearchParams]);
 
   const handleSubscribe = async (tier: 'pro') => {
     setActionLoading(true);
@@ -189,15 +201,18 @@ export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'canc
     );
   }
 
+  // A canceled checkout leaves a 'pending' row for users who had none; it is not a subscription.
+  const hasSubscription = status?.has_subscription === true && status.status !== 'pending';
+
   const getStatusBadge = () => {
-    if (!status?.has_subscription) {
+    if (!hasSubscription) {
       if (status?.is_trialing) {
         return <Badge color="blue" size="lg">{t('billingPage.statusFreeTrial')}</Badge>;
       }
       return <Badge color="gray" size="lg">{t('billingPage.statusFree')}</Badge>;
     }
 
-    switch (status.status) {
+    switch (status?.status) {
       case 'active':
         return <Badge color="green" size="lg">{t('billingPage.statusActive')}</Badge>;
       case 'trialing':
@@ -207,7 +222,7 @@ export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'canc
       case 'canceled':
         return <Badge color="red" size="lg">{t('billingPage.statusCanceled')}</Badge>;
       default:
-        return <Badge color="gray" size="lg">{status.status}</Badge>;
+        return <Badge color="gray" size="lg">{status?.status}</Badge>;
     }
   };
 
@@ -250,8 +265,8 @@ export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'canc
         </Alert>
       )}
 
-      {awaitingCheckout && (
-        <CheckoutSuccessNotice active={paidPro} timedOut={activation.timedOut} onRetry={activation.retry} />
+      {(awaitingCheckout || checkoutConfirmed) && (
+        <CheckoutSuccessNotice active={paidPro || checkoutConfirmed} timedOut={activation.timedOut} onRetry={activation.retry} />
       )}
       {checkoutResult === 'cancel' && <CheckoutCanceledNotice />}
 
@@ -284,7 +299,7 @@ export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'canc
             <Text c="dimmed">{t('billingPage.currentTierLabel')}</Text>
             <Text fw={500}>{formatTierName(status?.effective_tier)}</Text>
           </Group>
-          {status?.has_subscription && (
+          {hasSubscription && status && (
             <>
               <Group justify="space-between">
                 <Text c="dimmed">{t('billingPage.billingLabel')}</Text>
@@ -353,7 +368,7 @@ export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'canc
       )}
 
       {/* Pricing is available to Free users and trial subscribers, but not while a purchase activates. */}
-      {(!status?.has_subscription || status.is_trialing) && !awaitingCheckout && (
+      {(!hasSubscription || status?.is_trialing) && !awaitingCheckout && (
         <>
           <Group justify="center" mb="lg">
             <SegmentedControl
