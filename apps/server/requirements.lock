@@ -164,7 +164,7 @@ requests==2.34.2
     #   resend
     #   responses
     #   stripe
-resend==2.50.0
+resend==2.50.1
     # via -r apps/server/requirements.txt
 responses==0.26.3
     # via -r apps/server/requirements.txt
@@ -182,7 +182,7 @@ sqlalchemy==2.0.54
     #   flask-sqlalchemy
 stevedore==5.9.1
     # via bandit
-stripe==16.0.0
+stripe==16.1.0
     # via -r apps/server/requirements.txt
 tomli==2.4.1
     # via pip-audit
