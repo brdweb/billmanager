@@ -68,13 +68,23 @@ export async function verifyDemo(password, request = fetch) {
 const absentAuth = [{ assertNotVisible: { id: 'auth-login-screen' } }, { assertNotVisible: { text: '^Password$' } }];
 const wait = text => ({ extendedWaitUntil: { visible: { text }, timeout: 30000 } });
 const route = path => ({ openLink: `billmanager://${path}` });
+// Each login step is a labelled runFlow so a failure can be attributed to a fixed
+// step name without publishing raw output. Selectors exist in the shipped build 16
+// source (81a9e78): the field Text label precedes the accessible TextInput, and
+// the "Sign in" header precedes the button. hideKeyboard is unreliable on iOS, so
+// Return on the password field submits through onSubmitEditing and blurs it.
+export const LOGIN_STEPS = ['launch', 'username', 'password', 'submit', 'post-login', 'deep-link'];
+const STEP_LABEL = 'qa-login-step-';
+const step = (name, commands) => ({ runFlow: { label: STEP_LABEL + name, commands } });
 export const loginCommands = [
-  { launchApp: { clearState: true } }, { extendedWaitUntil: { visible: { id: 'auth-login-screen' }, timeout: 30000 } },
-  { tapOn: { text: '^Username$', index: 1 } }, { inputText: 'store-review' },
-  { tapOn: { text: '^Password$', index: 1 } }, { inputText: '${MAESTRO_QA_REVIEWER_PASSWORD}' },
-  { hideKeyboard: {} }, { tapOn: { text: '^Sign in$', index: 1 } },
-  { extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 30000 } },
-  route('bills'), wait('.*DEMO Rent.*'), ...absentAuth,
+  step('launch', [{ launchApp: { clearState: true } }, { extendedWaitUntil: { visible: { id: 'auth-login-screen' }, timeout: 60000 } },
+    { assertVisible: { text: '^Username$' } }, { assertVisible: { text: '^Password$' } }]),
+  step('username', [{ tapOn: { text: '^Username$', index: 1 } }, { inputText: 'store-review' }]),
+  step('password', [{ tapOn: { text: '^Password$', index: 1 } }, { inputText: '${MAESTRO_QA_REVIEWER_PASSWORD}' }]),
+  // An enabled Sign in button disappears once submission starts (busy) or the screen leaves.
+  step('submit', [{ pressKey: 'Enter' }, { extendedWaitUntil: { notVisible: { text: '^Sign in$', index: 1, enabled: true }, timeout: 15000 } }]),
+  step('post-login', [{ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } }]),
+  step('deep-link', [route('bills'), { extendedWaitUntil: { visible: { text: '.*DEMO Rent.*' }, timeout: 60000 } }, ...absentAuth]),
 ];
 export const captureCommands = [
   route('bills'), ...NAMES.map(name => wait(`.*${name}.*`)), ...absentAuth, { takeScreenshot: 'bills' },
@@ -83,6 +93,8 @@ export const captureCommands = [
   route('settings/billing'), wait('Plan and billing'), wait('.*Pro.*'),
   { assertNotVisible: { text: 'Open billing portal' } }, ...absentAuth, { takeScreenshot: 'billing' },
 ];
+// Driver start-up plus every bounded in-flow wait, with headroom.
+export const LOGIN_TIMEOUT_MS = 420000, CAPTURE_TIMEOUT_MS = 360000;
 const EXPECTED = ['bills.png', 'payment-history.png', 'settlements.png', 'billing.png'];
 export function safeScreenshots(directory, family) {
   const found = [];
@@ -106,33 +118,49 @@ export function safeScreenshots(directory, family) {
 // Only fixed enum labels and bounded numeric ordinals leave the private directory.
 export function safeCommandFailure(directory, result) {
   const kinds = ['tapOnElement', 'assertConditionCommand', 'inputTextCommand', 'launchAppCommand',
-    'applyConfigurationCommand', 'openLinkCommand', 'hideKeyboardCommand', 'takeScreenshotCommand'];
+    'applyConfigurationCommand', 'openLinkCommand', 'hideKeyboardCommand', 'takeScreenshotCommand',
+    'pressKeyCommand', 'runFlowCommand'];
   const processOutcome = result.error?.code === 'ETIMEDOUT' ? 'timeout'
     : result.error?.code === 'ENOBUFS' ? 'output_limit' : result.error ? 'launch_failed' : 'nonzero_exit';
   const report = { process: processOutcome, exitCode: Number.isInteger(result.status) ? result.status : null };
-  const pending = [];
+  const pending = [], steps = [];
+  const stepOf = label => LOGIN_STEPS.find(name => label === STEP_LABEL + name);
   const walk = path => {
     for (const name of readdirSync(path)) {
       const file = join(path, name), stat = lstatSync(file);
       if (stat.isSymbolicLink()) continue;
       if (stat.isDirectory()) walk(file);
       else if (/^commands(?:-.*)?\.json$/.test(name) && stat.size <= 2_000_000) {
-        const rows = JSON.parse(readFileSync(file, 'utf8'));
+        let rows;
+        try { rows = JSON.parse(readFileSync(file, 'utf8')); } catch { continue; }
         if (!Array.isArray(rows) || rows.length > 1000) continue;
         rows.forEach((row, index) => {
           if (!['FAILED', 'RUNNING'].includes(row?.metadata?.status)) return;
-          pending.push({ ordinal: index + 1, type: kinds.find(kind => row.command?.[kind] != null) ?? 'unknown', status: row.metadata.status });
+          const type = kinds.find(kind => row.command?.[kind] != null) ?? 'unknown';
+          pending.push({ ordinal: index + 1, type, status: row.metadata.status });
+          const labelled = type === 'runFlowCommand' ? stepOf(row.command.runFlowCommand.label) : undefined;
+          if (labelled) steps.push(labelled);
         });
       }
     }
   };
   try { walk(directory); } catch { /* Missing/truncated debug output is not evidence. */ }
-  const command = pending.find(row => row.status === 'FAILED') ?? pending.at(-1);
+  // Nested commands follow their runFlow parent; report the innermost failed command.
+  const failed = pending.filter(row => row.status === 'FAILED');
+  const command = failed.findLast(row => row.type !== 'runFlowCommand') ?? failed.at(-1) ?? pending.at(-1);
   if (command) report.command = command;
   const raw = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
-  report.category = /Element not found|No elements found/i.test(raw) ? 'element_not_found'
-    : /Failed to parse|Unable to parse|Invalid YAML|Unrecognized field/i.test(raw) ? 'flow_parse'
-      : /Failed to (?:start|connect to).*driver|Unable to connect to.*driver/i.test(raw) ? 'driver_unavailable' : 'unclassified';
+  report.category = /Element not found|No elements found|No visible element found/i.test(raw) ? 'element_not_found'
+    : /Assertion is false/i.test(raw) ? 'assertion_false'
+      : /Couldn't hide the keyboard/i.test(raw) ? 'keyboard_not_hidden'
+        : /Unable to launch app/i.test(raw) ? 'app_launch_failed'
+          : /Failed to parse|Unable to parse|Invalid YAML|Unrecognized field/i.test(raw) ? 'flow_parse'
+            : /Failed to (?:start|connect to).*driver|Unable to connect to.*driver/i.test(raw) ? 'driver_unavailable' : 'unclassified';
+  // Plain console output prints each labelled step when it starts; the latest one
+  // started is the step that was running. Only fixed step names are published.
+  const started = [...raw.matchAll(/qa-login-step-([a-z-]+?)(?![a-z-])/g)].map(match => LOGIN_STEPS.indexOf(match[1])).filter(i => i >= 0);
+  if (steps.length) Object.assign(report, { step: steps.at(-1), stepSource: 'command_report' });
+  else if (started.length) Object.assign(report, { step: LOGIN_STEPS[Math.max(...started)], stepSource: 'console' });
   return report;
 }
 
@@ -182,9 +210,9 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
       });
       const deviceDir = join(privateDir, device.family); mkdirSync(deviceDir);
       stage = `${device.family}-login`;
-      execute('maestro', ['--device', active, 'test', login, '--test-output-dir', join(deviceDir, 'login'), '--debug-output', join(deviceDir, 'login-debug')], true);
+      execute('maestro', ['--device', active, 'test', login, '--test-output-dir', join(deviceDir, 'login'), '--debug-output', join(deviceDir, 'login-debug')], true, LOGIN_TIMEOUT_MS);
       stage = `${device.family}-read-only-capture`;
-      execute('maestro', ['--device', active, 'test', capture, '--test-output-dir', join(deviceDir, 'capture'), '--debug-output', join(deviceDir, 'capture-debug')]);
+      execute('maestro', ['--device', active, 'test', capture, '--test-output-dir', join(deviceDir, 'capture'), '--debug-output', join(deviceDir, 'capture-debug')], false, CAPTURE_TIMEOUT_MS);
       stage = `${device.family}-png-validation`;
       screenshots.push(...safeScreenshots(join(deviceDir, 'capture'), device.family).map(s => ({ ...s, family: device.family })));
       stage = `${device.family}-shutdown`;
