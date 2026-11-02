@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import {
   Container,
   Paper,
@@ -34,14 +34,21 @@ import * as api from '../api/client';
 import type { SubscriptionStatus, BillingUsage } from '../api/client';
 import { useConfig } from '../context/ConfigContext';
 import { formatCurrencyFor, getLocale } from '../lib/currency';
+import { isPaidPro, useCheckoutActivation } from '../hooks/useCheckoutActivation';
+import {
+  CheckoutCanceledNotice,
+  CheckoutSuccessNotice,
+  ProRenewalDisclosure,
+} from '../components/Billing/CheckoutNotices';
 
 const PRICING = {
   pro: { monthly: 2.99, annual: 24 },
 };
 
-export function Billing() {
+export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'cancel' } = {}) {
   const { t } = useTranslation();
   const { isSelfHosted } = useConfig();
+  const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<SubscriptionStatus | null>(null);
   const [usage, setUsage] = useState<BillingUsage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,6 +79,20 @@ export function Billing() {
     }
     void fetchData();
   }, [fetchData, isSelfHosted]);
+
+  // Stripe returns to /billing/success?session_id=...; without it, show the normal page.
+  const awaitingCheckout = checkoutResult === 'success' && !isSelfHosted && searchParams.has('session_id');
+  const paidPro = isPaidPro(status);
+  const handlePolledStatus = useCallback((next: SubscriptionStatus) => {
+    setStatus(next);
+    if (isPaidPro(next)) {
+      api.getBillingUsage().then(setUsage).catch(() => undefined);
+    }
+  }, []);
+  const activation = useCheckoutActivation(
+    awaitingCheckout && !loading && !paidPro,
+    handlePolledStatus
+  );
 
   const handleSubscribe = async (tier: 'pro') => {
     setActionLoading(true);
@@ -229,6 +250,11 @@ export function Billing() {
         </Alert>
       )}
 
+      {awaitingCheckout && (
+        <CheckoutSuccessNotice active={paidPro} timedOut={activation.timedOut} onRetry={activation.retry} />
+      )}
+      {checkoutResult === 'cancel' && <CheckoutCanceledNotice />}
+
       {/* Current Plan Status */}
       <Paper withBorder shadow="md" p="lg" radius="md" mb="lg">
         <Group justify="space-between" mb="md">
@@ -239,13 +265,14 @@ export function Billing() {
           {getStatusBadge()}
         </Group>
 
-        {status?.is_trial_expired && (
+        {/* Do not prompt for another purchase while a completed checkout activates. */}
+        {status?.is_trial_expired && !awaitingCheckout && (
           <Alert icon={<IconAlertCircle size={16} />} color="orange" variant="light" mb="md">
             {t('billingPage.trialExpiredAlert')}
           </Alert>
         )}
 
-        {status?.is_trialing && !status.is_trial_expired && status.trial_days_remaining !== undefined && (
+        {status?.is_trialing && !status.is_trial_expired && status.trial_days_remaining !== undefined && !awaitingCheckout && (
           <Alert icon={<IconCalendar size={16} />} color="blue" variant="light" mb="md">
             {t('billingPage.trialRemainingAlert', { count: status.trial_days_remaining })}
             {status.trial_days_remaining <= 3 && ` ${t('billingPage.trialRemainingUrgentSuffix')}`}
@@ -325,8 +352,8 @@ export function Billing() {
         </Paper>
       )}
 
-      {/* Pricing is available to Free users and trial subscribers. */}
-      {(!status?.has_subscription || status.is_trialing) && (
+      {/* Pricing is available to Free users and trial subscribers, but not while a purchase activates. */}
+      {(!status?.has_subscription || status.is_trialing) && !awaitingCheckout && (
         <>
           <Group justify="center" mb="lg">
             <SegmentedControl
@@ -377,6 +404,10 @@ export function Billing() {
                 </List>
               </Card.Section>
 
+              <ProRenewalDisclosure
+                interval={billingInterval}
+                price={formatCurrencyFor(billingInterval === 'monthly' ? PRICING.pro.monthly : PRICING.pro.annual, 'USD')}
+              />
               <Button
                 fullWidth
                 onClick={() => handleSubscribe('pro')}
