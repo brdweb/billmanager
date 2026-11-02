@@ -61,6 +61,9 @@ export const releaseNotes: ReleaseNote[] = [
         'Subscription plan changes report their existing immediate behavior and update the local plan after provider confirmation',
         'Release-note dates display the correct calendar day across time zones',
         'Guarded settlement payments reject stale versions or changed bill occurrences instead of undoing an existing payment',
+        'Shared payment requests carry an explicit paid or unpaid intent, so retrying after a lost response cannot reverse a recorded change',
+        'Shared payment actions on the web keep their original request when retried and ignore clicks or responses from a previous account, group, or view',
+        'Manage subscription is hidden when billing management is unavailable, such as for locally granted Pro accounts',
       ] },
       { heading: 'Security', items: [
         'Patched the server msgpack dependency',
