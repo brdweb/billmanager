@@ -15,7 +15,7 @@ ARG VITE_UMAMI_WEBSITE_ID=
 RUN npm run build && ls -la dist/ && test -f dist/index.html
 
 # Stage 2: Python backend with built frontend
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 # Match the frontend build origin in the production Content Security Policy.
 ARG VITE_UMAMI_SCRIPT_URL=
