@@ -108,11 +108,29 @@ jobs:
         if: inputs.authenticated
         working-directory: apps/mobile
         run: node scripts/ios-simulator-readiness.mjs
+      - name: Install verified age for sealed failure diagnostics
+        if: inputs.authenticated && vars.QA_DIAGNOSTICS_AGE_RECIPIENT != ''
+        # Optional: without age the capture still runs and reports encrypt_failed.
+        continue-on-error: true
+        env:
+          AGE_VERSION: v1.3.2
+          AGE_SHA256: e2020b073c44f692685a24d6abc378817eb81ffaaf49fd0531ef8565f767f2f5
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/age.tar.gz"
+          curl --fail --location --retry 3 "https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-darwin-arm64.tar.gz" --output "$archive"
+          printf '%s  %s\n' "$AGE_SHA256" "$archive" | shasum -a 256 --check
+          mkdir -p "$RUNNER_TEMP/age-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/age-bin" --strip-components 1 age/age
+          printf '%s\n' "$RUNNER_TEMP/age-bin" >> "$GITHUB_PATH"
       - name: Capture private synthetic reviewer screens
         if: inputs.authenticated
         working-directory: apps/mobile
         env:
           QA_REVIEWER_PASSWORD: ${{ secrets.QA_REVIEWER_PASSWORD }}
+          # Public age recipient only. Raw failure output is uploaded solely as ciphertext
+          # that the operator decrypts locally with the matching private key.
+          QA_DIAGNOSTICS_AGE_RECIPIENT: ${{ vars.QA_DIAGNOSTICS_AGE_RECIPIENT }}
         run: |
           set +x
           printf '%s' "$QA_REVIEWER_PASSWORD" | env -u QA_REVIEWER_PASSWORD node scripts/ios-store-capture.mjs
@@ -131,6 +149,7 @@ jobs:
             ${{ runner.temp }}/billmanager-ios-qa/result.json
             ${{ runner.temp }}/billmanager-ios-qa/selected-devices.json
             ${{ runner.temp }}/billmanager-ios-qa/store-capture.json
+            ${{ runner.temp }}/billmanager-ios-qa/sealed-capture-failure.tar.age
             ${{ runner.temp }}/billmanager-ios-qa/simulator-readiness.json
             ${{ runner.temp }}/billmanager-ios-qa/simulator-cleanup.json
             ${{ runner.temp }}/billmanager-ios-qa/store-screenshots/*.png
