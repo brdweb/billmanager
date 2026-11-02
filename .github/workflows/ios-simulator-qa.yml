@@ -108,9 +108,21 @@ jobs:
         if: inputs.authenticated
         working-directory: apps/mobile
         run: node scripts/ios-simulator-readiness.mjs
-      - name: Install age for sealed failure diagnostics
+      - name: Install verified age for sealed failure diagnostics
         if: inputs.authenticated && vars.QA_DIAGNOSTICS_AGE_RECIPIENT != ''
-        run: brew install age && age --version
+        # Optional: without age the capture still runs and reports encrypt_failed.
+        continue-on-error: true
+        env:
+          AGE_VERSION: v1.3.2
+          AGE_SHA256: e2020b073c44f692685a24d6abc378817eb81ffaaf49fd0531ef8565f767f2f5
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/age.tar.gz"
+          curl --fail --location --retry 3 "https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-darwin-arm64.tar.gz" --output "$archive"
+          printf '%s  %s\n' "$AGE_SHA256" "$archive" | shasum -a 256 --check
+          mkdir -p "$RUNNER_TEMP/age-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/age-bin" --strip-components 1 age/age
+          printf '%s\n' "$RUNNER_TEMP/age-bin" >> "$GITHUB_PATH"
       - name: Capture private synthetic reviewer screens
         if: inputs.authenticated
         working-directory: apps/mobile

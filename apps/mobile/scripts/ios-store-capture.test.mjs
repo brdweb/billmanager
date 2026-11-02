@@ -288,17 +288,18 @@ describe('sealed private diagnostics', () => {
   });
   it('archives only the private directory, encrypts to the recipient and removes the plaintext archive', () => {
     const root = mkdtempSync(join(tmpdir(), 'qa-seal-')); const out = join(root, 'billmanager-ios-qa'); mkdirSync(out);
-    const priv = join(root, 'billmanager-ios-private-x'); mkdirSync(priv);
+    const priv = join(root, 'billmanager-ios-private-x'); mkdirSync(priv); writeFileSync(join(priv, 'last-command.log'), 'raw');
     const calls = [];
     try {
-      const result = sealPrivateDiagnostics(priv, out, recipient, (command, args) => {
-        calls.push({ command, args });
-        if (command === 'tar') writeFileSync(args[1], 'plaintext');
+      const result = sealPrivateDiagnostics(priv, out, recipient, (command, args, options) => {
+        calls.push({ command, args, options });
+        if (command === '/usr/bin/tar') writeFileSync(args[1], 'plaintext');
         if (command === 'age') writeFileSync(args[3], 'ciphertext');
         return { status: 0 };
       });
       expect(result).toEqual({ sealed: true });
-      expect(calls.map(c => c.command)).toEqual(['tar', 'age']);
+      expect(calls.map(c => c.command)).toEqual(['/usr/bin/tar', 'age']);
+      expect(calls.every(c => JSON.stringify(Object.keys(c.options.env)) === '["PATH"]')).toBe(true);
       expect(calls[0].args.slice(2)).toEqual(['-C', priv, '.']);
       expect(calls[1].args.slice(0, 4)).toEqual(['-r', recipient, '-o', join(out, 'sealed-capture-failure.tar.age')]);
       expect(calls[1].args[4]).toBe(calls[0].args[1]);
@@ -334,9 +335,29 @@ describe('sealed private diagnostics', () => {
       expect(text).not.toContain(password);
       const maestro = calls.filter(c => c.command === 'maestro');
       expect(maestro.every(c => c.options.env.MAESTRO_DRIVER_STARTUP_TIMEOUT === '300000' && !('QA_DIAGNOSTICS_AGE_RECIPIENT' in c.options.env))).toBe(true);
-      expect(calls.filter(c => c.command === 'tar' || c.command === 'age').every(c => !c.options?.env)).toBe(true);
+      expect(calls.filter(c => c.command === '/usr/bin/tar' || c.command === 'age').every(c => Object.keys(c.options.env).join() === 'PATH')).toBe(true);
       expect(readdirSync(out).sort()).toEqual(['sealed-capture-failure.tar.age', 'selected-devices.json', 'simulator-readiness.json', 'store-capture.json']);
       expect(readdirSync(root)).toEqual(['billmanager-ios-qa']);
+    } finally { rmSync(root, { recursive: true }); }
+  });
+  it('removes staging and uploads nothing when archiving fails or the runner throws', () => {
+    const root = mkdtempSync(join(tmpdir(), 'qa-seal-archive-')); const out = join(root, 'billmanager-ios-qa'); mkdirSync(out);
+    const priv = join(root, 'priv'); mkdirSync(priv); writeFileSync(join(priv, 'raw.log'), 'raw');
+    try {
+      expect(sealPrivateDiagnostics(priv, out, recipient, () => ({ status: 2 }))).toEqual({ sealed: false, reason: 'archive_failed' });
+      expect(() => sealPrivateDiagnostics(priv, out, recipient, () => { throw new Error('spawn'); })).toThrow('spawn');
+      expect(readdirSync(out)).toEqual([]);
+      expect(readdirSync(root).sort()).toEqual(['billmanager-ios-qa', 'priv']);
+    } finally { rmSync(root, { recursive: true }); }
+  });
+  it('seals nothing when no private output exists', () => {
+    const root = mkdtempSync(join(tmpdir(), 'qa-seal-empty-')); const priv = join(root, 'priv'); mkdirSync(priv);
+    const calls = [];
+    try {
+      for (const dir of [priv, join(root, 'missing')]) {
+        expect(sealPrivateDiagnostics(dir, root, recipient, (...c) => { calls.push(c); return { status: 0 }; })).toEqual({ sealed: false, reason: 'nothing_to_seal' });
+      }
+      expect(calls).toEqual([]);
     } finally { rmSync(root, { recursive: true }); }
   });
 });

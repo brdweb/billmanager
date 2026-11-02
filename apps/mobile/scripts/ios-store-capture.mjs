@@ -1,5 +1,5 @@
 // QA-only native UI driver. No credential, token, raw diagnostic or failure image is published.
-import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, copyFileSync, readdirSync, lstatSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, copyFileSync, readdirSync, lstatSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -99,7 +99,7 @@ export const captureCommands = [
   { assertNotVisible: { text: 'Open billing portal' } }, ...absentAuth, { takeScreenshot: 'billing' },
 ];
 // Driver start-up plus every bounded in-flow wait, with headroom.
-export const LOGIN_TIMEOUT_MS = 420000, CAPTURE_TIMEOUT_MS = 360000;
+export const LOGIN_TIMEOUT_MS = 540000, CAPTURE_TIMEOUT_MS = 660000;
 const EXPECTED = ['bills.png', 'payment-history.png', 'settlements.png', 'billing.png'];
 export function safeScreenshots(directory, family) {
   const found = [];
@@ -175,12 +175,15 @@ export function safeCommandFailure(directory, result) {
 const AGE_RECIPIENT = /^age1[02-9ac-hj-np-z]{58}$/;
 export function sealPrivateDiagnostics(privateDir, output, recipient, run = spawnSync) {
   if (!AGE_RECIPIENT.test(recipient ?? '')) return { sealed: false, reason: 'no_recipient' };
+  if (!existsSync(privateDir) || readdirSync(privateDir).length === 0) return { sealed: false, reason: 'nothing_to_seal' };
+  // Fixed system tar and a minimal environment: no PATH-shadowed tar and no inherited credentials.
+  const options = { timeout: 120000, encoding: 'utf8', env: { PATH: process.env.PATH ?? '/usr/bin:/bin' } };
   const staging = mkdtempSync(join(resolve(output, '..'), 'billmanager-ios-seal-'));
   const archive = join(staging, 'diagnostics.tar.gz'), sealed = join(output, 'sealed-capture-failure.tar.age');
   try {
-    const tar = run('tar', ['-czf', archive, '-C', privateDir, '.'], { timeout: 120000, encoding: 'utf8' });
+    const tar = run('/usr/bin/tar', ['-czf', archive, '-C', privateDir, '.'], options);
     if (tar.status !== 0 || tar.error) return { sealed: false, reason: 'archive_failed' };
-    const age = run('age', ['-r', recipient, '-o', sealed, archive], { timeout: 120000, encoding: 'utf8' });
+    const age = run('age', ['-r', recipient, '-o', sealed, archive], options);
     if (age.status !== 0 || age.error) { rmSync(sealed, { force: true }); return { sealed: false, reason: 'encrypt_failed' }; }
     return { sealed: true };
   } finally { rmSync(staging, { recursive: true, force: true }); }

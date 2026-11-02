@@ -82,7 +82,13 @@ can contain the reviewer password) and uploads only
 deleted before upload and the safe report records only `diagnostics.sealed`. Decrypt
 locally with `age -d -i <private key> sealed-capture-failure.tar.age | tar -xzf -` in a
 private directory, never commit or share the plaintext, and delete it after diagnosis.
-Without the variable nothing is sealed or uploaded. The capture also raises Maestro's
+Without the variable nothing is sealed or uploaded. Set the recipient only on the
+`ios-production` environment (no repository or organization variable of that name),
+because whoever holds the matching key can read the archive. The repository is
+public, so the ciphertext is downloadable for the artifact's 14-day retention:
+download it from the specific run with `gh run download <run-id>`, and rotate the
+synthetic reviewer password after any run whose report shows `diagnostics.sealed: true`.
+age is a pinned, checksum-verified release binary. The capture also raises Maestro's
 XCTest driver startup timeout to five minutes for freshly prepared Simulators. Inspect these screenshots before store upload;
 this does not replace physical-device or production diagnostics acceptance.
 
