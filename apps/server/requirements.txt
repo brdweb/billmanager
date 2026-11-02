@@ -16,8 +16,8 @@ greenlet==3.5.6
 psycopg[binary]>=3.3.6
 flask-migrate==4.1.0
 PyJWT==2.15.1
-resend==2.50.0
-stripe==16.0.0
+resend==2.50.1
+stripe==16.1.0
 APScheduler==3.11.3
 requests>=2.34.2
 authlib>=1.9.1
@@ -25,7 +25,7 @@ webauthn>=3.0.1
 PyYAML>=6.0.3
 
 # Testing
-pytest>=9.1.1
+pytest>=9.2.0
 pytest-cov>=7.1.0
 responses>=0.26.3
 
