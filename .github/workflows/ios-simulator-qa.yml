@@ -48,7 +48,7 @@ jobs:
           cache: npm
           cache-dependency-path: apps/mobile/package-lock.json
       - name: Set up Java for Maestro
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
