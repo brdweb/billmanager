@@ -145,7 +145,7 @@ pyopenssl==26.4.0
     # via webauthn
 pyparsing==3.3.3
     # via pip-requirements-parser
-pytest==9.1.1
+pytest==9.2.0
     # via
     #   -r apps/server/requirements.txt
     #   pytest-cov
