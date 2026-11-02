@@ -4,7 +4,7 @@ The **iOS Simulator QA** workflow is a separate, manual lane for reviewed `main`
 It builds the checked-out source locally on a standard GitHub-hosted macOS 26
 ARM64 runner with Xcode 26.6, Node 24.19.0 and two native build jobs. The job is
 limited to 90 minutes. Standard runners are compute-free for this public
-repository; artifacts use the account's storage allowance and expire in 3 days.
+repository; artifacts use the account's storage allowance and expire in 14 days.
 No larger runner or EAS build is used. The default anonymous mode uses no
 production environment or account credential; approved optional capture is described below.
 
@@ -77,17 +77,24 @@ this does not replace physical-device or production diagnostics acceptance.
 The private driver uses the Maestro-supported `MAESTRO_` shell-variable prefix
 ([official parameters reference](https://docs.maestro.dev/maestro-flows/flow-control-and-logic/parameters-and-constants)); no secret is passed through `-e` arguments.
 
-Capture-only diagnosis may set `reuse_reviewed_build=true` together with
-`authenticated=true`. This accepts only the pinned native archive from manual
-main run 41054807810, source `1b51cd6`, SHA-256
-`a6858200b085981fab88fdf6a3759decfc64258d4fe51629bb72f3074563e622`.
-That run compiled successfully but failed at private `iphone-login`, producing
-no promoted PNGs. Deleted private diagnostics cannot identify its exact failing
-command; this is not evidence of an application or selector defect.
+An authenticated dispatch builds fresh from the checked-out `main` by default.
+To skip compilation for capture-only diagnosis, set `pinned_run_id` to the ID of
+an earlier manual `main` run of this workflow together with `authenticated=true`.
+The input replaces the previous hard-coded run 41054807810. That run's artifact
+expired under the former 3-day retention, so the old reuse path could no longer
+succeed. Choose a pinned run whose 14-day artifact is still listed. A build from
+an older commit is acceptable only when its screens look identical to the
+store build being described.
 
-Before extracting or installing the archive, the helper verifies repository,
-manual main-run/workflow identity, successful native build step, exact source,
-archive hash and Release manifest. It then verifies the actual ARM64 Simulator
+Before anything is downloaded, the run ID must be numeric. The run must be a
+completed manual `main` run of this workflow in `brdweb/billmanager`, and its
+native build step must have succeeded (an earlier reuse run is rejected). Exactly
+one unexpired artifact named `ios-simulator-qa-<head_sha>` must belong to that
+run and commit, and the GitHub compare API must show that commit contained in
+the current `main`. After download, the same run and containment checks are
+repeated. The manifest source must equal the run commit,
+the archive SHA-256 must equal the manifest's, and the Release, version,
+HTTPS, OTA and Sentry fields must pass. It then verifies the actual ARM64 Simulator
 binary, HTTPS/OTA settings, embedded JavaScript hash and production/non-debug
 app configuration. Fresh runner device identifiers replace the old identifiers.
 The manifest retains the original compiled source and records the new capture
@@ -141,3 +148,42 @@ no runtime download or larger runner is requested. Full native PNG dimensions,
 all-eight success and privacy checks remain unchanged. See the
 [GitHub runner inventory](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)
 and [Chromium's bootstatus readiness semantics](https://chromium.googlesource.com/chromium/src/+/93b31d4424cb0fddb7cb5a901f21eb9859270658/ios/build/bots/scripts/iossim_util.py).
+
+Run 41079174520 reached the private login flow on the iPhone and failed at
+`iphone-login` after 148.5 of 180 seconds with category `unclassified` and no
+recovered command. The categorizer did not recognize two Maestro 2.12 messages
+the login flow can produce. One is `Couldn't hide the keyboard`: on iOS,
+`hideKeyboard` is a short swipe, and the login screen's scroll view does not
+dismiss the keyboard on drag. The other is `Assertion is false`, which an
+`extendedWaitUntil` timeout produces. Either is a likely cause; neither is
+proven. The new `No visible element found` mapping is defensive only: Maestro
+2.12 emits it from `scrollUntilVisible`, which these flows do not use, and
+`tapOn` or `assertVisible` failures still report `Element not found`.
+
+The login flow is now six labelled steps: `launch`, `username`, `password`,
+`submit`, `post-login` and `deep-link`. `hideKeyboard` is no longer used. Return
+on the password field calls the form's `onSubmitEditing` submit and blurs it.
+If an enabled **Sign in** button is still visible afterwards, the submit step
+taps it once as a guarded fallback. It then waits for an enabled **Sign in**
+button to disappear.
+Selectors are unchanged from the shipped build 16 source (`81a9e78`): the
+`auth-login-screen` ID, plus the second `^Username$`, `^Password$` and
+`^Sign in$` matches. Each field's text label comes before its accessible input,
+and the screen header comes before the button. Neither inputs nor the button
+have test IDs in that source. This change does not modify app source. Between
+`81a9e78` and current `main`, the app source changes are Android-only top
+insets, plus minor dependency bumps such as `lucide-react-native` 1.61 to 1.65,
+which can change icon glyphs. A pinned run can also come from an older commit.
+Before uploading captures to App Store Connect, compare them visually with
+build 16.
+
+The login process limit is 420 seconds, and in-flow waits for the login screen,
+navigation and first bill are 60 seconds. The read-only capture limit is 360
+seconds. On failure, `store-capture.json` adds `failure.step` (one of the six
+names) and `failure.stepSource`. The value `command_report` means the step came
+from the labelled `runFlow` in Maestro's private `commands.json`. The value
+`console` means it is the latest labelled step that the plain console output
+reported as started. No step is reported when neither source names one.
+Categories now include `element_not_found`, `assertion_false`,
+`keyboard_not_hidden` and `app_launch_failed`. Only these fixed names leave the
+private directory.
