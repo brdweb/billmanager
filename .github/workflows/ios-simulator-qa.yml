@@ -7,10 +7,10 @@ on:
         description: Capture synthetic reviewer screens (requires production approval)
         type: boolean
         default: false
-      reuse_reviewed_build:
-        description: Reuse only the pinned reviewed 41054807810 native archive for private capture
-        type: boolean
-        default: false
+      pinned_run_id:
+        description: Optional earlier manual main run ID whose verified native archive to reuse for authenticated capture (empty builds fresh)
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -72,24 +72,35 @@ jobs:
           printf '%s  %s\n' "$MAESTRO_SHA256" "$archive" | shasum -a 256 --check
           unzip -q "$archive" -d "$RUNNER_TEMP/maestro"
           printf '%s\n' "$RUNNER_TEMP/maestro/maestro/bin" >> "$GITHUB_PATH"
-      - name: Verify and reuse the reviewed native Simulator archive
-        if: inputs.reuse_reviewed_build
+      - name: Verify and reuse a pinned native Simulator archive
+        if: inputs.pinned_run_id != ''
         env:
           GH_TOKEN: ${{ github.token }}
           CAPTURE_ENABLED: ${{ inputs.authenticated }}
+          PINNED_RUN_ID: ${{ inputs.pinned_run_id }}
         run: |
           set -euo pipefail
           umask 077
           [[ "$CAPTURE_ENABLED" == true ]]
+          [[ "$PINNED_RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]]
+          metadata="$RUNNER_TEMP/billmanager-ios-reuse-metadata"
           incoming="$RUNNER_TEMP/billmanager-ios-reuse"
-          mkdir -p "$incoming"
-          gh api repos/brdweb/billmanager/actions/runs/41054807810 > "$incoming/run.json"
-          gh api repos/brdweb/billmanager/actions/runs/41054807810/jobs > "$incoming/jobs.json"
-          gh run download 41054807810 --repo brdweb/billmanager \
-            --name ios-simulator-qa-1b51cd6edc7a31265cb94b338113f355a49ae175 --dir "$incoming"
-          node apps/mobile/scripts/ios-qa-reuse.mjs "$incoming"
+          mkdir -p "$metadata" "$incoming"
+          repo=brdweb/billmanager
+          gh api "repos/$repo/actions/runs/$PINNED_RUN_ID" > "$metadata/run.json"
+          gh api "repos/$repo/actions/runs/$PINNED_RUN_ID/jobs?per_page=100" > "$metadata/jobs.json"
+          gh api "repos/$repo/actions/runs/$PINNED_RUN_ID/artifacts?per_page=100" > "$metadata/artifacts.json"
+          # Validates run identity, build success and an unexpired same-commit artifact before download.
+          source_sha="$(node apps/mobile/scripts/ios-qa-reuse.mjs preflight "$metadata" "$PINNED_RUN_ID")"
+          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
+          gh api "repos/$repo/compare/$source_sha...$GITHUB_SHA" \
+            --jq '{status: .status, base: .base_commit.sha, merge_base: .merge_base_commit.sha}' > "$metadata/comparison.json"
+          # Rechecks the run and requires its commit to be contained in the current main before download.
+          [[ "$(node apps/mobile/scripts/ios-qa-reuse.mjs contained "$metadata" "$PINNED_RUN_ID")" == "$source_sha" ]]
+          gh run download "$PINNED_RUN_ID" --repo "$repo" --name "ios-simulator-qa-$source_sha" --dir "$incoming"
+          node apps/mobile/scripts/ios-qa-reuse.mjs "$metadata" "$incoming" "$PINNED_RUN_ID"
       - name: Build and exercise the native Simulator app
-        if: '!inputs.reuse_reviewed_build'
+        if: inputs.pinned_run_id == ''
         env:
           IOS_QA_AUTHENTICATED: ${{ inputs.authenticated }}
         run: bash apps/mobile/scripts/ios-simulator-qa.sh
@@ -133,7 +144,7 @@ jobs:
             ${{ runner.temp }}/billmanager-ios-qa/ipad/screenshots/**/auth-login.png
             ${{ runner.temp }}/billmanager-ios-qa/ipad/screenshots/**/auth-password-recovery.png
           if-no-files-found: warn
-          retention-days: 3
+          retention-days: 14
       - name: Explain acceptance boundary
         if: always()
         run: |

@@ -28,7 +28,7 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     expect(secretSteps[0].if).toBe('inputs.authenticated');
     expect(secretSteps[0].name).toBe('Capture private synthetic reviewer screens');
     expect(job.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with.path).not.toMatch(/private|debug|simulator\.log|final-screen/);
-    expect(job.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with['retention-days']).toBe(3);
+    expect(job.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with['retention-days']).toBe(14);
   });
 
   it('keeps real native Release code and HTTPS policy while declaring QA exceptions', () => {
