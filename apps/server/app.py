@@ -1938,6 +1938,21 @@ def create_checkout():
             {"success": False, "error": "You already have an active subscription"}
         ), 400
 
+    # A stored Stripe subscription that is not terminal (past_due, unpaid,
+    # incomplete, paused, ...) is resolved in the billing portal. A second
+    # checkout would charge again and could not replace it.
+    if (
+        user.subscription
+        and user.subscription.stripe_subscription_id
+        and user.subscription.status not in TERMINAL_STRIPE_SUBSCRIPTION_STATUSES
+    ):
+        return jsonify(
+            {
+                "success": False,
+                "error": "Your current subscription needs attention. Manage it in the billing portal instead of starting a new subscription.",
+            }
+        ), 400
+
     # Get tier and interval from request
     data = request.get_json() or {}
     from config import normalize_paid_tier
@@ -2147,6 +2162,65 @@ def billing_status():
     )
 
 
+# Stripe subscription statuses that can never bill or become active again.
+TERMINAL_STRIPE_SUBSCRIPTION_STATUSES = frozenset({"canceled", "incomplete_expired"})
+
+
+def _stripe_field(obj, key):
+    """Read a field from a webhook dict or an SDK StripeObject (not a dict)."""
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return obj.get(key)
+    try:
+        return obj[key]
+    except (KeyError, TypeError):
+        return None
+
+
+def _stripe_object_id(value):
+    """An expandable field is an ID string or the expanded object."""
+    if value is None or isinstance(value, str):
+        return value
+    expanded_id = _stripe_field(value, "id")
+    return value if expanded_id is None else expanded_id
+
+
+def _invoice_subscription_id(invoice):
+    """Stripe API 2025-03-31.basil moved invoice.subscription to
+    invoice.parent.subscription_details.subscription; accept both shapes."""
+    subscription_id = _stripe_object_id(_stripe_field(invoice, "subscription"))
+    if subscription_id is not None:
+        return subscription_id
+    details = _stripe_field(_stripe_field(invoice, "parent"), "subscription_details")
+    return _stripe_object_id(_stripe_field(details, "subscription"))
+
+
+def _can_replace_stored_subscription(subscription, checkout_customer_id):
+    """Allow a checkout to replace the stored subscription only when the
+    previous one is terminal locally and at Stripe, for the same customer."""
+    previous_id = subscription.stripe_subscription_id
+    # Serialize with in-flight deliveries for the previous subscription and
+    # re-read the row so a late update cannot overwrite the new association.
+    db.session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+        {"lock_key": f"stripe-subscription:{previous_id}"},
+    )
+    db.session.refresh(subscription, with_for_update=True)
+    if (
+        subscription.stripe_subscription_id != previous_id
+        or subscription.status not in TERMINAL_STRIPE_SUBSCRIPTION_STATUSES
+        or not isinstance(checkout_customer_id, str)
+        or not subscription.stripe_customer_id
+        or subscription.stripe_customer_id != checkout_customer_id
+    ):
+        return False
+    previous = get_subscription(previous_id)
+    if "error" in previous:
+        raise RuntimeError("Unable to verify previous Stripe subscription")
+    return previous.get("status") in TERMINAL_STRIPE_SUBSCRIPTION_STATUSES
+
+
 @api_v2_bp.route("/webhooks/stripe", methods=["POST"])
 def stripe_webhook():
     """Handle verified Stripe events transactionally and in order."""
@@ -2177,9 +2251,12 @@ def stripe_webhook():
 
     event_type = event.get("type")
     data = event.get("data", {}).get("object", {})
-    subscription_id = data.get("subscription") if event_type in {
-        "checkout.session.completed", "invoice.paid", "invoice.payment_failed"
-    } else data.get("id")
+    if event_type in {"invoice.paid", "invoice.payment_failed"}:
+        subscription_id = _invoice_subscription_id(data)
+    elif event_type == "checkout.session.completed":
+        subscription_id = data.get("subscription")
+    else:
+        subscription_id = data.get("id")
     if event_type in supported and (
         (subscription_id is not None and (not isinstance(subscription_id, str) or not subscription_id.strip()))
         or (event_type not in {"invoice.paid", "invoice.payment_failed"} and not subscription_id)
@@ -2251,9 +2328,18 @@ def stripe_webhook():
             if user_id:
                 user = db.session.get(User, int(user_id))
                 if user:
-                    if user.subscription and user.subscription.stripe_subscription_id not in (None, subscription_id):
-                        # Do not orphan an existing paid subscription. Replacement
-                        # needs an explicit operator reconciliation policy.
+                    if subscription is not None and subscription.user_id != user.id:
+                        # Never move another user's subscription association.
+                        raise RuntimeError("Conflicting Stripe subscription association")
+                    replacing = bool(
+                        user.subscription
+                        and user.subscription.stripe_subscription_id not in (None, subscription_id)
+                    )
+                    if replacing and not _can_replace_stored_subscription(
+                        user.subscription, data.get("customer")
+                    ):
+                        # Do not orphan a subscription that can still bill; that
+                        # needs operator reconciliation.
                         raise RuntimeError("Conflicting Stripe subscription association")
                     details = get_subscription(subscription_id)
                     if "error" in details or not details.get("status"):
@@ -2271,6 +2357,9 @@ def stripe_webhook():
                     subscription.tier = tier
                     subscription.billing_interval = interval
                     subscription.plan = f"{tier}_{interval}"
+                    if replacing:
+                        # The previous subscription's cancellation does not apply.
+                        subscription.canceled_at = None
                     if "error" not in details:
                         subscription.current_period_start = datetime.datetime.fromtimestamp(details["current_period_start"])
                         subscription.current_period_end = datetime.datetime.fromtimestamp(details["current_period_end"])
