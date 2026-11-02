@@ -199,7 +199,7 @@ it.each([
 });
 
 const flat = commands => commands.flatMap(c => [c, ...(c.runFlow ? flat(c.runFlow.commands) : [])]);
-it('splits login into labelled steps, submits with Return and never uses hideKeyboard', () => {
+it('splits login into labelled steps, submits with Return plus a guarded Sign in fallback and never uses hideKeyboard', () => {
   expect(loginCommands.map(c => c.runFlow?.label)).toEqual(LOGIN_STEPS.map(step => `qa-login-step-${step}`));
   expect(LOGIN_STEPS).toEqual(['launch', 'username', 'password', 'submit', 'post-login', 'deep-link']);
   const step = name => loginCommands[LOGIN_STEPS.indexOf(name)].runFlow.commands;
@@ -208,7 +208,14 @@ it('splits login into labelled steps, submits with Return and never uses hideKey
   expect(flat(loginCommands).filter(c => c.launchApp)).toHaveLength(1);
   for (const name of LOGIN_STEPS.filter(name => name !== 'password')) expect(JSON.stringify(step(name))).not.toContain('MAESTRO_QA_REVIEWER_PASSWORD');
   expect(step('password').at(-1)).toEqual({ inputText: '${MAESTRO_QA_REVIEWER_PASSWORD}' });
-  expect(step('submit')[0]).toEqual({ pressKey: 'Enter' });
+  const signIn = { text: '^Sign in$', index: 1, enabled: true };
+  expect(step('submit')).toEqual([
+    { pressKey: 'Enter' },
+    { runFlow: { when: { visible: signIn }, commands: [{ tapOn: { text: '^Sign in$', index: 1 } }] } },
+    { extendedWaitUntil: { notVisible: signIn, timeout: 15000 } },
+  ]);
+  // The only Sign in tap is the guarded fallback, after Return.
+  expect(flat(loginCommands).filter(c => c.tapOn?.text === '^Sign in$')).toHaveLength(1);
   expect(step('post-login')[0]).toEqual({ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } });
   expect(flat(loginCommands).filter(c => c.openLink)).toEqual([{ openLink: 'billmanager://bills' }]);
   expect(step('deep-link')[0]).toEqual({ openLink: 'billmanager://bills' });
@@ -229,6 +236,23 @@ it('names the failing login step from the private command report using fixed lab
     const report = safeCommandFailure(root, { status: 1, stdout: `qa-login-step-launch... COMPLETED\nqa-login-step-deep-link ${password}` });
     expect(report).toMatchObject({ step: 'password', stepSource: 'command_report', command: { ordinal: 6, type: 'inputTextCommand', status: 'FAILED' } });
     expect(JSON.stringify(report)).not.toMatch(/synthetic-fixture|Password/);
+  } finally { rmSync(root, { recursive: true }); }
+});
+
+it('attributes a failed fallback Sign in tap to the submit step', () => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-login-submit-'));
+  try {
+    const row = (command, status) => ({ command, metadata: { status } });
+    writeFileSync(join(root, 'commands.json'), JSON.stringify([
+      row({ runFlowCommand: { label: 'qa-login-step-password', commands: [] } }, 'COMPLETED'),
+      row({ runFlowCommand: { label: 'qa-login-step-submit', commands: [] } }, 'FAILED'),
+      row({ pressKeyCommand: { code: 'ENTER' } }, 'COMPLETED'),
+      row({ runFlowCommand: { commands: [] } }, 'FAILED'),
+      row({ tapOnElement: { selector: { textRegex: '^Sign in$' } } }, 'FAILED'),
+    ]));
+    expect(safeCommandFailure(root, { status: 1, stdout: 'Element not found: Text matching regex: ^Sign in$' })).toEqual({
+      process: 'nonzero_exit', exitCode: 1, category: 'element_not_found', step: 'submit', stepSource: 'command_report',
+      command: { ordinal: 5, type: 'tapOnElement', status: 'FAILED' } });
   } finally { rmSync(root, { recursive: true }); }
 });
 

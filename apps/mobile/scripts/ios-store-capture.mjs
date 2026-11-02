@@ -72,17 +72,22 @@ const route = path => ({ openLink: `billmanager://${path}` });
 // step name without publishing raw output. Selectors exist in the shipped build 16
 // source (81a9e78): the field Text label precedes the accessible TextInput, and
 // the "Sign in" header precedes the button. hideKeyboard is unreliable on iOS, so
-// Return on the password field submits through onSubmitEditing and blurs it.
+// Return on the password field submits through onSubmitEditing and blurs it, with
+// a guarded tap on an enabled Sign in button as fallback.
 export const LOGIN_STEPS = ['launch', 'username', 'password', 'submit', 'post-login', 'deep-link'];
 const STEP_LABEL = 'qa-login-step-';
 const step = (name, commands) => ({ runFlow: { label: STEP_LABEL + name, commands } });
+const SIGN_IN = { text: '^Sign in$', index: 1, enabled: true };
 export const loginCommands = [
   step('launch', [{ launchApp: { clearState: true } }, { extendedWaitUntil: { visible: { id: 'auth-login-screen' }, timeout: 60000 } },
     { assertVisible: { text: '^Username$' } }, { assertVisible: { text: '^Password$' } }]),
   step('username', [{ tapOn: { text: '^Username$', index: 1 } }, { inputText: 'store-review' }]),
   step('password', [{ tapOn: { text: '^Password$', index: 1 } }, { inputText: '${MAESTRO_QA_REVIEWER_PASSWORD}' }]),
-  // An enabled Sign in button disappears once submission starts (busy) or the screen leaves.
-  step('submit', [{ pressKey: 'Enter' }, { extendedWaitUntil: { notVisible: { text: '^Sign in$', index: 1, enabled: true }, timeout: 15000 } }]),
+  // Return submits through onSubmitEditing. If an enabled Sign in button is still shown
+  // (Return did not submit), tap it once as a guarded fallback. An enabled button
+  // disappears once submission starts (busy) or the screen leaves.
+  step('submit', [{ pressKey: 'Enter' }, { runFlow: { when: { visible: SIGN_IN }, commands: [{ tapOn: { text: '^Sign in$', index: 1 } }] } },
+    { extendedWaitUntil: { notVisible: SIGN_IN, timeout: 15000 } }]),
   step('post-login', [{ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } }]),
   step('deep-link', [route('bills'), { extendedWaitUntil: { visible: { text: '.*DEMO Rent.*' }, timeout: 60000 } }, ...absentAuth]),
 ];
