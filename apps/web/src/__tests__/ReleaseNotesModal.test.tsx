@@ -12,6 +12,6 @@ it.each(['America/New_York', 'Pacific/Honolulu'])('preserves the release calenda
     return formatDate.call(this, locales, { timeZone, ...options });
   });
   render(<MantineProvider><ReleaseNotesModal opened onClose={() => undefined} /></MantineProvider>);
-  expect(screen.getByText('October 29, 2026')).toBeVisible();
-  expect(screen.queryByText('October 28, 2026')).not.toBeInTheDocument();
+  expect(screen.getByText('November 2, 2026')).toBeVisible();
+  expect(screen.queryByText('November 1, 2026')).not.toBeInTheDocument();
 });

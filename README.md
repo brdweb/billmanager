@@ -10,19 +10,18 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.13.3
+## 🎉 What's New in v4.13.4
 
-**Account Boundaries and Session Recovery** — Consistent owner permissions, safe bill-group switching, and recovery from removed saved groups.
+**Clear Pro Checkout and Billing Fixes** — Renewal terms before purchase, confirmed checkout returns, and reliable Stripe subscription updates.
 
 ### Highlights
 
-- **Owner permissions** — Password, OAuth, password-change, and two-factor sign-in identify account owners consistently. Managed users do not see owner-only administration or whole-account deletion controls.
-- **Safe bill switching** — Changing accounts or bill groups clears previous bills and rejects late responses from the old view.
-- **Session recovery** — A removed or revoked saved bill group no longer interrupts session restoration; the web app selects an accessible group.
-- **Billing accuracy** — The published plan-change endpoint reports its existing immediate behavior accurately and updates local plan details after provider confirmation. Stripe request and proration behavior are unchanged.
-- **Shared payment retries** — Guarded shared payments carry an explicit paid or unpaid intent, and web retries keep their original request, so a retry after a lost response cannot reverse a recorded payment.
-- **Subscription management** — Manage subscription is hidden when billing management is unavailable, such as for locally granted Pro accounts.
-- **Security** — Patched the server msgpack dependency.
+- **Renewal disclosure** — The web Billing page shows the Pro price, automatic renewal, and how to cancel before checkout, with links to the Terms of Service and Privacy Policy. The trial note says that subscribing during the free trial starts paid billing right away.
+- **Checkout confirmation** — Returning from a completed checkout waits for Pro to activate. Returning from a canceled checkout confirms you were not charged. A canceled first checkout no longer leaves a pending plan on the Billing page.
+- **Stripe renewals and failures** — Invoice events in the current Stripe payload format now update subscription status and billing periods, including failed payments.
+- **Resubscribing** — Customers whose earlier subscription ended can subscribe again. Subscriptions that still need attention, such as an overdue payment, are directed to the billing portal. A late invoice cannot reopen a canceled subscription.
+- **Security and dependencies** — Patched joserfc, pyasn1, and follow-redirects. Refreshed web and server dependencies, including the Stripe SDK 16.1.
+- **No migration** — This release adds no database schema migration and needs no new configuration.
 - **Mobile delivery** — This release publishes the server/web container. Native mobile changes require a separate signed build and store release; these notes do not confirm store approval or public availability.
 
 ---
