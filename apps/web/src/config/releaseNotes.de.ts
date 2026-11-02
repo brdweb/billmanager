@@ -15,7 +15,7 @@ export const germanReleaseNotes: ReleaseNote[] = [
         'Abgesicherte Ausgleichszahlungen lehnen veraltete Versionen und geänderte Fälligkeiten ab, statt bestehende Zahlungen rückgängig zu machen',
         'Anfragen für geteilte Zahlungen übermitteln ausdrücklich „bezahlt“ oder „unbezahlt“, sodass eine Wiederholung nach verlorener Antwort keine erfasste Änderung umkehrt',
         'Geteilte Zahlungsaktionen im Web behalten bei Wiederholungen ihre ursprüngliche Anfrage und ignorieren Klicks oder Antworten aus einem vorherigen Konto, einer vorherigen Gruppe oder Ansicht',
-        '„Abonnement verwalten“ erscheint nur, wenn die Abrechnungsverwaltung tatsächlich verfügbar ist, auch bei lokal gewährtem Pro, und veraltete Portalaktionen werden ignoriert',
+        '„Abonnement verwalten“ wird ausgeblendet, wenn die Abrechnungsverwaltung nicht verfügbar ist, etwa bei lokal gewährtem Pro',
       ] },
       { heading: 'Sicherheit', items: [
         'Die msgpack-Abhängigkeit des Servers wurde aktualisiert',

@@ -20,6 +20,8 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 - **Safe bill switching** — Changing accounts or bill groups clears previous bills and rejects late responses from the old view.
 - **Session recovery** — A removed or revoked saved bill group no longer interrupts session restoration; the web app selects an accessible group.
 - **Billing accuracy** — The published plan-change endpoint reports its existing immediate behavior accurately and updates local plan details after provider confirmation. Stripe request and proration behavior are unchanged.
+- **Shared payment retries** — Guarded shared payments carry an explicit paid or unpaid intent, and web retries keep their original request, so a retry after a lost response cannot reverse a recorded payment.
+- **Subscription management** — Manage subscription is hidden when billing management is unavailable, such as for locally granted Pro accounts.
 - **Security** — Patched the server msgpack dependency.
 - **Mobile delivery** — This release publishes the server/web container. Native mobile changes require a separate signed build and store release; these notes do not confirm store approval or public availability.
 
