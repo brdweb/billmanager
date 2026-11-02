@@ -935,6 +935,7 @@
     "trialFooter": "New accounts start with a 30-day free trial; no payment method required. Subscribing during the trial ends it and starts paid billing right away.",
     "renewalDisclosureMonthly": "{{price}} per month, charged when you subscribe. Your subscription renews automatically every month until you cancel. Cancel anytime with Manage Subscription in the billing portal.",
     "renewalDisclosureAnnual": "{{price}} per year, charged when you subscribe. Your subscription renews automatically every year until you cancel. Cancel anytime with Manage Subscription in the billing portal.",
+    "ownerOnlyPurchase": "Only the account owner can subscribe to Pro and manage billing for this account.",
     "renewalLegal": "By subscribing, you agree to the <termsLink>Terms of Service</termsLink> and <privacyLink>Privacy Policy</privacyLink>.",
     "checkoutSuccessPending": "Thanks for subscribing! Your payment was received and we're activating Pro…",
     "checkoutSuccessActive": "Pro is now active. Thanks for subscribing!",
