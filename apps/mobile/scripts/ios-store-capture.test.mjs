@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure } from './ios-store-capture.mjs';
+import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, LOGIN_STEPS } from './ios-store-capture.mjs';
 const password = 'synthetic-fixture-only-not-a-credential';
 const data = {
   '/auth/login': { access_token: 'fixture-token' },
@@ -38,9 +38,10 @@ describe('private native demo screenshot boundaries', () => {
   });
   it('keeps password out of flow literals and uses only read-only navigation after login', () => {
     expect(JSON.stringify(loginCommands)).toContain('${MAESTRO_QA_REVIEWER_PASSWORD}');
-    expect(loginCommands.some(c => c.takeScreenshot)).toBe(false);
-    const firstLink = loginCommands.findIndex(c => c.openLink);
-    expect(loginCommands[firstLink - 1]).toEqual({ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 30000 } });
+    const login = flat(loginCommands).filter(c => !c.runFlow);
+    expect(login.some(c => c.takeScreenshot)).toBe(false);
+    const firstLink = login.findIndex(c => c.openLink);
+    expect(login[firstLink - 1]).toEqual({ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } });
     expect(captureCommands.some(c => c.inputText || c.tapOn)).toBe(false);
     expect(captureCommands.filter(c => c.takeScreenshot).map(c => c.takeScreenshot)).toEqual(['bills', 'payment-history', 'settlements', 'billing']);
     expect(captureCommands.filter(c => c.assertNotVisible?.id === 'auth-login-screen')).toHaveLength(4);
@@ -183,5 +184,95 @@ it.each(['read', 'write'])('always deletes private state when cleanup-report %s 
     const report = readFileSync(join(out, 'store-capture.json'), 'utf8');
     expect(JSON.parse(report).stage).toBe('iphone-login');
     expect(report).not.toMatch(/synthetic-fixture|Bearer|fixture-token/);
+  } finally { rmSync(root, { recursive: true }); }
+});
+
+it.each([
+  ['No visible element found: Text matching regex: ^Password$, Index: 1', 'element_not_found'],
+  ['Assertion is false: id: auth-login-screen is not visible', 'assertion_false'],
+  ["Couldn't hide the keyboard. This can happen if the app uses a custom input or doesn't expose a standard dismiss action.", 'keyboard_not_hidden'],
+  ['Unable to launch app com.brdweb.billmanager', 'app_launch_failed'],
+])('maps the Maestro 2.12 failure message to a fixed category: %s', (message, category) => {
+  const report = safeCommandFailure('/missing-fixture', { status: 1, stdout: `${password}\n${message}` });
+  expect(report.category).toBe(category);
+  expect(JSON.stringify(report)).not.toContain(password);
+});
+
+const flat = commands => commands.flatMap(c => [c, ...(c.runFlow ? flat(c.runFlow.commands) : [])]);
+it('splits login into labelled steps, submits with Return plus a guarded Sign in fallback and never uses hideKeyboard', () => {
+  expect(loginCommands.map(c => c.runFlow?.label)).toEqual(LOGIN_STEPS.map(step => `qa-login-step-${step}`));
+  expect(LOGIN_STEPS).toEqual(['launch', 'username', 'password', 'submit', 'post-login', 'deep-link']);
+  const step = name => loginCommands[LOGIN_STEPS.indexOf(name)].runFlow.commands;
+  expect(flat(loginCommands).some(c => 'hideKeyboard' in c)).toBe(false);
+  expect(step('launch')[0]).toEqual({ launchApp: { clearState: true } });
+  expect(flat(loginCommands).filter(c => c.launchApp)).toHaveLength(1);
+  for (const name of LOGIN_STEPS.filter(name => name !== 'password')) expect(JSON.stringify(step(name))).not.toContain('MAESTRO_QA_REVIEWER_PASSWORD');
+  expect(step('password').at(-1)).toEqual({ inputText: '${MAESTRO_QA_REVIEWER_PASSWORD}' });
+  const signIn = { text: '^Sign in$', index: 1, enabled: true };
+  expect(step('submit')).toEqual([
+    { pressKey: 'Enter' },
+    { runFlow: { when: { visible: signIn }, commands: [{ tapOn: { text: '^Sign in$', index: 1 } }] } },
+    { extendedWaitUntil: { notVisible: signIn, timeout: 15000 } },
+  ]);
+  // The only Sign in tap is the guarded fallback, after Return.
+  expect(flat(loginCommands).filter(c => c.tapOn?.text === '^Sign in$')).toHaveLength(1);
+  expect(step('post-login')[0]).toEqual({ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } });
+  expect(flat(loginCommands).filter(c => c.openLink)).toEqual([{ openLink: 'billmanager://bills' }]);
+  expect(step('deep-link')[0]).toEqual({ openLink: 'billmanager://bills' });
+});
+
+it('names the failing login step from the private command report using fixed labels only', () => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-login-step-'));
+  try {
+    const nested = join(root, 'login', '2026-11-02_120000', 'login'); mkdirSync(nested, { recursive: true });
+    writeFileSync(join(root, 'login', 'commands-broken.json'), '{not json');
+    const run = label => ({ command: { runFlowCommand: { label, commands: [] } }, metadata: { status: label.endsWith('password') ? 'FAILED' : 'COMPLETED', depth: 0 } });
+    writeFileSync(join(nested, 'commands.json'), JSON.stringify([
+      run('qa-login-step-launch'), { command: { launchAppCommand: {} }, metadata: { status: 'COMPLETED', depth: 1 } },
+      run('qa-login-step-username'), run('qa-login-step-password'),
+      { command: { tapOnElement: { selector: { textRegex: '^Password$' } } }, metadata: { status: 'COMPLETED', depth: 1 } },
+      { command: { inputTextCommand: { text: password } }, metadata: { status: 'FAILED', depth: 1, error: { message: password } } },
+    ]));
+    const report = safeCommandFailure(root, { status: 1, stdout: `qa-login-step-launch... COMPLETED\nqa-login-step-deep-link ${password}` });
+    expect(report).toMatchObject({ step: 'password', stepSource: 'command_report', command: { ordinal: 6, type: 'inputTextCommand', status: 'FAILED' } });
+    expect(JSON.stringify(report)).not.toMatch(/synthetic-fixture|Password/);
+  } finally { rmSync(root, { recursive: true }); }
+});
+
+it('attributes a failed fallback Sign in tap to the submit step', () => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-login-submit-'));
+  try {
+    const row = (command, status) => ({ command, metadata: { status } });
+    writeFileSync(join(root, 'commands.json'), JSON.stringify([
+      row({ runFlowCommand: { label: 'qa-login-step-password', commands: [] } }, 'COMPLETED'),
+      row({ runFlowCommand: { label: 'qa-login-step-submit', commands: [] } }, 'FAILED'),
+      row({ pressKeyCommand: { code: 'ENTER' } }, 'COMPLETED'),
+      row({ runFlowCommand: { commands: [] } }, 'FAILED'),
+      row({ tapOnElement: { selector: { textRegex: '^Sign in$' } } }, 'FAILED'),
+    ]));
+    expect(safeCommandFailure(root, { status: 1, stdout: 'Element not found: Text matching regex: ^Sign in$' })).toEqual({
+      process: 'nonzero_exit', exitCode: 1, category: 'element_not_found', step: 'submit', stepSource: 'command_report',
+      command: { ordinal: 5, type: 'tapOnElement', status: 'FAILED' } });
+  } finally { rmSync(root, { recursive: true }); }
+});
+
+it('falls back to the last started fixed console step marker and never invents one', () => {
+  const console = 'Running on iPhone\n > Flow login\nqa-login-step-launch...\nqa-login-step-launch... COMPLETED\nqa-login-step-username...\nqa-login-step-username... COMPLETED\nqa-login-step-password...\nqa-login-step-password... COMPLETED\nqa-login-step-submit...\nqa-login-step-submit... COMPLETED\nqa-login-step-post-login...\n  Assert that id: auth-login-screen is not visible... FAILED\nqa-login-step-post-login... FAILED\nAssertion is false: id: auth-login-screen is not visible';
+  expect(safeCommandFailure('/missing-fixture', { status: 1, stdout: console })).toEqual({
+    process: 'nonzero_exit', exitCode: 1, category: 'assertion_false', step: 'post-login', stepSource: 'console' });
+  expect(safeCommandFailure('/missing-fixture', { status: 1, stdout: 'qa-login-step-unknown... qa-login-step-post-loginx' })).not.toHaveProperty('step');
+});
+
+it('publishes the failing login step in the safe capture report', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-step-report-')); const out = join(root, 'billmanager-ios-qa'); mkdirSync(out); writePrepared(out);
+  try {
+    await expect(runCapture(password, { runnerTemp: root, request: api(), run: (command, args) => {
+      if (command === 'xcrun' && args[1] === 'list') return stateResult();
+      if (command === 'maestro') return { status: 1, stdout: `qa-login-step-launch...\nqa-login-step-launch... COMPLETED\nqa-login-step-username...\n${password}\nNo visible element found: Text matching regex: ^Username$` };
+      return { status: 0 };
+    } })).rejects.toThrow('raw diagnostics withheld');
+    const text = readFileSync(join(out, 'store-capture.json'), 'utf8');
+    expect(JSON.parse(text)).toMatchObject({ stage: 'iphone-login', failure: { category: 'element_not_found', step: 'username', stepSource: 'console', stage: 'iphone-login' } });
+    expect(text).not.toMatch(/synthetic-fixture|Bearer|fixture-token|Username/);
   } finally { rmSync(root, { recursive: true }); }
 });

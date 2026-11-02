@@ -13,6 +13,9 @@ export const germanReleaseNotes: ReleaseNote[] = [
         'Abonnementänderungen melden ihre bereits bestehende sofortige Wirkung und aktualisieren den lokalen Tarif nach Bestätigung des Zahlungsanbieters',
         'Veröffentlichungsdaten zeigen in allen Zeitzonen den richtigen Kalendertag',
         'Abgesicherte Ausgleichszahlungen lehnen veraltete Versionen und geänderte Fälligkeiten ab, statt bestehende Zahlungen rückgängig zu machen',
+        'Anfragen für geteilte Zahlungen übermitteln ausdrücklich „bezahlt“ oder „unbezahlt“, sodass eine Wiederholung nach verlorener Antwort keine erfasste Änderung umkehrt',
+        'Geteilte Zahlungsaktionen im Web behalten bei Wiederholungen ihre ursprüngliche Anfrage und ignorieren Klicks oder Antworten aus einem vorherigen Konto, einer vorherigen Gruppe oder Ansicht',
+        '„Abonnement verwalten“ wird ausgeblendet, wenn die Abrechnungsverwaltung nicht verfügbar ist, etwa bei lokal gewährtem Pro',
       ] },
       { heading: 'Sicherheit', items: [
         'Die msgpack-Abhängigkeit des Servers wurde aktualisiert',
