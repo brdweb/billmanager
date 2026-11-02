@@ -59,7 +59,11 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     expect(script).toContain('[[ "$(cat "$output/binary-architectures.txt")" == arm64 ]]');
     expect(script).toContain("binaryArchitectures:fs.readFileSync(`${output}/binary-architectures.txt`,'utf8')");
     const phases = [...script.matchAll(/QA phase: ([^\\\n']+)/g)].map(match => match[1]);
-    expect(phases.map(phase => phase.split(' ')[0])).toEqual(['prebuild', 'pods', 'compile', 'install', 'Maestro']);
+    expect(phases.map(phase => phase.split(' ')[0])).toEqual(['prebuild', 'pods', 'compile', 'sign', 'install', 'Maestro']);
+    // Unsigned Simulator apps lack entitlements, so secure-store keychain writes fail (-34018).
+    expect(script).toContain('codesign --force --sign - --timestamp=none --entitlements "$entitlements" "$app"');
+    expect(script).toContain('<key>keychain-access-groups</key>');
+    expect(script.indexOf('QA phase: sign')).toBeLessThan(script.indexOf('ditto -c -k'));
   });
 
   it('captures actual anonymous navigation without credentials or submissions', () => {
