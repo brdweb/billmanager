@@ -2,6 +2,30 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.4',
+    date: '2026-11-02',
+    title: 'Klarer Pro-Checkout und Abrechnungskorrekturen',
+    sections: [
+      { heading: 'Verbesserungen', items: [
+        'Die Abrechnungsseite zeigt vor dem Checkout den Pro-Preis und die automatische Verlängerung, mit Links zu den AGB und zur Datenschutzrichtlinie',
+        'Nach der Rückkehr vom Checkout wird das Ergebnis bestätigt: Nach einer abgeschlossenen Zahlung wird auf die Aktivierung von Pro gewartet, und ein abgebrochener Checkout bestätigt, dass nichts berechnet wurde',
+        'Der Hinweis zum Testzeitraum erklärt, dass ein Abonnement während der kostenlosen Testphase diese beendet und die kostenpflichtige Abrechnung sofort beginnt',
+        'Auf der Abrechnungsseite sieht nur der Kontoinhaber „Pro wählen“; andere Benutzer des Kontos sehen einen Hinweis, dass der Kontoinhaber die Abrechnung verwaltet',
+        'Web- und Server-Abhängigkeiten aktualisiert, darunter das Stripe SDK 16.1 und Mantine 9.7.4',
+      ] },
+      { heading: 'Fehlerbehebungen', items: [
+        'Von Stripe gemeldete Verlängerungen aktualisieren jetzt den Tarifstatus und den Abrechnungszeitraum, und fehlgeschlagene Zahlungen markieren das Abonnement als überfällig',
+        'Kunden, deren früheres Abonnement beendet wurde, können Pro erneut abonnieren',
+        'Konten mit einem Abonnement, das Aufmerksamkeit erfordert, etwa wegen einer überfälligen Zahlung, werden zum Abrechnungsportal geleitet, statt ein zweites Abonnement abzuschließen',
+        'Eine verspätete Rechnung kann ein gekündigtes Abonnement nicht mehr wieder öffnen',
+        'Ein abgebrochener erster Checkout zeigt keinen ausstehenden Tarif mehr an, und der Kontoinhaber kann weiterhin „Pro wählen“',
+      ] },
+      { heading: 'Sicherheit', items: [
+        'Die Abhängigkeiten joserfc, pyasn1 und follow-redirects wurden aktualisiert',
+      ] },
+    ],
+  },
+  {
     version: '4.13.3',
     date: '2026-10-29',
     title: 'Kontotrennung und Sitzungswiederherstellung',

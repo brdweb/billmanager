@@ -50,6 +50,30 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.4',
+    date: '2026-11-02',
+    title: 'Clear Pro Checkout and Billing Fixes',
+    sections: [
+      { heading: 'Improvements', items: [
+        'The Billing page shows the Pro price and automatic renewal terms before checkout, with links to the Terms of Service and Privacy Policy',
+        'Returning from checkout confirms the result: a completed payment waits for Pro to activate, and a canceled checkout confirms you were not charged',
+        'The trial note explains that subscribing during the free trial ends the trial and starts paid billing right away',
+        'Only the account owner sees Get Pro on the Billing page; other users in the account see a note that the account owner manages billing',
+        'Refreshed web and server dependencies, including the Stripe SDK 16.1 and Mantine 9.7.4',
+      ] },
+      { heading: 'Bug Fixes', items: [
+        'Subscription renewals reported by Stripe now update your plan status and billing period, and failed payments mark the subscription as past due',
+        'Customers whose earlier subscription ended can subscribe to Pro again',
+        'Accounts with a subscription that needs attention, such as an overdue payment, are directed to the billing portal instead of starting a second subscription',
+        'A late invoice can no longer reopen a canceled subscription',
+        'Canceling a first checkout no longer shows a pending plan, and the account owner can still choose Get Pro',
+      ] },
+      { heading: 'Security', items: [
+        'Patched the joserfc, pyasn1, and follow-redirects dependencies',
+      ] },
+    ],
+  },
+  {
     version: '4.13.3',
     date: '2026-10-29',
     title: 'Account Boundaries and Session Recovery',
