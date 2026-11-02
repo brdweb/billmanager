@@ -33,6 +33,7 @@ import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 import type { SubscriptionStatus, BillingUsage } from '../api/client';
 import { useConfig } from '../context/ConfigContext';
+import { useAuth } from '../context/AuthContext';
 import { formatCurrencyFor, getLocale } from '../lib/currency';
 import { isPaidPro, useCheckoutActivation } from '../hooks/useCheckoutActivation';
 import {
@@ -48,6 +49,9 @@ const PRICING = {
 export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'cancel' } = {}) {
   const { t } = useTranslation();
   const { isSelfHosted } = useConfig();
+  // Only the account owner can open the billing portal (server can_manage_subscription), so
+  // only the owner is offered a purchase whose disclosure promises cancellation there.
+  const { isAdmin: isAccountOwner } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [status, setStatus] = useState<SubscriptionStatus | null>(null);
   const [usage, setUsage] = useState<BillingUsage | null>(null);
@@ -419,18 +423,26 @@ export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'canc
                 </List>
               </Card.Section>
 
-              <ProRenewalDisclosure
-                interval={billingInterval}
-                price={formatCurrencyFor(billingInterval === 'monthly' ? PRICING.pro.monthly : PRICING.pro.annual, 'USD')}
-              />
-              <Button
-                fullWidth
-                onClick={() => handleSubscribe('pro')}
-                loading={actionLoading}
-                leftSection={<IconCrown size={16} />}
-              >
-                {t('billingPage.getPro')}
-              </Button>
+              {isAccountOwner ? (
+                <>
+                  <ProRenewalDisclosure
+                    interval={billingInterval}
+                    price={formatCurrencyFor(billingInterval === 'monthly' ? PRICING.pro.monthly : PRICING.pro.annual, 'USD')}
+                  />
+                  <Button
+                    fullWidth
+                    onClick={() => handleSubscribe('pro')}
+                    loading={actionLoading}
+                    leftSection={<IconCrown size={16} />}
+                  >
+                    {t('billingPage.getPro')}
+                  </Button>
+                </>
+              ) : (
+                <Text size="sm" c="dimmed" ta="center" data-testid="pro-owner-only">
+                  {t('billingPage.ownerOnlyPurchase')}
+                </Text>
+              )}
             </Card>
           </SimpleGrid>
 

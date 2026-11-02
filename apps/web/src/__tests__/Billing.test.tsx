@@ -6,14 +6,16 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getSubscriptionStatus: vi.fn(), getBillingUsage: vi.fn(), createCheckoutSession: vi.fn(),
-  selfHosted: false,
+  selfHosted: false, isAdmin: true,
 }));
 vi.mock('../api/client', () => mocks);
 vi.mock('../context/ConfigContext', () => ({ useConfig: () => ({ isSelfHosted: mocks.selfHosted }) }));
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isAdmin: mocks.isAdmin }) }));
 import { Billing } from '../pages/Billing';
 
 beforeEach(() => {
   mocks.selfHosted = false;
+  mocks.isAdmin = true;
   mocks.getSubscriptionStatus.mockResolvedValue({ has_subscription: false, effective_tier: 'free' });
   mocks.getBillingUsage.mockResolvedValue(null);
   mocks.createCheckoutSession.mockResolvedValue({});
@@ -170,4 +172,13 @@ it('treats /billing/success without a checkout session as the normal billing pag
   show('/billing/success', 'success');
   expect(await screen.findByRole('button', { name: 'Get Pro' })).toBeInTheDocument();
   expect(screen.queryByText(PENDING)).not.toBeInTheDocument();
+});
+
+it('offers purchase only to the account owner, who alone can cancel in the billing portal', async () => {
+  mocks.isAdmin = false;
+  show();
+  expect(await screen.findByTestId('pro-owner-only')).toHaveTextContent('Only the account owner can subscribe to Pro and manage billing for this account.');
+  expect(screen.queryByRole('button', { name: 'Get Pro' })).toBeNull();
+  expect(screen.queryByTestId('pro-renewal-disclosure')).toBeNull();
+  expect(mocks.createCheckoutSession).not.toHaveBeenCalled();
 });
