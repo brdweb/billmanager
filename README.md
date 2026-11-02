@@ -18,7 +18,8 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 - **Renewal disclosure** — The web Billing page shows the Pro price, automatic renewal, and how to cancel before checkout, with links to the Terms of Service and Privacy Policy. The trial note says that subscribing during the free trial starts paid billing right away.
 - **Checkout confirmation** — Returning from a completed checkout waits for Pro to activate. Returning from a canceled checkout confirms you were not charged. A canceled first checkout no longer leaves a pending plan on the Billing page.
-- **Stripe renewals and failures** — Invoice events in the current Stripe payload format now update subscription status and billing periods, including failed payments.
+- **Owner-only purchase** — Only the account owner sees **Get Pro** on the web Billing page. Other users in the account see a note that the account owner manages billing.
+- **Stripe renewals and failures** — Invoice events in the current Stripe payload format now update subscription status and billing periods for renewals, and mark the subscription past due when a payment fails.
 - **Resubscribing** — Customers whose earlier subscription ended can subscribe again. Subscriptions that still need attention, such as an overdue payment, are directed to the billing portal. A late invoice cannot reopen a canceled subscription.
 - **Security and dependencies** — Patched joserfc, pyasn1, and follow-redirects. Refreshed web and server dependencies, including the Stripe SDK 16.1.
 - **No migration** — This release adds no database schema migration and needs no new configuration.
