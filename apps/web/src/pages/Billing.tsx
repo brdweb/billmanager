@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import {
   Container,
   Paper,
@@ -33,21 +33,33 @@ import { useTranslation } from 'react-i18next';
 import * as api from '../api/client';
 import type { SubscriptionStatus, BillingUsage } from '../api/client';
 import { useConfig } from '../context/ConfigContext';
+import { useAuth } from '../context/AuthContext';
 import { formatCurrencyFor, getLocale } from '../lib/currency';
+import { isPaidPro, useCheckoutActivation } from '../hooks/useCheckoutActivation';
+import {
+  CheckoutCanceledNotice,
+  CheckoutSuccessNotice,
+  ProRenewalDisclosure,
+} from '../components/Billing/CheckoutNotices';
 
 const PRICING = {
   pro: { monthly: 2.99, annual: 24 },
 };
 
-export function Billing() {
+export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'cancel' } = {}) {
   const { t } = useTranslation();
   const { isSelfHosted } = useConfig();
+  // Only the account owner can open the billing portal (server can_manage_subscription), so
+  // only the owner is offered a purchase whose disclosure promises cancellation there.
+  const { isAdmin: isAccountOwner } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [status, setStatus] = useState<SubscriptionStatus | null>(null);
   const [usage, setUsage] = useState<BillingUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('monthly');
+  const [checkoutConfirmed, setCheckoutConfirmed] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -72,6 +84,31 @@ export function Billing() {
     }
     void fetchData();
   }, [fetchData, isSelfHosted]);
+
+  // Stripe returns to /billing/success?session_id=...; without it, show the normal page.
+  const awaitingCheckout = checkoutResult === 'success' && !isSelfHosted && searchParams.has('session_id');
+  const paidPro = isPaidPro(status);
+  const handlePolledStatus = useCallback((next: SubscriptionStatus) => {
+    setStatus(next);
+    if (isPaidPro(next)) {
+      api.getBillingUsage().then(setUsage).catch(() => undefined);
+    }
+  }, []);
+  const activation = useCheckoutActivation(
+    awaitingCheckout && !loading && !paidPro,
+    handlePolledStatus
+  );
+
+  // Once Pro is confirmed, drop session_id so a reload or Back does not replay activation.
+  useEffect(() => {
+    if (!awaitingCheckout || !paidPro) return;
+    setCheckoutConfirmed(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('session_id');
+      return next;
+    }, { replace: true });
+  }, [awaitingCheckout, paidPro, setSearchParams]);
 
   const handleSubscribe = async (tier: 'pro') => {
     setActionLoading(true);
@@ -168,15 +205,18 @@ export function Billing() {
     );
   }
 
+  // A canceled checkout leaves a 'pending' row for users who had none; it is not a subscription.
+  const hasSubscription = status?.has_subscription === true && status.status !== 'pending';
+
   const getStatusBadge = () => {
-    if (!status?.has_subscription) {
+    if (!hasSubscription) {
       if (status?.is_trialing) {
         return <Badge color="blue" size="lg">{t('billingPage.statusFreeTrial')}</Badge>;
       }
       return <Badge color="gray" size="lg">{t('billingPage.statusFree')}</Badge>;
     }
 
-    switch (status.status) {
+    switch (status?.status) {
       case 'active':
         return <Badge color="green" size="lg">{t('billingPage.statusActive')}</Badge>;
       case 'trialing':
@@ -186,7 +226,7 @@ export function Billing() {
       case 'canceled':
         return <Badge color="red" size="lg">{t('billingPage.statusCanceled')}</Badge>;
       default:
-        return <Badge color="gray" size="lg">{status.status}</Badge>;
+        return <Badge color="gray" size="lg">{status?.status}</Badge>;
     }
   };
 
@@ -229,6 +269,11 @@ export function Billing() {
         </Alert>
       )}
 
+      {(awaitingCheckout || checkoutConfirmed) && (
+        <CheckoutSuccessNotice active={paidPro || checkoutConfirmed} timedOut={activation.timedOut} onRetry={activation.retry} />
+      )}
+      {checkoutResult === 'cancel' && <CheckoutCanceledNotice />}
+
       {/* Current Plan Status */}
       <Paper withBorder shadow="md" p="lg" radius="md" mb="lg">
         <Group justify="space-between" mb="md">
@@ -239,13 +284,14 @@ export function Billing() {
           {getStatusBadge()}
         </Group>
 
-        {status?.is_trial_expired && (
+        {/* Do not prompt for another purchase while a completed checkout activates. */}
+        {status?.is_trial_expired && !awaitingCheckout && (
           <Alert icon={<IconAlertCircle size={16} />} color="orange" variant="light" mb="md">
             {t('billingPage.trialExpiredAlert')}
           </Alert>
         )}
 
-        {status?.is_trialing && !status.is_trial_expired && status.trial_days_remaining !== undefined && (
+        {status?.is_trialing && !status.is_trial_expired && status.trial_days_remaining !== undefined && !awaitingCheckout && (
           <Alert icon={<IconCalendar size={16} />} color="blue" variant="light" mb="md">
             {t('billingPage.trialRemainingAlert', { count: status.trial_days_remaining })}
             {status.trial_days_remaining <= 3 && ` ${t('billingPage.trialRemainingUrgentSuffix')}`}
@@ -257,7 +303,7 @@ export function Billing() {
             <Text c="dimmed">{t('billingPage.currentTierLabel')}</Text>
             <Text fw={500}>{formatTierName(status?.effective_tier)}</Text>
           </Group>
-          {status?.has_subscription && (
+          {hasSubscription && status && (
             <>
               <Group justify="space-between">
                 <Text c="dimmed">{t('billingPage.billingLabel')}</Text>
@@ -325,8 +371,8 @@ export function Billing() {
         </Paper>
       )}
 
-      {/* Pricing is available to Free users and trial subscribers. */}
-      {(!status?.has_subscription || status.is_trialing) && (
+      {/* Pricing is available to Free users and trial subscribers, but not while a purchase activates. */}
+      {(!hasSubscription || status?.is_trialing) && !awaitingCheckout && (
         <>
           <Group justify="center" mb="lg">
             <SegmentedControl
@@ -377,14 +423,26 @@ export function Billing() {
                 </List>
               </Card.Section>
 
-              <Button
-                fullWidth
-                onClick={() => handleSubscribe('pro')}
-                loading={actionLoading}
-                leftSection={<IconCrown size={16} />}
-              >
-                {t('billingPage.getPro')}
-              </Button>
+              {isAccountOwner ? (
+                <>
+                  <ProRenewalDisclosure
+                    interval={billingInterval}
+                    price={formatCurrencyFor(billingInterval === 'monthly' ? PRICING.pro.monthly : PRICING.pro.annual, 'USD')}
+                  />
+                  <Button
+                    fullWidth
+                    onClick={() => handleSubscribe('pro')}
+                    loading={actionLoading}
+                    leftSection={<IconCrown size={16} />}
+                  >
+                    {t('billingPage.getPro')}
+                  </Button>
+                </>
+              ) : (
+                <Text size="sm" c="dimmed" ta="center" data-testid="pro-owner-only">
+                  {t('billingPage.ownerOnlyPurchase')}
+                </Text>
+              )}
             </Card>
           </SimpleGrid>
 

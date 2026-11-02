@@ -519,8 +519,8 @@ function App() {
           {billingEnabled && (
             <>
               <Route path="/billing" element={<LazyRoute><Billing /></LazyRoute>} />
-              <Route path="/billing/success" element={<LazyRoute><Billing /></LazyRoute>} />
-              <Route path="/billing/cancel" element={<LazyRoute><Billing /></LazyRoute>} />
+              <Route path="/billing/success" element={<LazyRoute><Billing checkoutResult="success" /></LazyRoute>} />
+              <Route path="/billing/cancel" element={<LazyRoute><Billing checkoutResult="cancel" /></LazyRoute>} />
             </>
           )}
         </Routes>
