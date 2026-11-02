@@ -95,6 +95,8 @@ jobs:
           [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
           gh api "repos/$repo/compare/$source_sha...$GITHUB_SHA" \
             --jq '{status: .status, base: .base_commit.sha, merge_base: .merge_base_commit.sha}' > "$metadata/comparison.json"
+          # Rechecks the run and requires its commit to be contained in the current main before download.
+          [[ "$(node apps/mobile/scripts/ios-qa-reuse.mjs contained "$metadata" "$PINNED_RUN_ID")" == "$source_sha" ]]
           gh run download "$PINNED_RUN_ID" --repo "$repo" --name "ios-simulator-qa-$source_sha" --dir "$incoming"
           node apps/mobile/scripts/ios-qa-reuse.mjs "$metadata" "$incoming" "$PINNED_RUN_ID"
       - name: Build and exercise the native Simulator app
