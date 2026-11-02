@@ -176,3 +176,23 @@ def test_replacement_waits_for_an_in_flight_previous_subscription_event(app, db_
     current = db.session.get(Subscription, previous.id)
     assert (current.stripe_subscription_id, current.status, current.tier) == ("sub_new", "active", "pro")
     assert current.stripe_last_event_created == 400
+
+
+@pytest.mark.parametrize("event_type", ["invoice.paid", "invoice.payment_failed"])
+def test_late_invoice_event_does_not_reopen_a_terminal_subscription(client, admin_auth_headers, db_session, previous, monkeypatch, event_type):
+    """A leftover dunning invoice settled after cancellation keeps the user free to resubscribe."""
+    invoice = {"object": "invoice", "parent": {"subscription_details": {"subscription": "sub_old"}}}
+    monkeypatch.setattr(server, "get_subscription", _stripe())
+    monkeypatch.setattr(server, "construct_webhook_event", lambda *_: {
+        "id": "evt_late_invoice", "type": event_type, "created": 350, "data": {"object": invoice}})
+
+    assert _post(client).status_code == 200
+
+    db_session.refresh(previous)
+    assert (previous.status, previous.effective_tier) == ("canceled", "free")
+    assert previous.stripe_last_event_created == 350
+    assert StripeWebhookEvent.query.filter_by(event_id="evt_late_invoice").count() == 1
+    monkeypatch.setattr(server, "get_billing_readiness", lambda: {"billing_enabled": True})
+    monkeypatch.setattr(server, "create_checkout_session", lambda *args: {"url": "u", "session_id": "s"})
+    checkout = client.post("/api/v2/billing/create-checkout", json={"tier": "pro", "interval": "monthly"}, headers=admin_auth_headers)
+    assert checkout.status_code == 200

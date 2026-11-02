@@ -70,6 +70,31 @@ def test_modern_invoice_paid_reactivates_and_refreshes_period(client, db_session
     assert local_subscription.current_period_end == datetime.datetime.fromtimestamp(1_802_592_000)
 
 
+def test_modern_invoice_paid_stores_the_status_stripe_reports(client, db_session, local_subscription, monkeypatch):
+    """Paying one of several open invoices does not make the subscription active."""
+    local_subscription.status = "past_due"
+    db_session.commit()
+    monkeypatch.setattr(server, "construct_webhook_event", lambda *_: _event(
+        "evt_modern_partial", "invoice.paid", _modern_invoice("sub_modern")))
+    monkeypatch.setattr(server, "get_subscription", lambda sub_id: {
+        "status": "unpaid", "current_period_start": 1_800_000_000, "current_period_end": 1_802_592_000})
+
+    assert _post(client).status_code == 200
+
+    db_session.refresh(local_subscription)
+    assert local_subscription.status == "unpaid"
+
+
+@pytest.mark.parametrize("details", [{"error": "Unable to retrieve subscription details."}, {"current_period_start": 1}])
+def test_modern_invoice_paid_without_a_stripe_status_stays_retryable(client, db_session, local_subscription, monkeypatch, details):
+    monkeypatch.setattr(server, "construct_webhook_event", lambda *_: _event(
+        "evt_modern_unverified", "invoice.paid", _modern_invoice("sub_modern")))
+    monkeypatch.setattr(server, "get_subscription", lambda sub_id: details)
+
+    assert _post(client).status_code == 500
+    assert StripeWebhookEvent.query.filter_by(event_id="evt_modern_unverified").count() == 0
+
+
 def test_modern_invoice_for_unknown_subscription_stays_retryable(client, db_session, monkeypatch):
     monkeypatch.setattr(server, "construct_webhook_event", lambda *_: _event(
         "evt_modern_late", "invoice.payment_failed", _modern_invoice("sub_not_yet_local")))

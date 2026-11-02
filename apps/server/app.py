@@ -2363,11 +2363,18 @@ def stripe_webhook():
                     if "error" not in details:
                         subscription.current_period_start = datetime.datetime.fromtimestamp(details["current_period_start"])
                         subscription.current_period_end = datetime.datetime.fromtimestamp(details["current_period_end"])
+        elif (
+            event_type in {"invoice.paid", "invoice.payment_failed"}
+            and subscription.status in TERMINAL_STRIPE_SUBSCRIPTION_STATUSES
+        ):
+            # A late invoice event (e.g. a leftover dunning invoice paid after
+            # cancellation) must not reopen a subscription that can never bill.
+            pass
         elif event_type == "invoice.paid":
-            subscription.status = "active"
             details = get_subscription(subscription_id)
-            if "error" in details:
+            if "error" in details or not details.get("status"):
                 raise RuntimeError("Unable to reconcile Stripe subscription")
+            subscription.status = details["status"]
             subscription.current_period_start = datetime.datetime.fromtimestamp(details["current_period_start"])
             subscription.current_period_end = datetime.datetime.fromtimestamp(details["current_period_end"])
         elif event_type == "invoice.payment_failed":
