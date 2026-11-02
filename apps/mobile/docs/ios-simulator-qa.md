@@ -33,7 +33,7 @@ JUnit report, screenshots, native build logs and the unsigned
 `.app.zip`. The manifest records source commit/tree, mobile version, toolchain,
 Simulator identity, actual binary architectures, exceptions and SHA-256 hashes of the app archive and embedded
 JavaScript. Check the job result and report; logs or screenshots alone do not
-establish a passing run. Failed builds still upload allowlisted native diagnostic output. Private authenticated diagnostics are never uploaded.
+establish a passing run. Failed builds still upload allowlisted native diagnostic output. Private authenticated diagnostics are never uploaded in plaintext (see sealed failure diagnostics below).
 
 The job prints phase starts for prebuild, CocoaPods, native compilation, installation
 and Maestro; full compiler output remains in the retained build log. Before
@@ -71,7 +71,19 @@ native dimensions must match the accepted iPhone 1206×2622 and iPad 2048×2732 
 2064×2752 sizes. There is no resizing, framing or fabricated data. The uploader
 uses an explicit allowlist; sanitized counts, source, devices, dimensions and
 hashes accompany the PNGs. Any failure publishes only a controlled failure code and stage,
-not raw authenticated diagnostics. Inspect these screenshots before store upload;
+not raw authenticated diagnostics.
+
+Sealed failure diagnostics: when the `ios-production` environment variable
+`QA_DIAGNOSTICS_AGE_RECIPIENT` holds an operator's public
+[age](https://age-encryption.org) recipient, a failed capture archives the private
+runner directory (raw Maestro output, debug screenshots and command reports, which
+can contain the reviewer password) and uploads only
+`sealed-capture-failure.tar.age`, encrypted to that recipient. The plaintext archive is
+deleted before upload and the safe report records only `diagnostics.sealed`. Decrypt
+locally with `age -d -i <private key> sealed-capture-failure.tar.age | tar -xzf -` in a
+private directory, never commit or share the plaintext, and delete it after diagnosis.
+Without the variable nothing is sealed or uploaded. The capture also raises Maestro's
+XCTest driver startup timeout to five minutes for freshly prepared Simulators. Inspect these screenshots before store upload;
 this does not replace physical-device or production diagnostics acceptance.
 
 The private driver uses the Maestro-supported `MAESTRO_` shell-variable prefix

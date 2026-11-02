@@ -169,15 +169,35 @@ export function safeCommandFailure(directory, result) {
   return report;
 }
 
+// On failure, raw Maestro output (which can contain the reviewer password) is sealed with
+// age to an operator-held public key and only the ciphertext leaves the runner. Nothing
+// is sealed without a well-formed recipient, and no plaintext archive outlives this call.
+const AGE_RECIPIENT = /^age1[02-9ac-hj-np-z]{58}$/;
+export function sealPrivateDiagnostics(privateDir, output, recipient, run = spawnSync) {
+  if (!AGE_RECIPIENT.test(recipient ?? '')) return { sealed: false, reason: 'no_recipient' };
+  const staging = mkdtempSync(join(resolve(output, '..'), 'billmanager-ios-seal-'));
+  const archive = join(staging, 'diagnostics.tar.gz'), sealed = join(output, 'sealed-capture-failure.tar.age');
+  try {
+    const tar = run('tar', ['-czf', archive, '-C', privateDir, '.'], { timeout: 120000, encoding: 'utf8' });
+    if (tar.status !== 0 || tar.error) return { sealed: false, reason: 'archive_failed' };
+    const age = run('age', ['-r', recipient, '-o', sealed, archive], { timeout: 120000, encoding: 'utf8' });
+    if (age.status !== 0 || age.error) { rmSync(sealed, { force: true }); return { sealed: false, reason: 'encrypt_failed' }; }
+    return { sealed: true };
+  } finally { rmSync(staging, { recursive: true, force: true }); }
+}
+
 const persistCleanup = (path, cleanup) => writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')), cleanup }));
-export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEMP, run = spawnSync, request = fetch, recordCleanup = persistCleanup } = {}) {
+export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEMP, run = spawnSync, request = fetch, recordCleanup = persistCleanup,
+  diagnosticsRecipient = process.env.QA_DIAGNOSTICS_AGE_RECIPIENT } = {}) {
   ensure(password.length >= 24 && password.length <= 256 && !/[\r\n\0]/.test(password));
   ensure(runnerTemp && resolve(runnerTemp) !== resolve(tmpdir(), 'billmanager-ios-qa'));
   const output = join(runnerTemp, 'billmanager-ios-qa');
   const promoted = join(output, 'store-screenshots');
   rmSync(promoted, { recursive: true, force: true });
   const privateDir = mkdtempSync(join(runnerTemp, 'billmanager-ios-private-')); // umask 077
-  const env = { ...process.env, MAESTRO_CLI_NO_ANALYTICS: 'true' }; delete env.QA_REVIEWER_PASSWORD;
+  // A freshly prepared Simulator can need longer than Maestro's default to start its XCTest driver.
+  const env = { ...process.env, MAESTRO_CLI_NO_ANALYTICS: 'true', MAESTRO_DRIVER_STARTUP_TIMEOUT: '300000' };
+  delete env.QA_REVIEWER_PASSWORD; delete env.QA_DIAGNOSTICS_AGE_RECIPIENT;
   let failure; const commandTimings = [];
   const execute = (command, args, secrets = false, timeout = 180000) => {
     const started = Date.now();
@@ -237,7 +257,9 @@ export async function runCapture(password, { runnerTemp = process.env.RUNNER_TEM
     if (error instanceof PreflightFailure) failure = { preflight: error.diagnostic };
     if (failure?.stage) stage = failure.stage;
     rmSync(promoted, { recursive: true, force: true });
-    writeFileSync(join(output, 'store-capture.json'), JSON.stringify({ passed: false, code: 'private_capture_failed', stage, commandTimings, ...(failure ? { failure } : {}) }));
+    let diagnostics;
+    try { diagnostics = sealPrivateDiagnostics(privateDir, output, diagnosticsRecipient, run); } catch { diagnostics = { sealed: false, reason: 'seal_error' }; }
+    writeFileSync(join(output, 'store-capture.json'), JSON.stringify({ passed: false, code: 'private_capture_failed', stage, commandTimings, ...(failure ? { failure } : {}), diagnostics }));
     throw new Error('Private screenshot capture failed; raw diagnostics withheld');
   } finally {
     try {

@@ -108,11 +108,17 @@ jobs:
         if: inputs.authenticated
         working-directory: apps/mobile
         run: node scripts/ios-simulator-readiness.mjs
+      - name: Install age for sealed failure diagnostics
+        if: inputs.authenticated && vars.QA_DIAGNOSTICS_AGE_RECIPIENT != ''
+        run: brew install age && age --version
       - name: Capture private synthetic reviewer screens
         if: inputs.authenticated
         working-directory: apps/mobile
         env:
           QA_REVIEWER_PASSWORD: ${{ secrets.QA_REVIEWER_PASSWORD }}
+          # Public age recipient only. Raw failure output is uploaded solely as ciphertext
+          # that the operator decrypts locally with the matching private key.
+          QA_DIAGNOSTICS_AGE_RECIPIENT: ${{ vars.QA_DIAGNOSTICS_AGE_RECIPIENT }}
         run: |
           set +x
           printf '%s' "$QA_REVIEWER_PASSWORD" | env -u QA_REVIEWER_PASSWORD node scripts/ios-store-capture.mjs
@@ -131,6 +137,7 @@ jobs:
             ${{ runner.temp }}/billmanager-ios-qa/result.json
             ${{ runner.temp }}/billmanager-ios-qa/selected-devices.json
             ${{ runner.temp }}/billmanager-ios-qa/store-capture.json
+            ${{ runner.temp }}/billmanager-ios-qa/sealed-capture-failure.tar.age
             ${{ runner.temp }}/billmanager-ios-qa/simulator-readiness.json
             ${{ runner.temp }}/billmanager-ios-qa/simulator-cleanup.json
             ${{ runner.temp }}/billmanager-ios-qa/store-screenshots/*.png
