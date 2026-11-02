@@ -90,8 +90,9 @@ Before anything is downloaded, the run ID must be numeric. The run must be a
 completed manual `main` run of this workflow in `brdweb/billmanager`, and its
 native build step must have succeeded (an earlier reuse run is rejected). Exactly
 one unexpired artifact named `ios-simulator-qa-<head_sha>` must belong to that
-run and commit. After download, the GitHub compare API must show that commit
-contained in the current `main`. The manifest source must equal the run commit,
+run and commit, and the GitHub compare API must show that commit contained in
+the current `main`. After download, the same run and containment checks are
+repeated. The manifest source must equal the run commit,
 the archive SHA-256 must equal the manifest's, and the Release, version,
 HTTPS, OTA and Sentry fields must pass. It then verifies the actual ARM64 Simulator
 binary, HTTPS/OTA settings, embedded JavaScript hash and production/non-debug
@@ -150,22 +151,31 @@ and [Chromium's bootstatus readiness semantics](https://chromium.googlesource.co
 
 Run 41079174520 reached the private login flow on the iPhone and failed at
 `iphone-login` after 148.5 of 180 seconds with category `unclassified` and no
-recovered command. In Maestro 2.12 on iOS, `hideKeyboard` is a short swipe
-followed by a `Couldn't hide the keyboard` failure. The login screen's scroll
-view does not dismiss the keyboard on drag. The categorizer also missed Maestro
-2.12's `No visible element found` and `Assertion is false` messages. This is a
-likely cause, not a proven one.
+recovered command. The categorizer did not recognize two Maestro 2.12 messages
+the login flow can produce. One is `Couldn't hide the keyboard`: on iOS,
+`hideKeyboard` is a short swipe, and the login screen's scroll view does not
+dismiss the keyboard on drag. The other is `Assertion is false`, which an
+`extendedWaitUntil` timeout produces. Either is a likely cause; neither is
+proven. The new `No visible element found` mapping is defensive only: Maestro
+2.12 emits it from `scrollUntilVisible`, which these flows do not use, and
+`tapOn` or `assertVisible` failures still report `Element not found`.
 
 The login flow is now six labelled steps: `launch`, `username`, `password`,
 `submit`, `post-login` and `deep-link`. `hideKeyboard` is no longer used. Return
 on the password field calls the form's `onSubmitEditing` submit and blurs it.
-The submit step then waits for an enabled **Sign in** button to disappear.
+If an enabled **Sign in** button is still visible afterwards, the submit step
+taps it once as a guarded fallback. It then waits for an enabled **Sign in**
+button to disappear.
 Selectors are unchanged from the shipped build 16 source (`81a9e78`): the
 `auth-login-screen` ID, plus the second `^Username$`, `^Password$` and
 `^Sign in$` matches. Each field's text label comes before its accessible input,
 and the screen header comes before the button. Neither inputs nor the button
-have test IDs in that source. App source is not changed, so the Simulator build
-renders the same screens.
+have test IDs in that source. This change does not modify app source. Between
+`81a9e78` and current `main`, the app source changes are Android-only top
+insets, plus minor dependency bumps such as `lucide-react-native` 1.61 to 1.65,
+which can change icon glyphs. A pinned run can also come from an older commit.
+Before uploading captures to App Store Connect, compare them visually with
+build 16.
 
 The login process limit is 420 seconds, and in-flow waits for the login screen,
 navigation and first bill are 60 seconds. The read-only capture limit is 360
