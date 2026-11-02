@@ -28,6 +28,11 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     expect(secretSteps[0].if).toBe('inputs.authenticated');
     expect(secretSteps[0].name).toBe('Capture private synthetic reviewer screens');
     expect(job.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with.path).not.toMatch(/private|debug|simulator\.log|final-screen/);
+    // The only failure diagnostic uploaded is the age-encrypted archive, gated by the recipient variable.
+    expect(job.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with.path).toContain('billmanager-ios-qa/sealed-capture-failure.tar.age');
+    expect(job.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with.path).not.toMatch(/ios-seal|\.tar\.gz/);
+    expect(job.steps.find(step => step.name === 'Install verified age for sealed failure diagnostics').run).toContain('shasum -a 256 --check');
+    expect(job.steps.find(step => step.name === 'Install verified age for sealed failure diagnostics').if).toContain("vars.QA_DIAGNOSTICS_AGE_RECIPIENT != ''");
     expect(job.steps.find(step => step.uses?.startsWith('actions/upload-artifact')).with['retention-days']).toBe(14);
   });
 
