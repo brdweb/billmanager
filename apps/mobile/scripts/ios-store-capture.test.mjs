@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { mobileParityResources } from '../src/features/mobileParityResources';
 import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD, CAPTURE_RETRIES, APP_READY } from './ios-store-capture.mjs';
 const password = 'synthetic-fixture-only-not-a-credential';
 const data = {
@@ -66,7 +67,11 @@ describe('private native demo screenshot boundaries', () => {
     expect(flat(captureCommands).filter(c => c.launchApp)).toEqual(Array(4).fill({ launchApp: { clearState: false } }));
     // Payment rows are below the fold on iPhone; only on-screen header/summary text is asserted.
     const payments = captureCommands[1].retry.commands.filter(c => c.extendedWaitUntil?.visible?.text && c !== APP_READY).map(c => c.extendedWaitUntil.visible.text);
-    expect(payments).toEqual(['Payment history', 'Net total']);
+    expect(payments).toEqual(['Payment history', 'Payment totals\\..*']);
+    // Maestro matches the whole accessibility label, so the check must match the grouped totals label.
+    const totals = mobileParityResources.en.payments.totalsA11y.replace(/\{\{\w+\}\}/g, () => '$1,905.00');
+    expect(new RegExp(`^(?:${payments[1]})$`).test(totals)).toBe(true);
+    expect(new RegExp(`^(?:${payments[1]})$`).test(mobileParityResources.en.payments.netTotal)).toBe(false);
   });
   it('requires complete native-size PNG coverage; never resizes or accepts partial captures', () => {
     const root = mkdtempSync(join(tmpdir(), 'qa-png-test-'));
