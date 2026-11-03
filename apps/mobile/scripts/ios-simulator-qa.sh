@@ -55,7 +55,8 @@ printf 'QA phase: compile (Release, active ARM64 Simulator architecture)\n'
 xcodebuild -workspace ios/BillManager.xcworkspace -scheme BillManager \
   -configuration Release -sdk iphonesimulator -destination "id=$simulator_id" \
   -derivedDataPath "$RUNNER_TEMP/billmanager-ios-derived" -jobs 2 \
-  ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build > "$output/xcode-build.log" 2>&1
+  ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual \
+  DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= build > "$output/xcode-build.log" 2>&1
 app="$RUNNER_TEMP/billmanager-ios-derived/Build/Products/Release-iphonesimulator/BillManager.app"
 [[ -f "$app/main.jsbundle" ]]
 executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
@@ -66,32 +67,23 @@ xcrun lipo -archs "$app/$executable" | tee "$output/binary-architectures.txt"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' "$app/Info.plist")" == false ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsLocalNetworking' "$app/Info.plist")" == false ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :EXUpdatesEnabled' "$app/Expo.plist")" == false ]]
-# CODE_SIGNING_ALLOWED=NO leaves the app without entitlements, and the Simulator keychain then
-# rejects secure-store writes (errSecMissingEntitlement -34018), so authenticated sign-in fails.
-# Ad-hoc sign nested code inside-out, then the app with a Simulator-only keychain entitlement.
-# This is QA-only; store builds are signed by EAS with their real entitlements.
-printf 'QA phase: sign (ad-hoc Simulator keychain entitlement)\n'
-entitlements="$RUNNER_TEMP/billmanager-simulator.entitlements"
-cat > "$entitlements" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>application-identifier</key>
-  <string>SIMULATORQA.com.brdweb.billmanager</string>
-  <key>keychain-access-groups</key>
-  <array>
-    <string>SIMULATORQA.com.brdweb.billmanager</string>
-  </array>
-</dict>
-</plist>
-PLIST
-while IFS= read -r -d '' nested; do
-  codesign --force --sign - --timestamp=none "$nested"
-done < <(find "$app" -depth \( -name '*.framework' -o -name '*.appex' -o -name '*.dylib' \) -print0)
-codesign --force --sign - --timestamp=none --entitlements "$entitlements" "$app"
-codesign --verify --deep --strict "$app" || printf 'warning: strict deep signature verification reported issues\n'
-codesign -d --entitlements - --xml "$app" 2>/dev/null | grep -q 'SIMULATORQA.com.brdweb.billmanager'
+# "Sign to Run Locally": Xcode links the full entitlements (including an application-identifier)
+# into __TEXT,__entitlements / __ents_der and ad-hoc signs with only minimal signature entitlements.
+# The Simulator keychain reads the simulated section, so expo-secure-store writes succeed
+# (unsigned builds fail with errSecMissingEntitlement -34018), while restricted entitlements
+# never appear in the ad-hoc signature, which macOS would refuse to launch. QA-only; store
+# builds are signed by EAS with real entitlements.
+printf 'QA phase: sign (verify Xcode simulated entitlements)\n'
+# Capture before matching: grep -q under pipefail can fail on SIGPIPE, and `! cmd` never trips set -e.
+signature_info="$(codesign -dv "$app" 2>&1)"
+[[ "$signature_info" == *'Signature=adhoc'* ]]
+simulated_entitlements="$(xcrun otool -s __TEXT __entitlements -V "$app/$executable")"
+[[ "$simulated_entitlements" == *'application-identifier'* ]]
+signature_entitlements="$(codesign -d --entitlements - --xml "$app" 2>/dev/null || true)"
+if [[ "$signature_entitlements" == *'application-identifier'* ]]; then
+  echo 'Restricted entitlements must stay out of the ad-hoc signature' >&2
+  exit 1
+fi
 git diff HEAD --exit-code >> "$output/source-diff.txt"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$output/BillManager-simulator.app.zip"
 node - "$output" "$app" "$simulator_id" <<'NODE'
