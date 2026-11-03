@@ -43,7 +43,7 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     expect(env.SENTRY_DSN).toBe('');
     expect(env.SENTRY_DISABLE_AUTO_UPLOAD).toBe('true');
     expect(script).toContain('-configuration Release -sdk iphonesimulator');
-    expect(script).toContain('CODE_SIGNING_ALLOWED=NO');
+    expect(script).toContain('CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual');
     expect(script).toContain('-jobs 2');
     expect(script).toContain('Print :NSAppTransportSecurity:NSAllowsArbitraryLoads');
     expect(script).toContain('Print :NSAppTransportSecurity:NSAllowsLocalNetworking');
@@ -53,7 +53,8 @@ describe('credential-free iOS Simulator lane boundaries', () => {
   });
 
   it('builds and verifies only the active ARM64 Simulator binary and exposes phases', () => {
-    expect(script).toContain('ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO');
+    expect(script).toContain('ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=YES');
+    expect(script).not.toContain('CODE_SIGNING_ALLOWED=NO');
     expect(script).toContain('Print :CFBundleExecutable');
     expect(script).toContain('xcrun lipo -archs "$app/$executable"');
     expect(script).toContain('[[ "$(cat "$output/binary-architectures.txt")" == arm64 ]]');
@@ -61,8 +62,13 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     const phases = [...script.matchAll(/QA phase: ([^\\\n']+)/g)].map(match => match[1]);
     expect(phases.map(phase => phase.split(' ')[0])).toEqual(['prebuild', 'pods', 'compile', 'sign', 'install', 'Maestro']);
     // Unsigned Simulator apps lack entitlements, so secure-store keychain writes fail (-34018).
-    expect(script).toContain('codesign --force --sign - --timestamp=none --entitlements "$entitlements" "$app"');
-    expect(script).toContain('<key>keychain-access-groups</key>');
+    // Restricted entitlements in an ad-hoc signature make macOS refuse to launch the app; Xcode
+    // instead links them into __TEXT,__entitlements, which the build verifies before packaging.
+    expect(script).not.toContain('codesign --force');
+    expect(script).toContain('xcrun segedit "$app/$executable" -extract __TEXT __entitlements "$entitlements_dir/simulated.plist"');
+    expect(script).toContain('node scripts/ios-simulated-entitlements.mjs "$entitlements_dir/simulated.plist"');
+    expect(script).not.toContain('otool -s __TEXT __entitlements -V');
+    expect(script).toContain(`if [[ "$signature_entitlements" == *'application-identifier'* ]]; then`);
     expect(script.indexOf('QA phase: sign')).toBeLessThan(script.indexOf('ditto -c -k'));
   });
 
