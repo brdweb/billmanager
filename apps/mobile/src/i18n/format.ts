@@ -28,10 +28,31 @@ function currencyFormatter(): Intl.NumberFormat {
   });
 }
 
+const decimalSeparators = new Map<string, string>();
+
+// Hermes on iOS implements Intl.NumberFormat format() but not formatToParts(), so the
+// separator is read from format(1.1) with the locale's own "1" removed. That keeps
+// non-ASCII numbering systems (e.g. Arabic "١٫١") correct and falls back to ".".
 function decimalSeparator(): string {
-  return new Intl.NumberFormat(formattingConfig.locale)
-    .formatToParts(1.1)
-    .find((part) => part.type === 'decimal')?.value ?? '.';
+  const { locale } = formattingConfig;
+  const cached = decimalSeparators.get(locale);
+  if (cached) return cached;
+
+  let separator = '.';
+  try {
+    const one = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(1);
+    const oneAndTenth = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(1.1);
+    const candidate = oneAndTenth.split(one).join('').replace(/[\s\u200e\u200f\u061c]/g, '');
+    if (candidate.length === 1) separator = candidate;
+  } catch {
+    // Keep the "." fallback.
+  }
+
+  decimalSeparators.set(locale, separator);
+  return separator;
 }
 
 function resolveLocale(locale: string, language: SupportedLanguage): string {
