@@ -102,12 +102,17 @@ export const loginCommands = [
 // (swift_reflectionMirror, KERN_INVALID_ADDRESS) while XCUITest read the hierarchy
 // mid-transition; a bounded retry relaunches the app if that platform crash recurs.
 export const CAPTURE_RETRIES = 2;
+// A link opened before the relaunched app has mounted its navigator is dropped (run
+// 41713365017 stayed on Home), so each screen waits for the signed-in Home title first.
+export const APP_READY = { extendedWaitUntil: { visible: { text: '^Overview$' }, timeout: 60000 } };
 const screen = (path, checks, name) => ({ retry: { maxRetries: CAPTURE_RETRIES, commands: [
-  { launchApp: { clearState: false } }, ...route(path), ...checks, ...absentAuth, { takeScreenshot: name },
+  { launchApp: { clearState: false } }, APP_READY, ...route(path), ...checks, ...absentAuth, { takeScreenshot: name },
 ] } });
 export const captureCommands = [
   screen('bills', NAMES.map(name => wait(`.*${name}.*`)), 'bills'),
-  screen('payments', [wait('Payment history'), wait('.*DEMO Rent.*'), wait('.*DEMO Utilities.*')], 'payment-history'),
+  // The payment rows sit below the summary and filters on a phone, so only the always
+  // visible header and summary are asserted; verifyDemo already pins the payment data.
+  screen('payments', [wait('Payment history'), wait('Net total')], 'payment-history'),
   screen('settlements', [wait('Everyone is settled up')], 'settlements'),
   screen('settings/billing', [wait('Plan and billing'), wait('.*Pro.*'), { assertNotVisible: { text: 'Open billing portal' } }], 'billing'),
 ];
