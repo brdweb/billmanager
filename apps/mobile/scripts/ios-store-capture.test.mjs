@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS } from './ios-store-capture.mjs';
+import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD } from './ios-store-capture.mjs';
 const password = 'synthetic-fixture-only-not-a-credential';
 const data = {
   '/auth/login': { access_token: 'fixture-token' },
@@ -42,7 +42,10 @@ describe('private native demo screenshot boundaries', () => {
     expect(login.some(c => c.takeScreenshot)).toBe(false);
     const firstLink = login.findIndex(c => c.openLink);
     expect(login[firstLink - 1]).toEqual({ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } });
-    expect(captureCommands.some(c => c.inputText || c.tapOn)).toBe(false);
+    expect(captureCommands.some(c => c.inputText)).toBe(false);
+    // The only taps after sign-in confirm the iOS "Open in BillManager?" system prompt.
+    expect(captureCommands.filter(c => c.tapOn)).toEqual(Array(4).fill(CONFIRM_OPEN));
+    for (const [i, c] of captureCommands.entries()) if (c.openLink) expect(captureCommands[i + 1]).toEqual(CONFIRM_OPEN);
     expect(captureCommands.filter(c => c.takeScreenshot).map(c => c.takeScreenshot)).toEqual(['bills', 'payment-history', 'settlements', 'billing']);
     expect(captureCommands.filter(c => c.assertNotVisible?.id === 'auth-login-screen')).toHaveLength(4);
   });
@@ -218,7 +221,9 @@ it('splits login into labelled steps, submits with Return plus a guarded Sign in
   expect(flat(loginCommands).filter(c => c.tapOn?.text === '^Sign in$')).toHaveLength(1);
   expect(step('post-login')[0]).toEqual({ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } });
   expect(flat(loginCommands).filter(c => c.openLink)).toEqual([{ openLink: 'billmanager://bills' }]);
-  expect(step('deep-link')[0]).toEqual({ openLink: 'billmanager://bills' });
+  expect(step('deep-link').slice(0, 3)).toEqual([{ openLink: 'billmanager://bills' }, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD]);
+  expect(CONFIRM_OPEN).toEqual({ tapOn: { text: '^Open$', optional: true } });
+  expect(DECLINE_SAVE_PASSWORD).toEqual({ tapOn: { text: '^Not Now$', optional: true } });
 });
 
 it('names the failing login step from the private command report using fixed labels only', () => {

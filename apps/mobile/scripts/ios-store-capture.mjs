@@ -67,7 +67,12 @@ export async function verifyDemo(password, request = fetch) {
 
 const absentAuth = [{ assertNotVisible: { id: 'auth-login-screen' } }, { assertNotVisible: { text: '^Password$' } }];
 const wait = text => ({ extendedWaitUntil: { visible: { text }, timeout: 30000 } });
-const route = path => ({ openLink: `billmanager://${path}` });
+// iOS 26 asks "Open in “BillManager”?" for every simctl custom-scheme link and offers
+// to save the reviewer password after sign-in. Both are system prompts over the app;
+// tapping only their exact confirm/decline labels keeps the app itself read-only.
+export const CONFIRM_OPEN = { tapOn: { text: '^Open$', optional: true } };
+export const DECLINE_SAVE_PASSWORD = { tapOn: { text: '^Not Now$', optional: true } };
+const route = path => [{ openLink: `billmanager://${path}` }, CONFIRM_OPEN];
 // Each login step is a labelled runFlow so a failure can be attributed to a fixed
 // step name without publishing raw output. Selectors exist in the shipped build 16
 // source (81a9e78): the field Text label precedes the accessible TextInput, and
@@ -89,13 +94,13 @@ export const loginCommands = [
   step('submit', [{ pressKey: 'Enter' }, { runFlow: { when: { visible: SIGN_IN }, commands: [{ tapOn: { text: '^Sign in$', index: 1 } }] } },
     { extendedWaitUntil: { notVisible: SIGN_IN, timeout: 15000 } }]),
   step('post-login', [{ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } }]),
-  step('deep-link', [route('bills'), { extendedWaitUntil: { visible: { text: '.*DEMO Rent.*' }, timeout: 60000 } }, ...absentAuth]),
+  step('deep-link', [...route('bills'), DECLINE_SAVE_PASSWORD, { extendedWaitUntil: { visible: { text: '.*DEMO Rent.*' }, timeout: 60000 } }, ...absentAuth]),
 ];
 export const captureCommands = [
-  route('bills'), ...NAMES.map(name => wait(`.*${name}.*`)), ...absentAuth, { takeScreenshot: 'bills' },
-  route('payments'), wait('Payment history'), wait('.*DEMO Rent.*'), wait('.*DEMO Utilities.*'), ...absentAuth, { takeScreenshot: 'payment-history' },
-  route('settlements'), wait('Everyone is settled up'), ...absentAuth, { takeScreenshot: 'settlements' },
-  route('settings/billing'), wait('Plan and billing'), wait('.*Pro.*'),
+  ...route('bills'), ...NAMES.map(name => wait(`.*${name}.*`)), ...absentAuth, { takeScreenshot: 'bills' },
+  ...route('payments'), wait('Payment history'), wait('.*DEMO Rent.*'), wait('.*DEMO Utilities.*'), ...absentAuth, { takeScreenshot: 'payment-history' },
+  ...route('settlements'), wait('Everyone is settled up'), ...absentAuth, { takeScreenshot: 'settlements' },
+  ...route('settings/billing'), wait('Plan and billing'), wait('.*Pro.*'),
   { assertNotVisible: { text: 'Open billing portal' } }, ...absentAuth, { takeScreenshot: 'billing' },
 ];
 // Driver start-up plus every bounded in-flow wait, with headroom.
