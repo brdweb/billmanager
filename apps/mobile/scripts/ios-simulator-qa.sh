@@ -77,8 +77,11 @@ printf 'QA phase: sign (verify Xcode simulated entitlements)\n'
 # Capture before matching: grep -q under pipefail can fail on SIGPIPE, and `! cmd` never trips set -e.
 signature_info="$(codesign -dv "$app" 2>&1)"
 [[ "$signature_info" == *'Signature=adhoc'* ]]
-simulated_entitlements="$(xcrun otool -s __TEXT __entitlements -V "$app/$executable")"
-[[ "$simulated_entitlements" == *'application-identifier'* ]]
+# Extract the raw section bytes (otool prints only 16-byte hex rows) and parse the plist.
+entitlements_dir="$(mktemp -d "$RUNNER_TEMP/billmanager-simulated-entitlements.XXXXXX")"
+xcrun segedit "$app/$executable" -extract __TEXT __entitlements "$entitlements_dir/simulated.plist"
+node scripts/ios-simulated-entitlements.mjs "$entitlements_dir/simulated.plist"
+rm -rf "$entitlements_dir"
 signature_entitlements="$(codesign -d --entitlements - --xml "$app" 2>/dev/null || true)"
 if [[ "$signature_entitlements" == *'application-identifier'* ]]; then
   echo 'Restricted entitlements must stay out of the ad-hoc signature' >&2

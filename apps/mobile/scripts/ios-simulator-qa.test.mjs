@@ -65,8 +65,9 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     // Restricted entitlements in an ad-hoc signature make macOS refuse to launch the app; Xcode
     // instead links them into __TEXT,__entitlements, which the build verifies before packaging.
     expect(script).not.toContain('codesign --force');
-    expect(script).toContain('simulated_entitlements="$(xcrun otool -s __TEXT __entitlements -V "$app/$executable")"');
-    expect(script).toContain(`[[ "$simulated_entitlements" == *'application-identifier'* ]]`);
+    expect(script).toContain('xcrun segedit "$app/$executable" -extract __TEXT __entitlements "$entitlements_dir/simulated.plist"');
+    expect(script).toContain('node scripts/ios-simulated-entitlements.mjs "$entitlements_dir/simulated.plist"');
+    expect(script).not.toContain('otool -s __TEXT __entitlements -V');
     expect(script).toContain(`if [[ "$signature_entitlements" == *'application-identifier'* ]]; then`);
     expect(script.indexOf('QA phase: sign')).toBeLessThan(script.indexOf('ditto -c -k'));
   });

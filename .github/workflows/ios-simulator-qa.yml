@@ -60,7 +60,7 @@ jobs:
         run: |
           npm run i18n:check
           npm run maestro:validate
-          npm test -- scripts/ios-simulator-qa.test.mjs scripts/ios-qa-devices.test.mjs scripts/ios-store-capture.test.mjs scripts/ios-qa-reuse.test.mjs scripts/ios-simulator-readiness.test.mjs
+          npm test -- scripts/ios-simulator-qa.test.mjs scripts/ios-simulated-entitlements.test.mjs scripts/ios-qa-devices.test.mjs scripts/ios-store-capture.test.mjs scripts/ios-qa-reuse.test.mjs scripts/ios-simulator-readiness.test.mjs
       - name: Install verified Maestro CLI
         env:
           MAESTRO_VERSION: 2.12.0
