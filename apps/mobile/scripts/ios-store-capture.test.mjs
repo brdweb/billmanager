@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD } from './ios-store-capture.mjs';
+import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD, CAPTURE_RETRIES } from './ios-store-capture.mjs';
 const password = 'synthetic-fixture-only-not-a-credential';
 const data = {
   '/auth/login': { access_token: 'fixture-token' },
@@ -22,6 +22,7 @@ const writePrepared = (out, devices = preparedDevices) => {
   writeFileSync(join(out, 'simulator-readiness.json'), JSON.stringify({ passed: true, devices }));
 };
 const stateResult = () => ({ status: 0, stdout: JSON.stringify({ devices: { 'iOS-26-5': ['fixture', 'fixture2', 'phone', 'pad'].map(udid => ({ udid, state: 'Booted' })) } }) });
+const flat = commands => commands.flatMap(c => [c, ...flat(c.runFlow?.commands ?? c.retry?.commands ?? [])]);
 describe('private native demo screenshot boundaries', () => {
   it('requires exact owner, sole database, manual Pro and synthetic records before UI', async () => {
     const calls = []; expect(await verifyDemo(password, api(data, calls))).toEqual({ user: 25, database: 23, bills: 4, payments: 2 });
@@ -42,12 +43,24 @@ describe('private native demo screenshot boundaries', () => {
     expect(login.some(c => c.takeScreenshot)).toBe(false);
     const firstLink = login.findIndex(c => c.openLink);
     expect(login[firstLink - 1]).toEqual({ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } });
-    expect(captureCommands.some(c => c.inputText)).toBe(false);
+    const capture = flat(captureCommands);
+    expect(capture.some(c => c.inputText)).toBe(false);
     // The only taps after sign-in confirm the iOS "Open in BillManager?" system prompt.
-    expect(captureCommands.filter(c => c.tapOn)).toEqual(Array(4).fill(CONFIRM_OPEN));
-    for (const [i, c] of captureCommands.entries()) if (c.openLink) expect(captureCommands[i + 1]).toEqual(CONFIRM_OPEN);
-    expect(captureCommands.filter(c => c.takeScreenshot).map(c => c.takeScreenshot)).toEqual(['bills', 'payment-history', 'settlements', 'billing']);
-    expect(captureCommands.filter(c => c.assertNotVisible?.id === 'auth-login-screen')).toHaveLength(4);
+    expect(capture.filter(c => c.tapOn)).toEqual(Array(4).fill(CONFIRM_OPEN));
+    for (const [i, c] of capture.entries()) if (c.openLink) expect(capture[i + 1]).toEqual(CONFIRM_OPEN);
+    expect(capture.filter(c => c.takeScreenshot).map(c => c.takeScreenshot)).toEqual(['bills', 'payment-history', 'settlements', 'billing']);
+    expect(capture.filter(c => c.assertNotVisible?.id === 'auth-login-screen')).toHaveLength(4);
+  });
+  it('captures each screen from a fresh signed-in launch with a bounded relaunch retry', () => {
+    expect(CAPTURE_RETRIES).toBe(2);
+    for (const block of captureCommands) {
+      expect(Object.keys(block)).toEqual(['retry']);
+      expect(block.retry.maxRetries).toBe(CAPTURE_RETRIES);
+      expect(block.retry.commands[0]).toEqual({ launchApp: { clearState: false } });
+      expect(block.retry.commands[1].openLink).toMatch(/^billmanager:\/\//);
+      expect(block.retry.commands.at(-1).takeScreenshot).toBeTruthy();
+    }
+    expect(flat(captureCommands).filter(c => c.launchApp)).toEqual(Array(4).fill({ launchApp: { clearState: false } }));
   });
   it('requires complete native-size PNG coverage; never resizes or accepts partial captures', () => {
     const root = mkdtempSync(join(tmpdir(), 'qa-png-test-'));
@@ -201,7 +214,7 @@ it.each([
   expect(JSON.stringify(report)).not.toContain(password);
 });
 
-const flat = commands => commands.flatMap(c => [c, ...(c.runFlow ? flat(c.runFlow.commands) : [])]);
+
 it('splits login into labelled steps, submits with Return plus a guarded Sign in fallback and never uses hideKeyboard', () => {
   expect(loginCommands.map(c => c.runFlow?.label)).toEqual(LOGIN_STEPS.map(step => `qa-login-step-${step}`));
   expect(LOGIN_STEPS).toEqual(['launch', 'username', 'password', 'submit', 'post-login', 'deep-link']);
@@ -241,6 +254,22 @@ it('names the failing login step from the private command report using fixed lab
     const report = safeCommandFailure(root, { status: 1, stdout: `qa-login-step-launch... COMPLETED\nqa-login-step-deep-link ${password}` });
     expect(report).toMatchObject({ step: 'password', stepSource: 'command_report', command: { ordinal: 6, type: 'inputTextCommand', status: 'FAILED' } });
     expect(JSON.stringify(report)).not.toMatch(/synthetic-fixture|Password/);
+  } finally { rmSync(root, { recursive: true }); }
+});
+
+it('reports the innermost failed command inside a capture retry, not the retry wrapper', () => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-capture-retry-'));
+  try {
+    const nested = join(root, 'capture', '2026-11-03_120000', 'capture'); mkdirSync(nested, { recursive: true });
+    writeFileSync(join(nested, 'commands.json'), JSON.stringify([
+      { command: { retryCommand: { maxRetries: 2, commands: [] } }, metadata: { status: 'FAILED', depth: 0 } },
+      { command: { launchAppCommand: {} }, metadata: { status: 'COMPLETED', depth: 1 } },
+      { command: { openLinkCommand: {} }, metadata: { status: 'COMPLETED', depth: 1 } },
+      { command: { assertConditionCommand: {} }, metadata: { status: 'FAILED', depth: 1, error: { message: password } } },
+    ]));
+    const report = safeCommandFailure(root, { status: 1, stdout: password });
+    expect(report.command).toEqual({ ordinal: 4, type: 'assertConditionCommand', status: 'FAILED' });
+    expect(JSON.stringify(report)).not.toContain(password);
   } finally { rmSync(root, { recursive: true }); }
 });
 

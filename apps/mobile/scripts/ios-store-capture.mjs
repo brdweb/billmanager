@@ -96,15 +96,23 @@ export const loginCommands = [
   step('post-login', [{ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } }]),
   step('deep-link', [...route('bills'), DECLINE_SAVE_PASSWORD, { extendedWaitUntil: { visible: { text: '.*DEMO Rent.*' }, timeout: 60000 } }, ...absentAuth]),
 ];
+// Each screen starts from a fresh launch of the signed-in app (clearState: false keeps
+// the keychain session) and opens its own link, so no capture depends on a tab-to-tab
+// transition. Run 41676812680 crashed inside iOS 26 UINavigationBar accessibility
+// (swift_reflectionMirror, KERN_INVALID_ADDRESS) while XCUITest read the hierarchy
+// mid-transition; a bounded retry relaunches the app if that platform crash recurs.
+export const CAPTURE_RETRIES = 2;
+const screen = (path, checks, name) => ({ retry: { maxRetries: CAPTURE_RETRIES, commands: [
+  { launchApp: { clearState: false } }, ...route(path), ...checks, ...absentAuth, { takeScreenshot: name },
+] } });
 export const captureCommands = [
-  ...route('bills'), ...NAMES.map(name => wait(`.*${name}.*`)), ...absentAuth, { takeScreenshot: 'bills' },
-  ...route('payments'), wait('Payment history'), wait('.*DEMO Rent.*'), wait('.*DEMO Utilities.*'), ...absentAuth, { takeScreenshot: 'payment-history' },
-  ...route('settlements'), wait('Everyone is settled up'), ...absentAuth, { takeScreenshot: 'settlements' },
-  ...route('settings/billing'), wait('Plan and billing'), wait('.*Pro.*'),
-  { assertNotVisible: { text: 'Open billing portal' } }, ...absentAuth, { takeScreenshot: 'billing' },
+  screen('bills', NAMES.map(name => wait(`.*${name}.*`)), 'bills'),
+  screen('payments', [wait('Payment history'), wait('.*DEMO Rent.*'), wait('.*DEMO Utilities.*')], 'payment-history'),
+  screen('settlements', [wait('Everyone is settled up')], 'settlements'),
+  screen('settings/billing', [wait('Plan and billing'), wait('.*Pro.*'), { assertNotVisible: { text: 'Open billing portal' } }], 'billing'),
 ];
 // Driver start-up plus every bounded in-flow wait, with headroom.
-export const LOGIN_TIMEOUT_MS = 540000, CAPTURE_TIMEOUT_MS = 660000;
+export const LOGIN_TIMEOUT_MS = 540000, CAPTURE_TIMEOUT_MS = 900000;
 const EXPECTED = ['bills.png', 'payment-history.png', 'settlements.png', 'billing.png'];
 export function safeScreenshots(directory, family) {
   const found = [];
@@ -129,7 +137,7 @@ export function safeScreenshots(directory, family) {
 export function safeCommandFailure(directory, result) {
   const kinds = ['tapOnElement', 'assertConditionCommand', 'inputTextCommand', 'launchAppCommand',
     'applyConfigurationCommand', 'openLinkCommand', 'hideKeyboardCommand', 'takeScreenshotCommand',
-    'pressKeyCommand', 'runFlowCommand'];
+    'pressKeyCommand', 'runFlowCommand', 'retryCommand'];
   const processOutcome = result.error?.code === 'ETIMEDOUT' ? 'timeout'
     : result.error?.code === 'ENOBUFS' ? 'output_limit' : result.error ? 'launch_failed' : 'nonzero_exit';
   const report = { process: processOutcome, exitCode: Number.isInteger(result.status) ? result.status : null };
@@ -157,7 +165,7 @@ export function safeCommandFailure(directory, result) {
   try { walk(directory); } catch { /* Missing/truncated debug output is not evidence. */ }
   // Nested commands follow their runFlow parent; report the innermost failed command.
   const failed = pending.filter(row => row.status === 'FAILED');
-  const command = failed.findLast(row => row.type !== 'runFlowCommand') ?? failed.at(-1) ?? pending.at(-1);
+  const command = failed.findLast(row => !['runFlowCommand', 'retryCommand'].includes(row.type)) ?? failed.at(-1) ?? pending.at(-1);
   if (command) report.command = command;
   const raw = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
   report.category = /Element not found|No elements found|No visible element found/i.test(raw) ? 'element_not_found'
