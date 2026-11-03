@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD, CAPTURE_RETRIES } from './ios-store-capture.mjs';
+import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD, CAPTURE_RETRIES, APP_READY } from './ios-store-capture.mjs';
 const password = 'synthetic-fixture-only-not-a-credential';
 const data = {
   '/auth/login': { access_token: 'fixture-token' },
@@ -57,10 +57,16 @@ describe('private native demo screenshot boundaries', () => {
       expect(Object.keys(block)).toEqual(['retry']);
       expect(block.retry.maxRetries).toBe(CAPTURE_RETRIES);
       expect(block.retry.commands[0]).toEqual({ launchApp: { clearState: false } });
-      expect(block.retry.commands[1].openLink).toMatch(/^billmanager:\/\//);
+      // The deep link is only opened once the relaunched app shows its signed-in Home.
+      expect(block.retry.commands[1]).toEqual(APP_READY);
+      expect(APP_READY).toEqual({ extendedWaitUntil: { visible: { text: '^Overview$' }, timeout: 60000 } });
+      expect(block.retry.commands[2].openLink).toMatch(/^billmanager:\/\//);
       expect(block.retry.commands.at(-1).takeScreenshot).toBeTruthy();
     }
     expect(flat(captureCommands).filter(c => c.launchApp)).toEqual(Array(4).fill({ launchApp: { clearState: false } }));
+    // Payment rows are below the fold on iPhone; only on-screen header/summary text is asserted.
+    const payments = captureCommands[1].retry.commands.filter(c => c.extendedWaitUntil?.visible?.text && c !== APP_READY).map(c => c.extendedWaitUntil.visible.text);
+    expect(payments).toEqual(['Payment history', 'Net total']);
   });
   it('requires complete native-size PNG coverage; never resizes or accepts partial captures', () => {
     const root = mkdtempSync(join(tmpdir(), 'qa-png-test-'));
