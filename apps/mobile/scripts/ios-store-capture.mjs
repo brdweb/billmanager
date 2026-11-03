@@ -112,7 +112,9 @@ export const captureCommands = [
   screen('bills', NAMES.map(name => wait(`.*${name}.*`)), 'bills'),
   // The payment rows sit below the summary and filters on a phone, so only the always
   // visible header and summary are asserted; verifyDemo already pins the payment data.
-  screen('payments', [wait('Payment history'), wait('Net total')], 'payment-history'),
+  // The totals card is one accessibility element ("Payment totals. Income …"), so its
+  // visible "Net total" caption is not a separate element Maestro can match.
+  screen('payments', [wait('Payment history'), wait('Payment totals\\..*')], 'payment-history'),
   screen('settlements', [wait('Everyone is settled up')], 'settlements'),
   screen('settings/billing', [wait('Plan and billing'), wait('.*Pro.*'), { assertNotVisible: { text: 'Open billing portal' } }], 'billing'),
 ];
