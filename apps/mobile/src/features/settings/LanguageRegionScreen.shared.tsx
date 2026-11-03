@@ -8,6 +8,7 @@ import { api } from '../../api/client';
 import { AdaptivePlatform } from '../../design/tokens';
 import {
   configureFormatting,
+  currencyDisplayName,
   getFormattingConfig,
   type FormattingConfig,
 } from '../../i18n/format';
@@ -96,7 +97,7 @@ export function LanguageRegionScreenView({
             key={currency}
             platform={platform}
             title={currency}
-            subtitle={new Intl.DisplayNames([language], { type: 'currency' }).of(currency) ?? currency}
+            subtitle={currencyDisplayName(currency, language)}
             selected={(user?.currency ?? formatting.currency) === currency}
             onPress={() => void chooseCurrency(currency)}
             isLast={index === currencies.length - 1}

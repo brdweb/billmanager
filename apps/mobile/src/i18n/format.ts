@@ -55,16 +55,20 @@ function decimalSeparator(): string {
   return separator;
 }
 
+// Hermes (React Native) has no Intl.Locale on any platform, so the UI language and the
+// deployment region are combined from the BCP 47 subtags by hand. Unicode extensions
+// (-u-ca-, -u-hc-, -u-nu-) are kept, and the result is canonicalised by
+// Intl.getCanonicalLocales, which Hermes does implement.
 function resolveLocale(locale: string, language: SupportedLanguage): string {
+  const subtags = locale.replace(/_/g, '-').split('-');
+  let index = 1;
+  let script: string | undefined;
+  let region: string | undefined;
+  if (/^[A-Za-z]{4}$/.test(subtags[index] ?? '')) script = subtags[index++];
+  if (/^(?:[A-Za-z]{2}|\d{3})$/.test(subtags[index] ?? '')) region = subtags[index];
+  const extension = /-u(?:-[A-Za-z0-9]{2,8})+/i.exec(locale)?.[0] ?? '';
   try {
-    const base = new Intl.Locale(locale);
-    return new Intl.Locale(language, {
-      region: base.region,
-      script: base.script,
-      calendar: base.calendar,
-      hourCycle: base.hourCycle,
-      numberingSystem: base.numberingSystem,
-    }).toString();
+    return Intl.getCanonicalLocales(`${[language, script, region].filter(Boolean).join('-')}${extension}`)[0] ?? language;
   } catch {
     return language;
   }
@@ -91,6 +95,17 @@ export function configureFormatting(
   }
 
   return formattingConfig;
+}
+
+// Hermes has no Intl.DisplayNames on any platform; fall back to the ISO code.
+export function currencyDisplayName(currency: string, language: string): string {
+  const { DisplayNames } = Intl as { DisplayNames?: typeof Intl.DisplayNames };
+  if (typeof DisplayNames !== 'function') return currency;
+  try {
+    return new DisplayNames([language], { type: 'currency' }).of(currency) ?? currency;
+  } catch {
+    return currency;
+  }
 }
 
 export function getFormattingConfig(): FormattingConfig {
