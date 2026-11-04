@@ -6,7 +6,7 @@ import pytest
 import app as server
 import config
 from app import create_access_token
-from models import Subscription, User, UserInvite
+from models import Bill, Subscription, User, UserInvite
 from services import stripe_service, email
 
 
@@ -320,3 +320,18 @@ def test_public_catalog_preserves_old_response_keys_as_non_purchasable_aliases(m
         assert public['pricing'][tier]['annual'] == 2400
         assert public['pricing'][tier]['purchasable'] == (tier == 'pro')
         assert public['tier_limits'][tier]['users'] == 6
+
+
+def test_unlimited_bill_usage_reports_the_actual_active_bill_count(admin_user, test_database, test_bill, client, admin_auth_headers, db_session, monkeypatch):
+    monkeypatch.setattr(config, 'DEPLOYMENT_MODE', 'saas')
+    test_database.owner_id = admin_user.id
+    if admin_user.subscription is None:
+        db_session.add(Subscription(user_id=admin_user.id, tier='pro', status='active'))
+    db_session.add(Bill(database_id=test_database.id, name='Archived', amount=5, frequency='monthly',
+        due_date='2025-01-20', type='expense', account='Checking', archived=True))
+    db_session.commit()
+    allowed, info = server.check_tier_limit(admin_user, 'bills')
+    assert allowed and info == {'limit': -1, 'used': 1, 'unlimited': True, 'tier': 'pro'}
+    response = client.get('/api/v2/billing/usage', headers=admin_auth_headers)
+    assert response.status_code == 200
+    assert response.get_json()['data']['usage']['bills'] == {'used': 1, 'limit': -1, 'unlimited': True}

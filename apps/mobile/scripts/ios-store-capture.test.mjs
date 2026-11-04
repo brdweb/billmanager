@@ -3,7 +3,7 @@ import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mobileParityResources } from '../src/features/mobileParityResources';
-import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD, CAPTURE_RETRIES, APP_READY } from './ios-store-capture.mjs';
+import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD, SIGNED_IN_BILLS, CAPTURE_RETRIES, APP_READY } from './ios-store-capture.mjs';
 const password = 'synthetic-fixture-only-not-a-credential';
 const data = {
   '/auth/login': { access_token: 'fixture-token' },
@@ -245,7 +245,11 @@ it('splits login into labelled steps, submits with Return plus a guarded Sign in
   expect(flat(loginCommands).filter(c => c.tapOn?.text === '^Sign in$')).toHaveLength(1);
   expect(step('post-login')[0]).toEqual({ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } });
   expect(flat(loginCommands).filter(c => c.openLink)).toEqual([{ openLink: 'billmanager://bills' }]);
-  expect(step('deep-link').slice(0, 3)).toEqual([{ openLink: 'billmanager://bills' }, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD]);
+  expect(step('deep-link').slice(0, 3)).toEqual([{ openLink: 'billmanager://bills' }, CONFIRM_OPEN, SIGNED_IN_BILLS]);
+  // A late Save Password sheet is dismissed on every attempt before waiting for the bills again.
+  expect(SIGNED_IN_BILLS.retry.maxRetries).toBeGreaterThanOrEqual(2);
+  expect(SIGNED_IN_BILLS.retry.commands[0]).toEqual(DECLINE_SAVE_PASSWORD);
+  expect(SIGNED_IN_BILLS.retry.commands[1].extendedWaitUntil.visible.text).toBe('.*DEMO Rent.*');
   expect(CONFIRM_OPEN).toEqual({ tapOn: { text: '^Open$', optional: true } });
   expect(DECLINE_SAVE_PASSWORD).toEqual({ tapOn: { text: '^Not Now$', optional: true } });
 });

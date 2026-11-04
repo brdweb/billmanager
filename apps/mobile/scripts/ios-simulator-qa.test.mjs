@@ -19,7 +19,7 @@ describe('credential-free iOS Simulator lane boundaries', () => {
     const job = workflow.jobs.simulator;
     expect(job.if).toBe("github.ref == 'refs/heads/main'");
     expect(job['runs-on']).toBe('macos-26');
-    expect(job['timeout-minutes']).toBe(120);
+    expect(job['timeout-minutes']).toBe(150);
     expect(JSON.stringify(workflow)).not.toMatch(/eas-cli|workflow_call/);
     expect(workflow.on.workflow_dispatch.inputs.authenticated.default).toBe(false);
     expect(job.environment).toBe("${{ inputs.authenticated && 'ios-production' || '' }}");

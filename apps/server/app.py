@@ -1100,11 +1100,7 @@ def check_tier_limit(user, feature: str) -> tuple[bool, dict]:
     if isinstance(limit, bool):
         return limit, {"allowed": limit, "tier": tier}
 
-    # Numeric limits (-1 = unlimited)
-    if limit == -1:
-        return True, {"limit": -1, "used": 0, "unlimited": True, "tier": tier}
-
-    # Count current usage
+    # Count current usage, including for unlimited (-1) limits so usage displays stay accurate.
     if feature == "bills":
         # Count active (non-archived) bills across user's databases
         from models import Bill
@@ -1164,6 +1160,9 @@ def check_tier_limit(user, feature: str) -> tuple[bool, dict]:
             used = User.query.count()
     else:
         used = 0
+
+    if limit == -1:
+        return True, {"limit": -1, "used": used, "unlimited": True, "tier": tier}
 
     allowed = used < limit
     return allowed, {
