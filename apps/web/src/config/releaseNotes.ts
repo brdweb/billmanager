@@ -50,6 +50,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.5',
+    date: '2026-11-03',
+    title: 'Accurate Plan Usage',
+    sections: [
+      { heading: 'Bug Fixes', items: [
+        'Plan usage now counts your active bills on Pro, where bills are unlimited, instead of showing 0 in the mobile app',
+      ] },
+    ],
+  },
+  {
     version: '4.13.4',
     date: '2026-11-02',
     title: 'Clear Pro Checkout and Billing Fixes',

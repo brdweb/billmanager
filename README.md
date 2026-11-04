@@ -10,18 +10,13 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.13.4
+## 🎉 What's New in v4.13.5
 
-**Clear Pro Checkout and Billing Fixes** — Renewal terms before purchase, confirmed checkout returns, and reliable Stripe subscription updates.
+**Accurate Plan Usage** — The billing usage summary now counts your bills on unlimited plans.
 
 ### Highlights
 
-- **Renewal disclosure** — The web Billing page shows the Pro price, automatic renewal, and how to cancel before checkout, with links to the Terms of Service and Privacy Policy. The trial note says that subscribing during the free trial starts paid billing right away.
-- **Checkout confirmation** — Returning from a completed checkout waits for Pro to activate. Returning from a canceled checkout confirms you were not charged. A canceled first checkout no longer leaves a pending plan on the Billing page.
-- **Owner-only purchase** — Only the account owner sees **Get Pro** on the web Billing page. Other users in the account see a note that the account owner manages billing.
-- **Stripe renewals and failures** — Invoice events in the current Stripe payload format now update subscription status and billing periods for renewals, and mark the subscription past due when a payment fails.
-- **Resubscribing** — Customers whose earlier subscription ended can subscribe again. Subscriptions that still need attention, such as an overdue payment, are directed to the billing portal. A late invoice cannot reopen a canceled subscription.
-- **Security and dependencies** — Patched joserfc, pyasn1, and follow-redirects. Refreshed web and server dependencies, including the Stripe SDK 16.1.
+- **Plan usage** — Billing usage reports the number of active bills for Pro accounts, whose bill limit is unlimited. Previously it reported 0, which the mobile Plan and billing screen showed as "0 · Unlimited".
 - **No migration** — This release adds no database schema migration and needs no new configuration.
 - **Mobile delivery** — This release publishes the server/web container. Native mobile changes require a separate signed build and store release; these notes do not confirm store approval or public availability.
 
