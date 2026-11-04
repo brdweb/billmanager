@@ -2,6 +2,16 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.5',
+    date: '2026-11-03',
+    title: 'Genaue Tarifnutzung',
+    sections: [
+      { heading: 'Fehlerbehebungen', items: [
+        'Die Tarifnutzung zählt bei Pro, wo Rechnungen unbegrenzt sind, jetzt Ihre aktiven Rechnungen, statt in der mobilen App 0 anzuzeigen',
+      ] },
+    ],
+  },
+  {
     version: '4.13.4',
     date: '2026-11-02',
     title: 'Klarer Pro-Checkout und Abrechnungskorrekturen',
