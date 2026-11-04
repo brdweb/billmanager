@@ -72,6 +72,10 @@ const wait = text => ({ extendedWaitUntil: { visible: { text }, timeout: 30000 }
 // tapping only their exact confirm/decline labels keeps the app itself read-only.
 export const CONFIRM_OPEN = { tapOn: { text: '^Open$', optional: true } };
 export const DECLINE_SAVE_PASSWORD = { tapOn: { text: '^Not Now$', optional: true } };
+// iOS can raise the Save Password sheet only after the bills have loaded (seen on iPad),
+// and the sheet hides the list from Maestro. Each attempt dismisses the sheet if it is
+// showing, then waits for the bills.
+export const SIGNED_IN_BILLS = { retry: { maxRetries: 3, commands: [DECLINE_SAVE_PASSWORD, { extendedWaitUntil: { visible: { text: '.*DEMO Rent.*' }, timeout: 20000 } }] } };
 const route = path => [{ openLink: `billmanager://${path}` }, CONFIRM_OPEN];
 // Each login step is a labelled runFlow so a failure can be attributed to a fixed
 // step name without publishing raw output. Selectors exist in the shipped build 16
@@ -94,7 +98,7 @@ export const loginCommands = [
   step('submit', [{ pressKey: 'Enter' }, { runFlow: { when: { visible: SIGN_IN }, commands: [{ tapOn: { text: '^Sign in$', index: 1 } }] } },
     { extendedWaitUntil: { notVisible: SIGN_IN, timeout: 15000 } }]),
   step('post-login', [{ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } }]),
-  step('deep-link', [...route('bills'), DECLINE_SAVE_PASSWORD, { extendedWaitUntil: { visible: { text: '.*DEMO Rent.*' }, timeout: 60000 } }, ...absentAuth]),
+  step('deep-link', [...route('bills'), SIGNED_IN_BILLS, ...absentAuth]),
 ];
 // Each screen starts from a fresh launch of the signed-in app (clearState: false keeps
 // the keychain session) and opens its own link, so no capture depends on a tab-to-tab
@@ -119,7 +123,7 @@ export const captureCommands = [
   screen('settings/billing', [wait('Plan and billing'), wait('.*Pro.*'), { assertNotVisible: { text: 'Open billing portal' } }], 'billing'),
 ];
 // Driver start-up plus every bounded in-flow wait, with headroom.
-export const LOGIN_TIMEOUT_MS = 540000, CAPTURE_TIMEOUT_MS = 900000;
+export const LOGIN_TIMEOUT_MS = 720000, CAPTURE_TIMEOUT_MS = 900000;
 const EXPECTED = ['bills.png', 'payment-history.png', 'settlements.png', 'billing.png'];
 export function safeScreenshots(directory, family) {
   const found = [];
