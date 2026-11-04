@@ -3,7 +3,7 @@ import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mobileParityResources } from '../src/features/mobileParityResources';
-import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD, SIGNED_IN_BILLS, RELAUNCH_SIGNED_IN, CAPTURE_RETRIES, APP_READY } from './ios-store-capture.mjs';
+import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD, SIGNED_IN_BILLS, RELAUNCH_SIGNED_IN, CAPTURE_RETRIES, APP_READY, NO_OFFLINE_BANNER } from './ios-store-capture.mjs';
 const password = 'synthetic-fixture-only-not-a-credential';
 const data = {
   '/auth/login': { access_token: 'fixture-token' },
@@ -64,7 +64,15 @@ describe('private native demo screenshot boundaries', () => {
       expect(APP_READY).toEqual({ extendedWaitUntil: { visible: { text: '^Overview$' }, timeout: 60000 } });
       expect(block.retry.commands[2].openLink).toMatch(/^billmanager:\/\//);
       expect(block.retry.commands.at(-1).takeScreenshot).toBeTruthy();
+      expect(block.retry.commands.at(-2)).toEqual(NO_OFFLINE_BANNER);
     }
+    // Every English and German offline banner is rejected; the screen titles and live copy are not.
+    const offline = new RegExp(`^(?:${NO_OFFLINE_BANNER.extendedWaitUntil.notVisible.text})$`);
+    const fill = text => text.replace(/\{\{\w+\}\}/g, ' · Nov 4');
+    for (const lang of ['en', 'de']) {
+      for (const section of ['payments', 'settlements']) expect(offline.test(fill(mobileParityResources[lang][section].offlineSaved))).toBe(true);
+    }
+    for (const text of ['Payment history', 'Settlements', 'Everyone is settled up', 'Plan and billing', 'Offline']) expect(offline.test(text)).toBe(false);
     expect(flat(captureCommands).filter(c => c.launchApp)).toEqual(Array(4).fill({ launchApp: { clearState: false } }));
     // Payment rows are below the fold on iPhone; only on-screen header/summary text is asserted.
     const payments = captureCommands[1].retry.commands.filter(c => c.extendedWaitUntil?.visible?.text && c !== APP_READY).map(c => c.extendedWaitUntil.visible.text);

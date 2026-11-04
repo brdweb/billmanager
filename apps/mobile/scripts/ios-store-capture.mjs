@@ -113,8 +113,13 @@ export const loginCommands = [
 // (swift_reflectionMirror, KERN_INVALID_ADDRESS) while XCUITest read the hierarchy
 // mid-transition; a bounded retry relaunches the app if that platform crash recurs.
 export const CAPTURE_RETRIES = 2;
+// A store screenshot must show live data. Run 41762630759 captured the iPhone payment
+// history and settlements screens behind the "Offline · showing saved …" banner after a
+// transient network drop, so each screen waits for any offline banner to clear and
+// otherwise fails the attempt, which relaunches and retries.
+export const NO_OFFLINE_BANNER = { extendedWaitUntil: { notVisible: { text: 'Offline [·•] .*' }, timeout: 15000 } };
 const screen = (path, checks, name) => ({ retry: { maxRetries: CAPTURE_RETRIES, commands: [
-  { launchApp: { clearState: false } }, APP_READY, ...route(path), ...checks, ...absentAuth, { takeScreenshot: name },
+  { launchApp: { clearState: false } }, APP_READY, ...route(path), ...checks, ...absentAuth, NO_OFFLINE_BANNER, { takeScreenshot: name },
 ] } });
 export const captureCommands = [
   screen('bills', NAMES.map(name => wait(`.*${name}.*`)), 'bills'),
