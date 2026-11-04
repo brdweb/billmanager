@@ -72,10 +72,17 @@ const wait = text => ({ extendedWaitUntil: { visible: { text }, timeout: 30000 }
 // tapping only their exact confirm/decline labels keeps the app itself read-only.
 export const CONFIRM_OPEN = { tapOn: { text: '^Open$', optional: true } };
 export const DECLINE_SAVE_PASSWORD = { tapOn: { text: '^Not Now$', optional: true } };
-// iOS can raise the Save Password sheet only after the bills have loaded (seen on iPad),
-// and the sheet hides the list from Maestro. Each attempt dismisses the sheet if it is
-// showing, then waits for the bills.
+// iOS can raise the Save Password sheet only after the bills have loaded, and on iPad it
+// is hosted out of process: Maestro cannot see or tap its buttons, and while it is up the
+// app's own hierarchy is hidden (runs 41740236798, 41753035782). Relaunching the signed-in
+// app (clearState: false keeps the keychain session) tears the sheet down, so login
+// verification relaunches before it deep links, exactly like each capture screen.
+// Each attempt still taps "Not Now" when the sheet is visible (iPhone) before waiting.
 export const SIGNED_IN_BILLS = { retry: { maxRetries: 3, commands: [DECLINE_SAVE_PASSWORD, { extendedWaitUntil: { visible: { text: '.*DEMO Rent.*' }, timeout: 20000 } }] } };
+// A link opened before the relaunched app has mounted its navigator is dropped (run
+// 41713365017 stayed on Home), so each relaunch waits for the signed-in Home title first.
+export const APP_READY = { extendedWaitUntil: { visible: { text: '^Overview$' }, timeout: 60000 } };
+export const RELAUNCH_SIGNED_IN = [DECLINE_SAVE_PASSWORD, { launchApp: { clearState: false } }, APP_READY];
 const route = path => [{ openLink: `billmanager://${path}` }, CONFIRM_OPEN];
 // Each login step is a labelled runFlow so a failure can be attributed to a fixed
 // step name without publishing raw output. Selectors exist in the shipped build 16
@@ -98,7 +105,7 @@ export const loginCommands = [
   step('submit', [{ pressKey: 'Enter' }, { runFlow: { when: { visible: SIGN_IN }, commands: [{ tapOn: { text: '^Sign in$', index: 1 } }] } },
     { extendedWaitUntil: { notVisible: SIGN_IN, timeout: 15000 } }]),
   step('post-login', [{ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } }]),
-  step('deep-link', [...route('bills'), SIGNED_IN_BILLS, ...absentAuth]),
+  step('deep-link', [...RELAUNCH_SIGNED_IN, ...route('bills'), SIGNED_IN_BILLS, ...absentAuth]),
 ];
 // Each screen starts from a fresh launch of the signed-in app (clearState: false keeps
 // the keychain session) and opens its own link, so no capture depends on a tab-to-tab
@@ -106,9 +113,6 @@ export const loginCommands = [
 // (swift_reflectionMirror, KERN_INVALID_ADDRESS) while XCUITest read the hierarchy
 // mid-transition; a bounded retry relaunches the app if that platform crash recurs.
 export const CAPTURE_RETRIES = 2;
-// A link opened before the relaunched app has mounted its navigator is dropped (run
-// 41713365017 stayed on Home), so each screen waits for the signed-in Home title first.
-export const APP_READY = { extendedWaitUntil: { visible: { text: '^Overview$' }, timeout: 60000 } };
 const screen = (path, checks, name) => ({ retry: { maxRetries: CAPTURE_RETRIES, commands: [
   { launchApp: { clearState: false } }, APP_READY, ...route(path), ...checks, ...absentAuth, { takeScreenshot: name },
 ] } });

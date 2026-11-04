@@ -3,7 +3,7 @@ import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mobileParityResources } from '../src/features/mobileParityResources';
-import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD, SIGNED_IN_BILLS, CAPTURE_RETRIES, APP_READY } from './ios-store-capture.mjs';
+import { loginCommands, captureCommands, verifyDemo, safeScreenshots, runCapture, safeCommandFailure, sealPrivateDiagnostics, LOGIN_STEPS, CONFIRM_OPEN, DECLINE_SAVE_PASSWORD, SIGNED_IN_BILLS, RELAUNCH_SIGNED_IN, CAPTURE_RETRIES, APP_READY } from './ios-store-capture.mjs';
 const password = 'synthetic-fixture-only-not-a-credential';
 const data = {
   '/auth/login': { access_token: 'fixture-token' },
@@ -43,7 +43,8 @@ describe('private native demo screenshot boundaries', () => {
     const login = flat(loginCommands).filter(c => !c.runFlow);
     expect(login.some(c => c.takeScreenshot)).toBe(false);
     const firstLink = login.findIndex(c => c.openLink);
-    expect(login[firstLink - 1]).toEqual({ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } });
+    // Sign-in completes, the signed-in app is relaunched and shows Home, and only then is the link opened.
+    expect(login.slice(firstLink - 4, firstLink)).toEqual([{ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } }, ...RELAUNCH_SIGNED_IN]);
     const capture = flat(captureCommands);
     expect(capture.some(c => c.inputText)).toBe(false);
     // The only taps after sign-in confirm the iOS "Open in BillManager?" system prompt.
@@ -232,7 +233,9 @@ it('splits login into labelled steps, submits with Return plus a guarded Sign in
   const step = name => loginCommands[LOGIN_STEPS.indexOf(name)].runFlow.commands;
   expect(flat(loginCommands).some(c => 'hideKeyboard' in c)).toBe(false);
   expect(step('launch')[0]).toEqual({ launchApp: { clearState: true } });
-  expect(flat(loginCommands).filter(c => c.launchApp)).toHaveLength(1);
+  // One clean launch to sign in, then one signed-in relaunch that tears down an out-of-process
+  // Save Password sheet (iPad) before the deep link is verified.
+  expect(flat(loginCommands).filter(c => c.launchApp)).toEqual([{ launchApp: { clearState: true } }, { launchApp: { clearState: false } }]);
   for (const name of LOGIN_STEPS.filter(name => name !== 'password')) expect(JSON.stringify(step(name))).not.toContain('MAESTRO_QA_REVIEWER_PASSWORD');
   expect(step('password').at(-1)).toEqual({ inputText: '${MAESTRO_QA_REVIEWER_PASSWORD}' });
   const signIn = { text: '^Sign in$', index: 1, enabled: true };
@@ -245,7 +248,8 @@ it('splits login into labelled steps, submits with Return plus a guarded Sign in
   expect(flat(loginCommands).filter(c => c.tapOn?.text === '^Sign in$')).toHaveLength(1);
   expect(step('post-login')[0]).toEqual({ extendedWaitUntil: { notVisible: { id: 'auth-login-screen' }, timeout: 60000 } });
   expect(flat(loginCommands).filter(c => c.openLink)).toEqual([{ openLink: 'billmanager://bills' }]);
-  expect(step('deep-link').slice(0, 3)).toEqual([{ openLink: 'billmanager://bills' }, CONFIRM_OPEN, SIGNED_IN_BILLS]);
+  expect(RELAUNCH_SIGNED_IN).toEqual([DECLINE_SAVE_PASSWORD, { launchApp: { clearState: false } }, APP_READY]);
+  expect(step('deep-link').slice(0, 6)).toEqual([...RELAUNCH_SIGNED_IN, { openLink: 'billmanager://bills' }, CONFIRM_OPEN, SIGNED_IN_BILLS]);
   // A late Save Password sheet is dismissed on every attempt before waiting for the bills again.
   expect(SIGNED_IN_BILLS.retry.maxRetries).toBeGreaterThanOrEqual(2);
   expect(SIGNED_IN_BILLS.retry.commands[0]).toEqual(DECLINE_SAVE_PASSWORD);
