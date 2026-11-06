@@ -44,20 +44,25 @@ def previous(db_session, admin_user, monkeypatch):
     return subscription
 
 
+@pytest.mark.parametrize("portal", [True, False])
 @pytest.mark.parametrize("status", ["past_due", "unpaid", "incomplete", "paused"])
-def test_checkout_refuses_a_second_subscription_while_the_current_one_can_bill(client, admin_auth_headers, previous, db_session, monkeypatch, status):
+def test_checkout_refuses_a_second_subscription_while_the_current_one_can_bill(client, admin_auth_headers, previous, db_session, monkeypatch, status, portal):
     previous.status = status
     db_session.commit()
     calls = []
     monkeypatch.setattr(server, "get_billing_readiness", lambda: {"billing_enabled": True})
     monkeypatch.setattr(server, "create_checkout_session", lambda *args: calls.append(args) or {"url": "u", "session_id": "s"})
+    monkeypatch.setattr(server, "is_saas", lambda: True)
+    monkeypatch.setattr(server, "is_portal_configured", lambda: portal)
 
     response = client.post("/api/v2/billing/create-checkout", json={"tier": "pro", "interval": "monthly"}, headers=admin_auth_headers)
 
     assert response.status_code == 400
     body = response.get_json()
     assert body["success"] is False
-    assert "billing portal" in body["error"]
+    assert body["code"] == "subscription_needs_attention"
+    # Older clients show the message as-is: it must not point to a portal this user cannot open.
+    assert ("billing portal" in body["error"]) is portal
     assert calls == []
 
 

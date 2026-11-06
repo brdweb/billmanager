@@ -945,7 +945,9 @@
     "checkoutFailedDefault": "Checkout-Sitzung konnte nicht erstellt werden",
     "checkoutFailedRetryDefault": "Abonnementvorgang konnte nicht gestartet werden",
     "portalFailedDefault": "Abrechnungsportal konnte nicht geöffnet werden",
-    "portalFailedRetryDefault": "Abrechnungsportal konnte nicht geöffnet werden"
+    "portalFailedRetryDefault": "Abrechnungsportal konnte nicht geöffnet werden",
+    "checkoutNeedsAttentionPortal": "Ihr aktuelles Abonnement erfordert Ihre Aufmerksamkeit. Verwalten Sie es im Abrechnungsportal, statt ein neues Abonnement abzuschließen.",
+    "checkoutNeedsAttention": "Ihr aktuelles Abonnement erfordert Ihre Aufmerksamkeit und muss geklärt werden, bevor Sie ein neues Abonnement abschließen können."
   },
   "analyticsPage": {
     "title": "Analysen",

@@ -945,7 +945,9 @@
     "checkoutFailedDefault": "Failed to create checkout session",
     "checkoutFailedRetryDefault": "Failed to start subscription process",
     "portalFailedDefault": "Failed to open billing portal",
-    "portalFailedRetryDefault": "Failed to open billing portal"
+    "portalFailedRetryDefault": "Failed to open billing portal",
+    "checkoutNeedsAttentionPortal": "Your current subscription needs attention. Manage it in the billing portal instead of starting a new subscription.",
+    "checkoutNeedsAttention": "Your current subscription needs attention and must be resolved before you can start a new subscription."
   },
   "analyticsPage": {
     "title": "Analytics",

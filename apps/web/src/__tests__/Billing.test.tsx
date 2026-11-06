@@ -147,6 +147,41 @@ it('lets a trial subscriber convert to Pro', async () => {
   show();
   expect(await screen.findByRole('button', { name: 'Get Pro' })).toBeInTheDocument();
 });
+it.each(['canceled', 'incomplete_expired'])('offers checkout to a returning customer whose subscription is %s', async (subscriptionStatus) => {
+  const user = userEvent.setup();
+  mocks.getSubscriptionStatus.mockResolvedValue({ has_subscription: true, is_trialing: false, is_active: false,
+    status: subscriptionStatus, tier: 'pro', effective_tier: 'free', can_manage_subscription: true });
+  show();
+  await user.click(await screen.findByRole('button', { name: 'Get Pro' }));
+  expect(mocks.createCheckoutSession).toHaveBeenLastCalledWith('pro', 'monthly');
+  expect(screen.getByRole('button', { name: 'Manage Subscription' })).toBeInTheDocument();
+});
+it.each(['past_due', 'unpaid', 'incomplete', 'paused'])('keeps a %s subscription on the portal path without pricing', async (subscriptionStatus) => {
+  mocks.getSubscriptionStatus.mockResolvedValue({ has_subscription: true, is_trialing: false,
+    status: subscriptionStatus, tier: 'pro', effective_tier: 'free', can_manage_subscription: true });
+  show();
+  expect(await screen.findByRole('button', { name: 'Manage Subscription' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Get Pro' })).not.toBeInTheDocument();
+});
+it.each([
+  [true, 'Your current subscription needs attention. Manage it in the billing portal instead of starting a new subscription.'],
+  [false, 'Your current subscription needs attention and must be resolved before you can start a new subscription.'],
+])('localizes the needs-attention checkout refusal by code (portal available: %s)', async (canManage, expected) => {
+  const user = userEvent.setup();
+  mocks.getSubscriptionStatus.mockResolvedValue({ ...trialPro, can_manage_subscription: canManage });
+  mocks.createCheckoutSession.mockRejectedValue(Object.assign(new Error('Server English refusal'), { code: 'subscription_needs_attention' }));
+  show();
+  await user.click(await screen.findByRole('button', { name: 'Get Pro' }));
+  expect(await screen.findByText(expected)).toBeInTheDocument();
+  expect(screen.queryByText('Server English refusal')).not.toBeInTheDocument();
+});
+it('shows other checkout failures as returned by the server', async () => {
+  const user = userEvent.setup();
+  mocks.createCheckoutSession.mockRejectedValue(new Error('Billing is not ready'));
+  show();
+  await user.click(await screen.findByRole('button', { name: 'Get Pro' }));
+  expect(await screen.findByText('Billing is not ready')).toBeInTheDocument();
+});
 it('keeps self-hosted billing unlimited with no purchase action', async () => {
   mocks.selfHosted = true;
   show();

@@ -49,12 +49,16 @@ api.interceptors.request.use(
 export class ApiError extends Error {
   public statusCode: number;
   public originalError: AxiosError;
+  /** Stable machine-readable server code, when the response carries one. */
+  public code?: string;
 
   constructor(message: string, statusCode: number, originalError: AxiosError) {
     super(message);
     this.name = 'ApiError';
     this.statusCode = statusCode;
     this.originalError = originalError;
+    const code = (originalError.response?.data as { code?: unknown } | undefined)?.code;
+    if (typeof code === 'string') this.code = code;
   }
 }
 

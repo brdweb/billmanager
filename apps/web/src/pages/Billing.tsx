@@ -46,6 +46,15 @@ const PRICING = {
   pro: { monthly: 2.99, annual: 24 },
 };
 
+// Stripe statuses that can never bill again; the server accepts a new checkout for them.
+const TERMINAL_SUBSCRIPTION_STATUSES: Record<string, true> = { canceled: true, incomplete_expired: true };
+
+// Localize the server's refusal for a subscription that must be resolved before checkout.
+const checkoutRefusalKey = (err: unknown, canManage: boolean) =>
+  (err as { code?: unknown } | null)?.code === 'subscription_needs_attention'
+    ? canManage ? 'billingPage.checkoutNeedsAttentionPortal' : 'billingPage.checkoutNeedsAttention'
+    : null;
+
 export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'cancel' } = {}) {
   const { t } = useTranslation();
   const { isSelfHosted } = useConfig();
@@ -121,7 +130,8 @@ export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'canc
         setError(t('billingPage.checkoutFailedDefault'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('billingPage.checkoutFailedRetryDefault'));
+      const refusal = checkoutRefusalKey(err, status?.can_manage_subscription === true);
+      setError(refusal ? t(refusal) : err instanceof Error ? err.message : t('billingPage.checkoutFailedRetryDefault'));
     } finally {
       setActionLoading(false);
     }
@@ -207,6 +217,10 @@ export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'canc
 
   // A canceled checkout leaves a 'pending' row for users who had none; it is not a subscription.
   const hasSubscription = status?.has_subscription === true && status.status !== 'pending';
+  // Free users, trial subscribers and returning customers whose subscription ended can check out;
+  // other stored subscriptions are resolved through the portal.
+  const canStartCheckout = !hasSubscription || status?.is_trialing === true
+    || TERMINAL_SUBSCRIPTION_STATUSES[status?.status ?? ''] === true;
 
   const getStatusBadge = () => {
     if (!hasSubscription) {
@@ -371,8 +385,8 @@ export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'canc
         </Paper>
       )}
 
-      {/* Pricing is available to Free users and trial subscribers, but not while a purchase activates. */}
-      {(!hasSubscription || status?.is_trialing) && !awaitingCheckout && (
+      {/* Pricing is available when checkout is allowed, but not while a purchase activates. */}
+      {canStartCheckout && !awaitingCheckout && (
         <>
           <Group justify="center" mb="lg">
             <SegmentedControl

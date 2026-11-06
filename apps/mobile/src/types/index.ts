@@ -9,6 +9,8 @@ export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+  /** Stable machine-readable server code on contract-aware errors. */
+  code?: string;
   /** Transport status when a response reached the server. Absent for network failures. */
   httpStatus?: number;
 }

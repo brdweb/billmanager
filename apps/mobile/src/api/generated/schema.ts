@@ -4994,7 +4994,15 @@ export interface operations {
                     "application/json": components["schemas"]["ObjectDataResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
+            /** @description Invalid plan or interval, or an existing subscription prevents checkout. `code` is `subscription_needs_attention` when the stored subscription is not terminal and must be resolved before a new checkout; clients localize it and offer the portal only when billing status reports `can_manage_subscription`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
