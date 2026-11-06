@@ -6,7 +6,7 @@ import type { BillingActions, BillingViewModel } from './models';
 
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const mocks = vi.hoisted(() => ({ profile: 'one', principal: 1, actions: null as BillingActions | null,
-  status: {} as { can_manage_subscription?: boolean }, owner: true, platform: 'ios', model: null as BillingViewModel | null, request: vi.fn(), openUrl: vi.fn(), alert: vi.fn() }));
+  status: {} as { can_manage_subscription?: boolean; status?: string; current_period_end?: string; cancel_at_period_end?: boolean }, owner: true, platform: 'ios', model: null as BillingViewModel | null, request: vi.fn(), openUrl: vi.fn(), alert: vi.fn() }));
 vi.mock('react-native', () => ({ Platform: { get OS() { return mocks.platform; } }, Alert: { alert: mocks.alert } }));
 vi.mock('expo-linking', () => ({ openURL: mocks.openUrl }));
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: { status: mocks.status, usage: {} }, refetch: vi.fn() }) }));
@@ -17,8 +17,8 @@ vi.mock('../../api/client', () => ({ api: {
 vi.mock('../../context/AuthContext', () => ({ useAuth: () => ({ user: { id: mocks.principal, is_account_owner: mocks.owner } }) }));
 vi.mock('../../context/MobileRuntimeContext', () => ({ useMobileRuntime: () => ({ online: true }) }));
 vi.mock('../../context/ServerProfileContext', () => ({ useServerProfiles: () => ({ activeProfile: { id: mocks.profile, deploymentMode: 'saas', capabilities: { billing: true } } }) }));
-vi.mock('../../i18n/format', () => ({ getFormattingConfig: () => ({ locale: 'en-US', currency: 'USD' }) }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock('../../i18n/format', () => ({ getFormattingConfig: () => ({ locale: 'en-US', currency: 'USD' }), formatDate: (date: string) => date.slice(0, 10) }));
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string, params?: { date?: string }) => params?.date ? `${key} ${params.date}` : key }) }));
 vi.mock('./BillingScreen', () => ({ default: ({ actions, model }: { actions: BillingActions; model: BillingViewModel }) => { mocks.actions = actions; mocks.model = model; return null; } }));
 let root: ReactTestRenderer;
 beforeEach(async () => {
@@ -68,6 +68,17 @@ it('shows other checkout refusals as returned by the server', async () => {
   mocks.request.mockResolvedValue({ success: false, error: 'Billing is not ready' });
   await act(async () => { mocks.actions!.onSelectPlan('pro-month'); });
   expect(mocks.alert).toHaveBeenCalledWith('mobileParity.billing.unavailableTitle', 'Billing is not ready');
+});
+it.each([
+  ['canceled', false, undefined, undefined],
+  ['incomplete_expired', false, undefined, undefined],
+  ['active', false, 'mobileParity.billing.renews 2026-12-01', undefined],
+  ['active', true, undefined, 'mobileParity.billing.cancels 2026-12-01'],
+])('labels the period end of a %s subscription (cancel at period end: %s)', async (status, cancelAtPeriodEnd, renewal, cancel) => {
+  mocks.status = { status, current_period_end: '2026-12-01T12:00:00', cancel_at_period_end: cancelAtPeriodEnd };
+  await act(async () => { root.update(React.createElement(BillingContainer)); });
+  expect(mocks.model!.subscription.renewalLabel).toBe(renewal);
+  expect(mocks.model!.subscription.cancelAtLabel).toBe(cancel);
 });
 it.each(['owner', 'member', 'android'] as const)('preserves provider portal role/platform gates for %s', async (kind) => {
   mocks.status = { can_manage_subscription: true };

@@ -201,3 +201,17 @@ def test_late_invoice_event_does_not_reopen_a_terminal_subscription(client, admi
     monkeypatch.setattr(server, "create_checkout_session", lambda *args: {"url": "u", "session_id": "s"})
     checkout = client.post("/api/v2/billing/create-checkout", json={"tier": "pro", "interval": "monthly"}, headers=admin_auth_headers)
     assert checkout.status_code == 200
+
+
+@pytest.mark.parametrize("status,expected", [
+    ("canceled", False), ("incomplete_expired", False), ("active", True), ("past_due", True),
+])
+def test_only_a_live_subscription_reports_cancellation_at_period_end(client, admin_auth_headers, db_session, previous, status, expected):
+    """An ended subscription has no remaining period even when its stored end date is in the future."""
+    previous.status = status
+    db_session.commit()
+
+    data = client.get("/api/v2/billing/status", headers=admin_auth_headers).get_json()["data"]
+
+    assert data["status"] == status
+    assert data["cancel_at_period_end"] is expected

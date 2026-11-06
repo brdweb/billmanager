@@ -912,6 +912,7 @@
     "billingLabel": "Billing",
     "monthlyDefault": "Monthly",
     "renewsOnLabel": "Renews on",
+    "cancelsOnLabel": "Cancels on",
     "manageSubscription": "Manage Subscription",
     "currentUsageTitle": "Current Usage",
     "billsLabel": "Bills",

@@ -54,6 +54,9 @@ export default function BillingContainer() {
   };
   const purchasesAllowed = allowsExternalPurchases(Platform.OS);
   const plans = proPlans(t, tier, subscription?.billing_interval);
+  // Ended subscriptions can never bill again, so they have no renewal or cancellation date.
+  const storedStatus: string | undefined = subscription?.status;
+  const periodEnd = storedStatus === 'canceled' || storedStatus === 'incomplete_expired' ? undefined : subscription?.current_period_end;
 
   const runAction = (request: () => ReturnType<typeof api.createPortalSession>, failureKey: string, portal = false) => runBillingAction({
     gate: actionScope.gate,
@@ -92,8 +95,8 @@ export default function BillingContainer() {
         subscription: {
           state,
           planName: selfHosted ? t('mobileParity.billing.selfHostedUnlimited') : tier !== 'free' ? t('billingPage.proPlan') : t('billingPage.tierFree'),
-          renewalLabel: subscription?.current_period_end ? t('mobileParity.billing.renews', { date: formatDate(subscription.current_period_end) }) : undefined,
-          cancelAtLabel: subscription?.cancel_at_period_end && subscription.current_period_end ? t('mobileParity.billing.cancels', { date: formatDate(subscription.current_period_end) }) : undefined,
+          renewalLabel: periodEnd && !subscription?.cancel_at_period_end ? t('mobileParity.billing.renews', { date: formatDate(periodEnd) }) : undefined,
+          cancelAtLabel: periodEnd && subscription?.cancel_at_period_end ? t('mobileParity.billing.cancels', { date: formatDate(periodEnd) }) : undefined,
           trialDaysRemaining: subscription?.trial_days_remaining,
         },
         usage: selfHosted ? [
