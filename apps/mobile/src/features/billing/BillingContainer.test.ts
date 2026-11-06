@@ -54,6 +54,21 @@ it.each([false, undefined])('blocks retained portal callbacks without provider a
   await act(async () => { mocks.actions!.onSelectPlan('pro-month'); });
   expect(mocks.request).toHaveBeenCalledOnce();
 });
+it.each([
+  [true, 'billingPage.checkoutNeedsAttentionPortal'],
+  [false, 'billingPage.checkoutNeedsAttention'],
+])('localizes the needs-attention checkout refusal by code (portal available: %s)', async (available, key) => {
+  mocks.status = { can_manage_subscription: available };
+  mocks.request.mockResolvedValue({ success: false, code: 'subscription_needs_attention', error: 'Server English refusal' });
+  await act(async () => { root.update(React.createElement(BillingContainer)); });
+  await act(async () => { mocks.actions!.onSelectPlan('pro-month'); });
+  expect(mocks.alert).toHaveBeenCalledWith('mobileParity.billing.unavailableTitle', key);
+});
+it('shows other checkout refusals as returned by the server', async () => {
+  mocks.request.mockResolvedValue({ success: false, error: 'Billing is not ready' });
+  await act(async () => { mocks.actions!.onSelectPlan('pro-month'); });
+  expect(mocks.alert).toHaveBeenCalledWith('mobileParity.billing.unavailableTitle', 'Billing is not ready');
+});
 it.each(['owner', 'member', 'android'] as const)('preserves provider portal role/platform gates for %s', async (kind) => {
   mocks.status = { can_manage_subscription: true };
   mocks.owner = kind !== 'member'; mocks.platform = kind === 'android' ? 'android' : 'ios';

@@ -1915,6 +1915,16 @@ def billing_usage():
     )
 
 
+def _can_manage_subscription(user, subscription):
+    """Account owner with a provider customer and a configured customer portal."""
+    return bool(
+        is_saas()
+        and user.is_account_owner
+        and subscription.stripe_customer_id
+        and is_portal_configured()
+    )
+
+
 @api_v2_bp.route("/billing/create-checkout", methods=["POST"])
 @jwt_required
 def create_checkout():
@@ -1938,17 +1948,23 @@ def create_checkout():
         ), 400
 
     # A stored Stripe subscription that is not terminal (past_due, unpaid,
-    # incomplete, paused, ...) is resolved in the billing portal. A second
-    # checkout would charge again and could not replace it.
+    # incomplete, paused, ...) must be resolved first. A second checkout would
+    # charge again and could not replace it. Clients localize by `code`; the
+    # message mentions the portal only when this user can open it.
     if (
         user.subscription
         and user.subscription.stripe_subscription_id
         and user.subscription.status not in TERMINAL_STRIPE_SUBSCRIPTION_STATUSES
     ):
+        if _can_manage_subscription(user, user.subscription):
+            message = "Your current subscription needs attention. Manage it in the billing portal instead of starting a new subscription."
+        else:
+            message = "Your current subscription needs attention and must be resolved before you can start a new subscription."
         return jsonify(
             {
                 "success": False,
-                "error": "Your current subscription needs attention. Manage it in the billing portal instead of starting a new subscription.",
+                "code": "subscription_needs_attention",
+                "error": message,
             }
         ), 400
 
@@ -2134,8 +2150,7 @@ def billing_status():
             "data": {
                 "status": subscription.status,
                 "has_subscription": True,
-                "can_manage_subscription": bool(is_saas() and user.is_account_owner
-                    and subscription.stripe_customer_id and is_portal_configured()),
+                "can_manage_subscription": _can_manage_subscription(user, subscription),
                 "is_active": subscription.is_active,
                 "is_trialing": subscription.is_trialing,
                 "is_trial_expired": subscription.is_trial_expired,

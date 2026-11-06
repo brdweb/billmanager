@@ -5,10 +5,10 @@ export async function runBillingAction({ gate, allowed, isCurrent, isActive, req
   allowed: boolean;
   isCurrent: () => Promise<boolean>;
   isActive: () => boolean;
-  request: () => Promise<{ success: boolean; data?: { url: string }; error?: string }>;
+  request: () => Promise<{ success: boolean; data?: { url: string }; error?: string; code?: string }>;
   openUrl: (url: string) => Promise<unknown>;
   onBusy: (busy: boolean) => void;
-  onError: (message?: string) => void;
+  onError: (message?: string, code?: string) => void;
 }): Promise<void> {
   if (!allowed || gate.current || !isActive()) return;
   gate.current = true;
@@ -17,7 +17,7 @@ export async function runBillingAction({ gate, allowed, isCurrent, isActive, req
     if (!await isCurrent() || !isActive()) return;
     const response = await request();
     if (!await isCurrent() || !isActive()) return;
-    if (!response.success || !response.data?.url) onError(response.error);
+    if (!response.success || !response.data?.url) onError(response.error, response.code);
     else await openUrl(response.data.url);
   } catch {
     if (await isCurrent() && isActive()) onError();

@@ -63,7 +63,9 @@ export default function BillingContainer() {
     request,
     openUrl: Linking.openURL,
     onBusy: actionScope.setBusy,
-    onError: (message) => Alert.alert(t('mobileParity.billing.unavailableTitle'), message ?? t(failureKey)),
+    onError: (message, code) => Alert.alert(t('mobileParity.billing.unavailableTitle'), code === 'subscription_needs_attention'
+      ? t(subscription?.can_manage_subscription === true ? 'billingPage.checkoutNeedsAttentionPortal' : 'billingPage.checkoutNeedsAttention')
+      : message ?? t(failureKey)),
   });
   const openCheckout = (planId: string) => {
     if (!/^pro-(month|year)$/.test(planId)) return;

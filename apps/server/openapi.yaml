@@ -2154,7 +2154,15 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ObjectDataResponse'}
-        '400': {$ref: '#/components/responses/BadRequest'}
+        '400':
+          description: >-
+            Invalid plan or interval, or an existing subscription prevents checkout. `code` is
+            `subscription_needs_attention` when the stored subscription is not terminal and must be
+            resolved before a new checkout; clients localize it and offer the portal only when
+            billing status reports `can_manage_subscription`.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
 
