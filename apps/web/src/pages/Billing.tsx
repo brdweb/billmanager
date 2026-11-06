@@ -217,10 +217,11 @@ export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'canc
 
   // A canceled checkout leaves a 'pending' row for users who had none; it is not a subscription.
   const hasSubscription = status?.has_subscription === true && status.status !== 'pending';
+  // Ended subscriptions can never bill again, so they have no renewal date.
+  const subscriptionEnded = hasSubscription && TERMINAL_SUBSCRIPTION_STATUSES[status?.status ?? ''] === true;
   // Free users, trial subscribers and returning customers whose subscription ended can check out;
   // other stored subscriptions are resolved through the portal.
-  const canStartCheckout = !hasSubscription || status?.is_trialing === true
-    || TERMINAL_SUBSCRIPTION_STATUSES[status?.status ?? ''] === true;
+  const canStartCheckout = !hasSubscription || status?.is_trialing === true || subscriptionEnded;
 
   const getStatusBadge = () => {
     if (!hasSubscription) {
@@ -323,9 +324,9 @@ export function Billing({ checkoutResult }: { checkoutResult?: 'success' | 'canc
                 <Text c="dimmed">{t('billingPage.billingLabel')}</Text>
                 <Text fw={500} tt="capitalize">{status.billing_interval || t('billingPage.monthlyDefault')}</Text>
               </Group>
-              {status.current_period_end && (
+              {status.current_period_end && !subscriptionEnded && (
                 <Group justify="space-between">
-                  <Text c="dimmed">{t('billingPage.renewsOnLabel')}</Text>
+                  <Text c="dimmed">{t(status.cancel_at_period_end ? 'billingPage.cancelsOnLabel' : 'billingPage.renewsOnLabel')}</Text>
                   <Text fw={500}>{formatDate(status.current_period_end)}</Text>
                 </Group>
               )}

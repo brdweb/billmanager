@@ -518,6 +518,9 @@ class Subscription(db.Model):
     @property
     def cancel_at_period_end(self):
         """Check if subscription is canceled but active until period end"""
+        # An ended subscription has no remaining period, whatever its stored end date.
+        if self.status in ('canceled', 'incomplete_expired'):
+            return False
         if not self.canceled_at:
             return False
         if not self.current_period_end:

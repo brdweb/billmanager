@@ -912,6 +912,7 @@
     "billingLabel": "Abrechnung",
     "monthlyDefault": "Monatlich",
     "renewsOnLabel": "Verlängert sich am",
+    "cancelsOnLabel": "Endet am",
     "manageSubscription": "Abonnement verwalten",
     "currentUsageTitle": "Aktuelle Nutzung",
     "billsLabel": "Rechnungen",

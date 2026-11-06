@@ -182,6 +182,27 @@ it('shows other checkout failures as returned by the server', async () => {
   await user.click(await screen.findByRole('button', { name: 'Get Pro' }));
   expect(await screen.findByText('Billing is not ready')).toBeInTheDocument();
 });
+it.each(['canceled', 'incomplete_expired'])('shows no renewal or cancellation date for a %s subscription', async (subscriptionStatus) => {
+  mocks.getSubscriptionStatus.mockResolvedValue({ has_subscription: true, is_trialing: false, status: subscriptionStatus,
+    tier: 'pro', effective_tier: 'free', billing_interval: 'monthly', current_period_end: '2026-10-27T12:00:00',
+    cancel_at_period_end: false });
+  show();
+  await screen.findByRole('button', { name: 'Get Pro' });
+  expect(screen.queryByText('Renews on')).not.toBeInTheDocument();
+  expect(screen.queryByText('Cancels on')).not.toBeInTheDocument();
+  expect(screen.queryByText('October 27, 2026')).not.toBeInTheDocument();
+});
+it.each([
+  [false, 'Renews on'],
+  [true, 'Cancels on'],
+])('labels the period end of a live subscription (cancel at period end: %s)', async (cancelAtPeriodEnd, label) => {
+  mocks.getSubscriptionStatus.mockResolvedValue({ ...paidPro, billing_interval: 'monthly',
+    current_period_end: '2026-12-01T12:00:00', cancel_at_period_end: cancelAtPeriodEnd });
+  show();
+  expect(await screen.findByText(label)).toBeInTheDocument();
+  expect(screen.getByText('December 1, 2026')).toBeInTheDocument();
+  expect(screen.queryByText(cancelAtPeriodEnd ? 'Renews on' : 'Cancels on')).not.toBeInTheDocument();
+});
 it('keeps self-hosted billing unlimited with no purchase action', async () => {
   mocks.selfHosted = true;
   show();
