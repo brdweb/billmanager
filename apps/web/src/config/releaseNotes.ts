@@ -50,6 +50,21 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.6',
+    date: '2026-11-09',
+    title: 'Resubscribing and Billing Dates',
+    sections: [
+      { heading: 'Bug Fixes', items: [
+        'If your Pro subscription has ended, the Billing page offers Get Pro again so you can resubscribe on the web',
+        'A subscription that needs attention, such as an overdue payment, now gets a clear message that points to the billing portal when you can open it',
+        'Ended subscriptions no longer show a past renewal date, and a subscription set to cancel shows "Cancels on" instead of "Renews on"',
+      ] },
+      { heading: 'Security', items: [
+        'Updated server dependencies, including Authlib, psycopg, Sentry and Resend, plus web dependency updates',
+      ] },
+    ],
+  },
+  {
     version: '4.13.5',
     date: '2026-11-03',
     title: 'Accurate Plan Usage',

@@ -10,13 +10,16 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.13.5
+## 🎉 What's New in v4.13.6
 
-**Accurate Plan Usage** — The billing usage summary now counts your bills on unlimited plans.
+**Resubscribing and Billing Dates** — Returning customers can resubscribe on the web, and the Billing page shows the right dates for ended and canceling subscriptions.
 
 ### Highlights
 
-- **Plan usage** — Billing usage reports the number of active bills for Pro accounts, whose bill limit is unlimited. Previously it reported 0, which the mobile Plan and billing screen showed as "0 · Unlimited".
+- **Resubscribe on the web** — When a subscription has ended (`canceled` or `incomplete_expired`), the web Billing page shows pricing and **Get Pro** again. Subscriptions that still need attention, such as an overdue payment, keep the billing-portal path.
+- **Clear checkout refusal** — When checkout is refused because a subscription needs attention, the server returns `code: "subscription_needs_attention"`, and web and mobile show a localized message that mentions the billing portal only when you can open it.
+- **Billing dates** — Ended subscriptions no longer report `cancel_at_period_end` or show a past "Renews on" date. A live subscription set to cancel shows **Cancels on**.
+- **Dependencies** — Server: Authlib 1.9.5, psycopg 3.3.8, sentry-sdk 2.74.0, resend 2.52.0. Web: Mantine 9.7.5, Vite 8.3.6, i18next 26.7.2 and other patch/minor updates.
 - **No migration** — This release adds no database schema migration and needs no new configuration.
 - **Mobile delivery** — This release publishes the server/web container. Native mobile changes require a separate signed build and store release; these notes do not confirm store approval or public availability.
 

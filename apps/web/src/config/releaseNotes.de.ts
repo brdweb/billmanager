@@ -2,6 +2,21 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.6',
+    date: '2026-11-09',
+    title: 'Erneutes Abonnieren und Abrechnungsdaten',
+    sections: [
+      { heading: 'Fehlerbehebungen', items: [
+        'Ist Ihr Pro-Abo beendet, bietet die Abrechnungsseite wieder „Pro wählen“ an, damit Sie im Web erneut abonnieren können',
+        'Ein Abo, das Aufmerksamkeit braucht, etwa bei einer überfälligen Zahlung, erhält jetzt eine klare Meldung, die auf das Abrechnungsportal verweist, wenn Sie es öffnen können',
+        'Beendete Abos zeigen kein vergangenes Verlängerungsdatum mehr, und ein Abo mit geplanter Kündigung zeigt „Endet am“ statt „Verlängert sich am“',
+      ] },
+      { heading: 'Sicherheit', items: [
+        'Aktualisierte Server-Abhängigkeiten, darunter Authlib, psycopg, Sentry und Resend, sowie Web-Abhängigkeiten',
+      ] },
+    ],
+  },
+  {
     version: '4.13.5',
     date: '2026-11-03',
     title: 'Genaue Tarifnutzung',
