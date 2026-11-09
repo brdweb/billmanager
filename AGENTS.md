@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Instructions for coding agents in this repository (Cursor cloud agents, Codex, Claude Code). Codex (`chatgpt-codex-connector`) is the only automatic PR reviewer. Claude Code is optional and available on request: someone calls it in with an `@claude` comment, for risky PRs only, and it never runs automatically.
+Instructions for coding agents in this repository (Cursor cloud agents, Codex, Claude Code). No AI reviewer runs automatically on pull requests. Codex (`chatgpt-codex-connector`) and Claude Code are available on request: someone calls them in with an `@codex review` or `@claude` comment, and neither runs on its own.
 
 Personal or machine-specific notes never go in tracked files. Claude Code auto-loads the gitignored `CLAUDE.local.md`; Codex users put personal guidance in `~/.codex/AGENTS.md`; `AGENTS.local.md` is a gitignored scratch file that tools don't load automatically.
 
@@ -84,12 +84,12 @@ Use Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `build
 
 ## Review guidance
 
-Codex (`chatgpt-codex-connector`) is the only automatic PR reviewer. It should focus on the risky paths above, plus row-level tenant isolation, shared-bill payment direction, JWT and OAuth and passkeys, Stripe webhooks, OpenAPI and mobile contract drift, and keeping the public GHCR image free of SaaS analytics build arguments. Claude Code is available on request for risky PRs: someone calls it in with an `@claude` comment, and it never runs automatically. The agent that opened the PR fixes review findings.
+No AI reviewer runs automatically. When someone requests a Codex review with an `@codex review` comment, it should focus on the risky paths above, plus row-level tenant isolation, shared-bill payment direction, JWT and OAuth and passkeys, Stripe webhooks, OpenAPI and mobile contract drift, and keeping the public GHCR image free of SaaS analytics build arguments. Claude Code is available on request for risky PRs: someone calls it in with an `@claude` comment, and it never runs automatically. The agent that opened the PR fixes review findings.
 
 ## Review and merge policy
 
 - Bots never post GitHub approvals.
-- A PR merges only after CI is green and every Codex review thread is fixed and resolved.
+- A PR merges only after CI is green and every review thread, including any requested Codex or Claude review, is fixed and resolved.
 - The triage bot may auto-merge only patch and minor dependency bumps, security fixes, docs, tests, and small fixes under about 50 changed lines.
 - Other bots and agents merge only work the maintainer has explicitly approved.
 - Everything else waits for the maintainer: major version bumps, auth, payments, database migrations, CI or release configuration, secrets, and large or ambiguous PRs.
