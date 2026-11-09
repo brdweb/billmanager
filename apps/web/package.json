@@ -9,6 +9,7 @@
   "overrides": {
     "dompurify": "^3.4.11",
     "flatted": "^3.4.2",
+    "minimatch": "^11.0.5",
     "picomatch": "^4.0.4",
     "serialize-javascript": "^7.0.5"
   },
