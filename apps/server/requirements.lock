@@ -121,9 +121,9 @@ pluggy==1.6.0
     # via
     #   pytest
     #   pytest-cov
-psycopg==3.3.6
+psycopg==3.3.8
     # via -r apps/server/requirements.txt
-psycopg-binary==3.3.6
+psycopg-binary==3.3.8
     # via psycopg
 py-serializable==2.1.0
     # via cyclonedx-python-lib
