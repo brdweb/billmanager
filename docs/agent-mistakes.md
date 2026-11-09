@@ -62,3 +62,8 @@ A bill `FOR UPDATE` followed by a share lock can deadlock with an existing share
 - **PR:** https://github.com/brdweb/billmanager/pull/255
 - **Mistake:** A retained portal callback and late response remained valid after the same account lost portal availability.
 - **Rule going forward:** Tie portal actions to a separate availability/owner lease checked before dispatch and before opening a URL, while retaining the shared busy guard and independent free-user checkout eligibility.
+
+- **Date:** 2026-11-09
+- **PR:** https://github.com/brdweb/billmanager/pull/312
+- **Mistake:** Ran `npm run test:coverage` and then `git add -A`, committing about 41,000 lines of generated `apps/web/coverage/` output (which also set off a CodeQL alert in the bundled report script).
+- **Rule going forward:** Stage files by name, not `git add -A`, and check `git show --stat` before pushing. Generated `coverage/` directories are now gitignored.
