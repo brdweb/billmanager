@@ -40,7 +40,7 @@
     "jspdf-autotable": "^5.0.9",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-i18next": "^17.1.13",
+    "react-i18next": "^18.0.1",
     "react-is": "^19.3.1",
     "react-router": "^8.5.1",
     "recharts": "^3.9.2"
