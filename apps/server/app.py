@@ -10479,9 +10479,31 @@ def oauth_callback_form_post_bridge():
 
     query = urlencode(params)
     target = "/auth/callback"
+    if _is_ios_app_oauth_form_post(params.get("state")):
+        target = "/auth/callback/complete"
     if query:
         target = f"{target}?{query}"
     return redirect(target, code=303)
+
+
+def _is_ios_app_oauth_form_post(state):
+    """Whether a form_post callback belongs to a sign-in the iOS app started.
+
+    The iOS sign-in sheet returns to the app when it reaches the registered
+    https callback address, and it matches by URL alone. A form_post arrives at
+    that same address, so the sheet would stop there and drop the posted code.
+    The iOS app therefore waits on a separate address for these answers.
+    Android returns through its verified app link on /auth/callback, and the
+    web app reads /auth/callback itself, so both keep that address.
+    """
+    if not state or "android" in request.headers.get("User-Agent", "").lower():
+        return False
+    payload = _decode_oauth_state(state)
+    return bool(
+        payload
+        and payload.get("client_challenge")
+        and str(payload.get("redirect_uri") or "").startswith("https://")
+    )
 
 
 @spa_bp.route("/<path:path>", methods=["GET"])

@@ -8,6 +8,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 const CLOUD_API_BASE_URL = 'https://app.billmanager.app/api/v2';
 const CLOUD_OAUTH_REDIRECT_URI = 'https://app.billmanager.app/auth/callback';
+const CLOUD_OAUTH_FORM_POST_RETURN_URI = `${CLOUD_OAUTH_REDIRECT_URI}/complete`;
 let activeOAuthSession: { returnUrl: string; expectedState: string } | null = null;
 
 export interface OAuthBrowserAdapter {
@@ -16,6 +17,7 @@ export interface OAuthBrowserAdapter {
     authorizationUrl: string,
     expectedState: string,
     redirectUri?: string,
+    provider?: string,
   ): Promise<OAuthBrowserResult>;
 }
 
@@ -28,6 +30,37 @@ export function createOAuthRedirectUri(
     return CLOUD_OAUTH_REDIRECT_URI;
   }
   return Linking.createURL('auth/callback');
+}
+
+/**
+ * The iOS sign-in sheet can return to an https address only from iOS 17.4.
+ * Earlier versions leave the hosted callback page open inside the sheet.
+ */
+export function supportsOAuthRedirectUri(
+  redirectUri: string,
+  platform: string = Platform.OS,
+  version: string | number | undefined = Platform.Version,
+): boolean {
+  if (platform !== 'ios' || !redirectUri.startsWith('https://')) return true;
+  const [major = 0, minor = 0] = String(version ?? '').split('.').map(Number);
+  return major > 17 || (major === 17 && minor >= 4);
+}
+
+/**
+ * The address the sign-in sheet waits for. Apple answers with a form POST to
+ * the registered redirect URI, and the iOS sheet matches its return address by
+ * URL alone, so it would stop at that POST and drop the posted code. The server
+ * forwards that POST to this separate GET address for the app's own sign-ins.
+ */
+export function createOAuthReturnUrl(
+  provider: string | undefined,
+  redirectUri: string,
+  platform: string = Platform.OS,
+): string {
+  if (platform === 'ios' && provider === 'apple' && redirectUri === CLOUD_OAUTH_REDIRECT_URI) {
+    return CLOUD_OAUTH_FORM_POST_RETURN_URI;
+  }
+  return redirectUri;
 }
 
 export function resolveOAuthRedirectUri(
@@ -97,12 +130,23 @@ export function parseOAuthRedirect(
 
 export const expoOAuthBrowserAdapter: OAuthBrowserAdapter = {
   createRedirectUri: createOAuthRedirectUri,
-  authorize: async (authorizationUrl, expectedState, redirectUri) => {
-    const returnUrl = redirectUri ?? Linking.createURL('auth/callback');
+  authorize: async (authorizationUrl, expectedState, redirectUri, provider) => {
+    const returnUrl = createOAuthReturnUrl(
+      provider,
+      redirectUri ?? Linking.createURL('auth/callback'),
+    );
     activeOAuthSession = { returnUrl, expectedState };
     let result: Awaited<ReturnType<typeof WebBrowser.openAuthSessionAsync>>;
     try {
-      result = await WebBrowser.openAuthSessionAsync(authorizationUrl, returnUrl);
+      // Without preferUniversalLinks, iOS treats "https" as a custom scheme and
+      // the sheet never returns to the app.
+      result = await WebBrowser.openAuthSessionAsync(
+        authorizationUrl,
+        returnUrl,
+        returnUrl.startsWith('https://') ? { preferUniversalLinks: true } : undefined,
+      );
+    } catch {
+      return { status: 'error', message: 'Authorization did not return to BillManager.' };
     } finally {
       activeOAuthSession = null;
     }
