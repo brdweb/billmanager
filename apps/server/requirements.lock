@@ -66,7 +66,7 @@ greenlet==3.5.6
     # via
     #   -r apps/server/requirements.txt
     #   sqlalchemy
-gunicorn==26.2.0
+gunicorn==27.0.1
     # via -r apps/server/requirements.txt
 idna==3.20
     # via requests
