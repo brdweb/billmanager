@@ -8,6 +8,7 @@ import type { OAuthProvider } from '../types';
 import {
   expoOAuthBrowserAdapter,
   resolveOAuthRedirectUri,
+  supportsOAuthRedirectUri,
   type OAuthBrowserAdapter,
 } from '../oauthBrowser';
 import {
@@ -89,6 +90,11 @@ export function OAuthProvidersScreen({
     setActiveProvider(provider.id);
     setNotice(null);
     const requestedRedirectUri = browser.createRedirectUri(provider.id, client.getBaseUrl());
+    if (!supportsOAuthRedirectUri(requestedRedirectUri, platform)) {
+      setNotice(t('mobileAuth.oauth.requiresNewerIos'));
+      setActiveProvider(null);
+      return;
+    }
     const authorization = await client.getOAuthAuthorization(
       provider.id,
       flow,
@@ -113,6 +119,7 @@ export function OAuthProvidersScreen({
       authorization.data.auth_url,
       authorization.data.state,
       redirectUri,
+      provider.id,
     );
     if (browserResult.status === 'cancelled') {
       setActiveProvider(null);

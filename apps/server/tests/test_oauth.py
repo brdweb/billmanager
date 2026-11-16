@@ -1152,6 +1152,57 @@ def test_private_callback_requires_initiating_app_proof(client, db_session, admi
         assert response.status_code == (200 if supplied == verifier else 400)
 
 
+IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 27_2 like Mac OS X) AppleWebKit/605.1.15 Version/27.2 Mobile/15E148 Safari/604.1"
+IPAD_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/27.2 Safari/605.1.15"
+ANDROID_UA = "Mozilla/5.0 (Linux; Android 16; Pixel 10) AppleWebKit/537.36 Chrome/150.0.0.0 Mobile Safari/537.36"
+APP_FLOW_STATE = {
+    "client_challenge": "a" * 64,
+    "redirect_uri": "https://app.billmanager.app/auth/callback",
+}
+
+
+@pytest.mark.parametrize(
+    "state_payload, user_agent, expected_path",
+    [
+        (APP_FLOW_STATE, IPHONE_UA, "/auth/callback/complete"),
+        (APP_FLOW_STATE, IPAD_UA, "/auth/callback/complete"),
+        (APP_FLOW_STATE, ANDROID_UA, "/auth/callback"),
+        ({"redirect_uri": APP_FLOW_STATE["redirect_uri"]}, IPHONE_UA, "/auth/callback"),
+        ({**APP_FLOW_STATE, "redirect_uri": "billmanager://auth/callback"}, IPHONE_UA, "/auth/callback"),
+        (None, IPHONE_UA, "/auth/callback"),
+    ],
+    ids=["iphone-app", "ipad-app", "android-app", "web", "scheme-callback", "unknown-state"],
+)
+def test_form_post_bridge_forwards_ios_app_sign_in_to_separate_address(
+    client, state_payload, user_agent, expected_path
+):
+    from urllib.parse import parse_qs, urlsplit
+
+    with patch("app._decode_oauth_state", return_value=state_payload) as decode:
+        response = client.post(
+            "/auth/callback",
+            data={"code": "provider-code", "state": "opaque-state", "user": "{}"},
+            headers={"User-Agent": user_agent},
+        )
+
+    assert response.status_code == 303
+    location = urlsplit(response.headers["Location"])
+    assert location.path == expected_path
+    assert parse_qs(location.query) == {"code": ["provider-code"], "state": ["opaque-state"]}
+    assert decode.call_count == (0 if user_agent == ANDROID_UA else 1)
+
+
+def test_form_post_bridge_without_state_keeps_web_callback(client):
+    response = client.post(
+        "/auth/callback",
+        data={"error": "user_cancelled_authorize"},
+        headers={"User-Agent": IPHONE_UA},
+    )
+
+    assert response.status_code == 303
+    assert response.headers["Location"].endswith("/auth/callback?error=user_cancelled_authorize")
+
+
 def test_private_callback_start_requires_challenge(client, db_session, monkeypatch):
     _set_provider_config(monkeypatch, 'google')
     monkeypatch.setattr(app_module, 'get_oauth_redirect_uris', lambda: ('billmanager://auth/callback',))
