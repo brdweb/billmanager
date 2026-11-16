@@ -66,7 +66,7 @@ greenlet==3.5.6
     # via
     #   -r apps/server/requirements.txt
     #   sqlalchemy
-gunicorn==26.2.0
+gunicorn==27.0.1
     # via -r apps/server/requirements.txt
 idna==3.20
     # via requests
@@ -182,7 +182,7 @@ sqlalchemy==2.0.54
     #   flask-sqlalchemy
 stevedore==5.9.1
     # via bandit
-stripe==16.1.0
+stripe==17.0.0
     # via -r apps/server/requirements.txt
 tomli==2.4.1
     # via pip-audit

@@ -4,6 +4,7 @@ export function proPlans(
   translate: (key: string) => string,
   tier: string,
   billingInterval?: string,
+  purchasable = true,
 ): BillingPlanItem[] {
   return (['month', 'year'] as const).map((interval) => ({
     id: `pro-${interval}`,
@@ -15,6 +16,7 @@ export function proPlans(
     features: [1, 2, 3, 4, 5].map((index) => translate(`billingPage.proFeature${index}`)),
     current: ['pro', 'basic', 'plus'].includes(tier)
       && billingInterval === (interval === 'month' ? 'monthly' : 'annual'),
+    selectable: purchasable,
     recommended: interval === 'year',
   }));
 }

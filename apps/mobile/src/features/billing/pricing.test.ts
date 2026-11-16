@@ -16,6 +16,10 @@ describe('Pro purchase catalog', () => {
     const plans = proPlans((key) => key, tier, 'annual');
     expect(plans.map((plan) => plan.current)).toEqual([false, true]);
   });
+  it('marks plans as not purchasable for an account with active Pro', () => {
+    expect(proPlans((key) => key, 'pro', 'monthly', false).map((plan) => plan.selectable)).toEqual([false, false]);
+    expect(proPlans((key) => key, 'free').map((plan) => plan.selectable)).toEqual([true, true]);
+  });
   it.each([en, de])('localizes all approved benefits and the 30-day trial', (catalog) => {
     const translate = (key: string) => {
       const field = key.replace('billingPage.', '') as keyof typeof catalog.billingPage;

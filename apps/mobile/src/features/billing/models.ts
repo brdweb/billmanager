@@ -13,6 +13,8 @@ export interface BillingPlanItem {
   currency: string;
   features: string[];
   current: boolean;
+  /** False when checkout would be refused, so no purchase button is shown. */
+  selectable?: boolean;
   recommended?: boolean;
 }
 

@@ -52,3 +52,10 @@ it('retains the account-owner gate even when provider management is available', 
   const html = renderToStaticMarkup(React.createElement(BillingScreen, { model: { ...model, canManageBilling: false, canOpenPortal: true }, actions, platform: 'ios' }));
   expect(html).not.toContain('billing.openPortalA11y');
 });
+it('lists plans without a purchase button when checkout would be refused', () => {
+  const plans = model.plans.map((plan) => ({ ...plan, selectable: false }));
+  const html = renderToStaticMarkup(React.createElement(BillingScreen, { model: { ...model, plans, canOpenPortal: false }, actions, platform: 'ios' }));
+  expect(html).toContain('billing.availablePlans');
+  expect(html).toContain('$2.99');
+  expect(html).not.toContain('billing.choose');
+});

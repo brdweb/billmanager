@@ -13,10 +13,12 @@ vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 
 import {
   createOAuthRedirectUri,
+  createOAuthReturnUrl,
   expoOAuthBrowserAdapter,
   parseOAuthRedirect,
   resolveOAuthRedirectUri,
   shouldHandleOAuthUrlWithNavigation,
+  supportsOAuthRedirectUri,
 } from './oauthBrowser';
 
 describe('OAuth redirect selection', () => {
@@ -91,6 +93,77 @@ describe('OAuth redirect selection', () => {
       provider: undefined,
     });
     expect(shouldHandleOAuthUrlWithNavigation(callbackUrl)).toBe(true);
+  });
+});
+
+describe('OAuth sign-in sheet return', () => {
+  const hosted = 'https://app.billmanager.app/auth/callback';
+
+  it('asks iOS to return an https callback to the app', async () => {
+    browserMocks.openAuthSessionAsync.mockResolvedValueOnce({
+      type: 'success',
+      url: `${hosted}?code=abc&state=expected`,
+    });
+
+    await expect(expoOAuthBrowserAdapter.authorize(
+      'https://accounts.google.com/o/oauth2/v2/auth',
+      'expected',
+      hosted,
+      'google',
+    )).resolves.toMatchObject({ status: 'success', code: 'abc' });
+    expect(browserMocks.openAuthSessionAsync).toHaveBeenLastCalledWith(
+      'https://accounts.google.com/o/oauth2/v2/auth',
+      hosted,
+      { preferUniversalLinks: true },
+    );
+  });
+
+  it('keeps the scheme callback for self-hosted servers', async () => {
+    browserMocks.openAuthSessionAsync.mockResolvedValueOnce({ type: 'cancel' });
+
+    await expoOAuthBrowserAdapter.authorize(
+      'https://identity.example/authorize',
+      'expected',
+      'billmanager://auth/callback',
+      'oidc',
+    );
+    expect(browserMocks.openAuthSessionAsync).toHaveBeenLastCalledWith(
+      'https://identity.example/authorize',
+      'billmanager://auth/callback',
+      undefined,
+    );
+  });
+
+  it('waits for the forwarded address when Apple posts its answer on iOS', () => {
+    expect(createOAuthReturnUrl('apple', hosted, 'ios')).toBe(`${hosted}/complete`);
+    expect(createOAuthReturnUrl('google', hosted, 'ios')).toBe(hosted);
+    expect(createOAuthReturnUrl('apple', hosted, 'android')).toBe(hosted);
+    expect(createOAuthReturnUrl('apple', 'billmanager://auth/callback', 'ios'))
+      .toBe('billmanager://auth/callback');
+  });
+
+  it('reports a sheet that could not start instead of rejecting', async () => {
+    browserMocks.openAuthSessionAsync.mockRejectedValueOnce(new Error('failed to start'));
+
+    await expect(expoOAuthBrowserAdapter.authorize(
+      'https://accounts.google.com/o/oauth2/v2/auth',
+      'expected',
+      hosted,
+      'google',
+    )).resolves.toEqual({
+      status: 'error',
+      message: 'Authorization did not return to BillManager.',
+    });
+    expect(shouldHandleOAuthUrlWithNavigation(`${hosted}?code=abc&state=expected`)).toBe(true);
+  });
+
+  it('requires iOS 17.4 for an https callback', () => {
+    expect(supportsOAuthRedirectUri(hosted, 'ios', '17.3.1')).toBe(false);
+    expect(supportsOAuthRedirectUri(hosted, 'ios', '16.4')).toBe(false);
+    expect(supportsOAuthRedirectUri(hosted, 'ios', '17.4')).toBe(true);
+    expect(supportsOAuthRedirectUri(hosted, 'ios', '27.2.1')).toBe(true);
+    expect(supportsOAuthRedirectUri(hosted, 'android', 36)).toBe(true);
+    expect(supportsOAuthRedirectUri('billmanager://auth/callback', 'ios', '16.4')).toBe(true);
   });
 });
 
