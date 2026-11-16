@@ -101,7 +101,7 @@ function PlanRow({ plan, model, actions, platform, isLast }: { plan: BillingPlan
       <View style={styles.features}>
         {plan.features.map((feature) => <View key={feature} style={styles.featureRow}><Check size={17} color={theme.colors.success} /><Text style={[typography.callout, styles.featureCopy, { color: theme.colors.textSecondary }]}>{feature}</Text></View>)}
       </View>
-      {!plan.current ? (
+      {!plan.current && plan.selectable !== false ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('mobileParity.billing.choose', { name: plan.name })}

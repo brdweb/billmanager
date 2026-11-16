@@ -53,7 +53,8 @@ export default function BillingContainer() {
       && active.principalId === requestedScope.principalId;
   };
   const purchasesAllowed = allowsExternalPurchases(Platform.OS);
-  const plans = proPlans(t, tier, subscription?.billing_interval);
+  // The server refuses checkout for an active paid subscription; plan changes go through the portal.
+  const plans = proPlans(t, tier, subscription?.billing_interval, state !== 'active');
   // Ended subscriptions can never bill again, so they have no renewal or cancellation date.
   const storedStatus: string | undefined = subscription?.status;
   const periodEnd = storedStatus === 'canceled' || storedStatus === 'incomplete_expired' ? undefined : subscription?.current_period_end;
