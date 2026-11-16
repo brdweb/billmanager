@@ -2,6 +2,19 @@ import type { ReleaseNote } from './releaseNotes';
 
 export const germanReleaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.7',
+    date: '2026-11-15',
+    title: 'Anmeldung in der iOS-App und Aktualisierungen',
+    sections: [
+      { heading: 'Fehlerbehebungen', items: [
+        'Die Anmeldung mit Apple aus der iOS-App kehrt jetzt zur App zurück, statt auf einer Webseite zu enden. Dies gilt ab der nächsten Version der iOS-App',
+      ] },
+      { heading: 'Sicherheit', items: [
+        'Aktualisierte Server-Abhängigkeiten, darunter Gunicorn, das Stripe-SDK, psycopg, Sentry und Resend, sowie Web-Abhängigkeiten',
+      ] },
+    ],
+  },
+  {
     version: '4.13.6',
     date: '2026-11-09',
     title: 'Erneutes Abonnieren und Abrechnungsdaten',
