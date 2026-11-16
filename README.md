@@ -10,16 +10,14 @@ A **secure multi-user** web application for tracking recurring expenses and inco
 
 ---
 
-## 🎉 What's New in v4.13.6
+## 🎉 What's New in v4.13.7
 
-**Resubscribing and Billing Dates** — Returning customers can resubscribe on the web, and the Billing page shows the right dates for ended and canceling subscriptions.
+**iOS App Sign-In and Updates** — The server now returns Apple sign-ins started in the iOS app to the app, and server and web dependencies are updated.
 
 ### Highlights
 
-- **Resubscribe on the web** — When a subscription has ended (`canceled` or `incomplete_expired`), the web Billing page shows pricing and **Get Pro** again. Subscriptions that still need attention, such as an overdue payment, keep the billing-portal path.
-- **Clear checkout refusal** — When checkout is refused because a subscription needs attention, the server returns `code: "subscription_needs_attention"`, and web and mobile show a localized message that mentions the billing portal only when you can open it.
-- **Billing dates** — Ended subscriptions no longer report `cancel_at_period_end` or show a past "Renews on" date. A live subscription set to cancel shows **Cancels on**.
-- **Dependencies** — Server: Authlib 1.9.5, psycopg 3.3.8, sentry-sdk 2.74.0, resend 2.52.0. Web: Mantine 9.7.5, Vite 8.3.6, i18next 26.7.2 and other patch/minor updates.
+- **Sign in with Apple from the iOS app** — Apple answers a sign-in with a form POST to `/auth/callback`. For sign-ins the iOS app started, the server now forwards that answer to `/auth/callback/complete`, the address the app's sign-in sheet waits on. Web and Android callbacks are unchanged. The matching app change ships in the next iOS build.
+- **Dependencies** — Server: Gunicorn 27.0.1, Stripe SDK 17.0.0, psycopg 3.3.9, sentry-sdk 2.75.0, resend 2.53.2. Web: i18next 27 and react-i18next 18, Mantine 9.8.0, Vite 8.3.8 and other patch/minor updates. Container: Node 24.22.3.
 - **No migration** — This release adds no database schema migration and needs no new configuration.
 - **Mobile delivery** — This release publishes the server/web container. Native mobile changes require a separate signed build and store release; these notes do not confirm store approval or public availability.
 
