@@ -50,6 +50,19 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '4.13.7',
+    date: '2026-11-15',
+    title: 'iOS App Sign-In and Updates',
+    sections: [
+      { heading: 'Bug Fixes', items: [
+        'Signing in with Apple from the iOS app now returns to the app instead of stopping on a web page. This takes effect with the next iOS app version',
+      ] },
+      { heading: 'Security', items: [
+        'Updated server dependencies, including Gunicorn, the Stripe SDK, psycopg, Sentry and Resend, plus web dependency updates',
+      ] },
+    ],
+  },
+  {
     version: '4.13.6',
     date: '2026-11-09',
     title: 'Resubscribing and Billing Dates',
