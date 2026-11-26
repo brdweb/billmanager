@@ -2,7 +2,7 @@ alembic==1.20.0
     # via flask-migrate
 apscheduler==3.11.3
     # via -r apps/server/requirements.txt
-authlib==1.9.5
+authlib==1.9.9
     # via -r apps/server/requirements.txt
 bandit==1.9.4
     # via -r apps/server/requirements.txt
@@ -164,7 +164,7 @@ requests==2.34.2
     #   resend
     #   responses
     #   stripe
-resend==2.53.2
+resend==2.55.0
     # via -r apps/server/requirements.txt
 responses==0.26.3
     # via -r apps/server/requirements.txt
@@ -182,7 +182,7 @@ sqlalchemy==2.0.54
     #   flask-sqlalchemy
 stevedore==5.9.1
     # via bandit
-stripe==17.0.0
+stripe==17.1.0
     # via -r apps/server/requirements.txt
 tomli==2.4.1
     # via pip-audit
