@@ -1,8 +1,10 @@
+import { NavigatorScreenParams } from '@react-navigation/native';
+
 import { Bill } from '../types';
 
 export type RootStackParamList = {
-  Auth: undefined;
-  Main: undefined;
+  Auth: NavigatorScreenParams<AuthStackParamList> | undefined;
+  Main: NavigatorScreenParams<MainTabParamList> | undefined;
 };
 
 export type AuthStackParamList = {
@@ -35,11 +37,11 @@ export type AuthStackParamList = {
 };
 
 export type MainTabParamList = {
-  HomeTab: undefined;
-  BillsTab: undefined;
-  CalendarTab: undefined;
-  InsightsTab: undefined;
-  SettingsTab: undefined;
+  HomeTab: NavigatorScreenParams<HomeStackParamList> | undefined;
+  BillsTab: NavigatorScreenParams<BillsStackParamList> | undefined;
+  CalendarTab: NavigatorScreenParams<CalendarStackParamList> | undefined;
+  InsightsTab: NavigatorScreenParams<InsightsStackParamList> | undefined;
+  SettingsTab: NavigatorScreenParams<SettingsStackParamList> | undefined;
 };
 
 export type HomeStackParamList = {
